@@ -1,0 +1,28 @@
+// Test harness for the Protection-from-... refresh-target fix.
+// Run ONLY with `weidu --nogame` from a disposable directory; never install in a game.
+//
+//   argv[0] = input SPL path
+//   argv[1] = output SPL path
+//   argv[2] = resource name to use for the opcode 321 self-reference (normally the spell's own resref)
+//   argv[3] = (component 3 only) path to live-patch/SRCB_PROT_REFRESH/lib/prot_refresh_target.tpa
+
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+// Reproduces upstream Spell Revisions v4.21 refresh_non_stacking.tpa, "direct" block:
+// the 321 self-removal is inserted with target = 1 (Self = the caster) in every ability.
+BEGIN ~build: upstream v4.21 direct refresh (ADD_SPELL_EFFECT target = 1)~ DESIGNATED 1
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF ADD_SPELL_EFFECT INT_VAR opcode = 321 timing = 1 target = 1 insert_point = 0 STR_VAR resource = EVAL ~%argv[2]%~ END
+
+// The expected end state for a creature-targeted spell: same effect, target = 2 (Projectile target).
+BEGIN ~build: expected direct refresh (ADD_SPELL_EFFECT target = 2)~ DESIGNATED 2
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF ADD_SPELL_EFFECT INT_VAR opcode = 321 timing = 1 target = 2 insert_point = 0 STR_VAR resource = EVAL ~%argv[2]%~ END
+
+// Applies the live-patch library's patch function to argv[0], writing argv[1].
+BEGIN ~apply: live-patch srcb_fix_refresh_target~ DESIGNATED 3
+INCLUDE ~%argv[3]%~
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF srcb_fix_refresh_target INT_VAR verbose = 1 STR_VAR resource = EVAL ~%argv[2]%~ END

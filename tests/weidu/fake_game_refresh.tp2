@@ -1,0 +1,9 @@
+// Test-only tp2: runs a copy of spell_rev/lib/refresh_non_stacking.tpa inside a synthetic
+// fake game (tests/weidu_env.py FakeGame). Never install this in a real game.
+
+BACKUP ~weidu_external/backup/srcb_test_refresh~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~test: run spell_rev/lib/refresh_non_stacking.tpa~ DESIGNATED 0
+INCLUDE ~spell_rev/lib/refresh_non_stacking.tpa~

@@ -1,0 +1,83 @@
+// SRCB_PROT_REFRESH — library (Spell Revisions — Chriz Balance Patch fork)
+//
+// Spell Revisions' EE "refresh, non-stacking" code (spell_rev/lib/refresh_non_stacking.tpa)
+// inserts an opcode 321 "Remove effects by resource = itself" as the first effect of a buff so
+// that a new cast replaces the old instance. For the three creature-targeted protections
+// (Protection from Magic Energy / the Elements / Energy) upstream adds that effect with
+// target = 1 ("Self" = the CASTER) instead of target = 2 ("Projectile target" = the recipient),
+// so every cast strips the caster's own buff and never refreshes the recipient's.
+//
+// This library retargets exactly those effects in an already-installed game. It is file-based
+// (no COPY_EXISTING inside the patch function) so the `--nogame` test harness can exercise it.
+
+// Patch function: on the current SPL, rewrite every ability effect that is
+//   opcode 321 AND target 1 AND resource == %resource% (case-insensitive)
+// to target 2. Caster-only spells (ability target 5/7) are left alone: there "Self" is right.
+// RET patched          = number of effects rewritten
+// RET skipped_self_only = 1 when the spell was skipped because its ability targets the caster
+DEFINE_PATCH_FUNCTION srcb_fix_refresh_target
+    INT_VAR verbose = 0
+    STR_VAR resource = ""
+    RET patched skipped_self_only
+BEGIN
+    SET patched = 0
+    SET skipped_self_only = 0
+    PATCH_IF (SOURCE_SIZE >= 0x72) BEGIN
+        READ_LONG  0x64 ext_off
+        READ_SHORT 0x68 ext_cnt
+        READ_LONG  0x6a fx_off
+        PATCH_IF (ext_cnt > 0) BEGIN
+            READ_BYTE (ext_off + 0x0c) ab_target
+            PATCH_IF ((ab_target = 5) OR (ab_target = 7)) BEGIN
+                SET skipped_self_only = 1
+            END ELSE BEGIN
+                FOR (a = 0; a < ext_cnt; ++a) BEGIN
+                    READ_SHORT (ext_off + (a * 0x28) + 0x1e) nfx
+                    READ_SHORT (ext_off + (a * 0x28) + 0x20) first_fx
+                    FOR (e = 0; e < nfx; ++e) BEGIN
+                        SET fx = fx_off + ((first_fx + e) * 0x30)
+                        PATCH_IF ((fx + 0x30) <= SOURCE_SIZE) BEGIN
+                            READ_SHORT fx op
+                            READ_BYTE  (fx + 0x02) tgt
+                            READ_ASCII (fx + 0x14) res (8) NULL
+                            PATCH_IF ((op = 321) AND (tgt = 1) AND ("%res%" STRING_EQUAL_CASE "%resource%")) BEGIN
+                                WRITE_BYTE (fx + 0x02) 2  // Projectile target (= the recipient)
+                                SET patched = patched + 1
+                            END
+                        END
+                    END
+                END
+            END
+        END
+    END
+    PATCH_IF (verbose) BEGIN
+        PATCH_PRINT "SRCB_PROT_REFRESH: %SOURCE_RES%: retargeted %patched% refresh effect(s); self-only skip = %skipped_self_only%."
+    END
+END
+
+// Action function: resolve the three spells by spell.ids symbol (Spell Revisions relocates
+// spells between resrefs — never hard-code spwi606/702/803) and patch each in override.
+DEFINE_ACTION_FUNCTION srcb_fix_protection_refresh
+    INT_VAR verbose = 1
+BEGIN
+    ACTION_DEFINE_ARRAY srcb_prot_spells BEGIN
+        "WIZARD_PROTECTION_FROM_MAGIC_ENERGY"
+        "WIZARD_PROTECTION_FROM_THE_ELEMENTS"
+        "WIZARD_PROTECTION_FROM_ENERGY"
+    END
+    ACTION_PHP_EACH srcb_prot_spells AS i => spell BEGIN
+        OUTER_SET spell_nbr = IDS_OF_SYMBOL ("spell" "%spell%")
+        ACTION_IF (spell_nbr = 0 - 1) BEGIN
+            WARN "SRCB_PROT_REFRESH: %spell% is not in spell.ids - skipped."
+        END ELSE BEGIN
+            LAF RES_NUM_OF_SPELL_NAME STR_VAR spell_name = EVAL "%spell%" RET spell_res END
+            ACTION_IF (FILE_EXISTS_IN_GAME ~%spell_res%.spl~) BEGIN
+                COPY_EXISTING ~%spell_res%.spl~ ~override~
+                    LPF srcb_fix_refresh_target INT_VAR verbose = verbose STR_VAR resource = EVAL "%spell_res%" END
+                BUT_ONLY
+            END ELSE BEGIN
+                WARN "SRCB_PROT_REFRESH: %spell% resolves to %spell_res%.spl, which does not exist - skipped."
+            END
+        END
+    END
+END

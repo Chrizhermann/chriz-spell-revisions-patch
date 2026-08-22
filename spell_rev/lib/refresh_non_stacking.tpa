@@ -29,6 +29,35 @@ DEFINE_PATCH_FUNCTION MAKE_REFRESHING INT_VAR debug = 0 STR_VAR resource = "" BE
     END
 END
 
+//Refresh, non-stacking for spells that have no 206 self-protection to clone: the 321 is added
+//directly. Its target must follow the ability's target type: "Self" (1) is only right for
+//caster-only spells (ability target 5/7). Creature-targeted spells need "Projectile target" (2),
+//otherwise casting the spell on an ally strips the CASTER's own instance and never refreshes
+//the recipient's (Protection from Magic Energy / the Elements / Energy).
+DEFINE_PATCH_FUNCTION MAKE_REFRESHING_DIRECT INT_VAR debug = 0 STR_VAR resource = "" BEGIN
+    SET fx_target = 2                   //Projectile target.
+    READ_LONG 0x64 ext_off
+    READ_SHORT 0x68 ext_cnt
+    PATCH_IF (ext_cnt > 0) BEGIN
+        READ_BYTE (ext_off + 0x0c) ab_target
+        PATCH_IF ((ab_target = 5) OR (ab_target = 7)) BEGIN
+            SET fx_target = 1           //Self.
+        END
+    END
+    PATCH_IF NOT (debug = 0) BEGIN
+        //Debug message.
+        PATCH_PRINT "%SOURCE_RES%: refresh, non-stacking (direct, effect target %fx_target%) on %resource%."
+    END
+    LPF ADD_SPELL_EFFECT INT_VAR
+        opcode = 321                    //Remove effects by resource.
+        timing = 1                      //Instantaneous.
+        target = fx_target              //1 = Self for caster-only spells, else 2 = Projectile target.
+        insert_point = 0                //First.
+    STR_VAR
+        resource = EVAL "%resource%"
+    END
+END
+
 //Main loop function.
 DEFINE_ACTION_FUNCTION MAKE_REFRESHING_LOOP BEGIN
     WITH_SCOPE BEGIN
@@ -134,14 +163,7 @@ DEFINE_ACTION_FUNCTION MAKE_REFRESHING_LOOP BEGIN
             END ELSE BEGIN
                 LAF RES_NUM_OF_SPELL_NAME STR_VAR spell_name = EVAL "%spell%" RET spell_res END
                 COPY_EXISTING ~%spell_res%.spl~ ~override~
-                    LPF ADD_SPELL_EFFECT INT_VAR
-                        opcode = 321        //Remove effects by resource.
-                        timing = 1          //Instantaneous.
-                        target = 1          //Self.
-                        insert_point = 0    //First.
-                    STR_VAR
-                        resource = EVAL "%spell_res%"
-                    END
+                    LPF MAKE_REFRESHING_DIRECT STR_VAR resource = EVAL "%spell_res%" END
                 BUT_ONLY
             END
         END
