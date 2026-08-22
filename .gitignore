@@ -15,3 +15,8 @@ spell_rev/backup/*
 spell_rev/debug/*
 !spell_rev/debug/debug.txt
 .DS_Store
+
+# fork: test / tooling artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/

@@ -1,3 +1,48 @@
+# Spell Revisions — Chriz Balance Patch
+
+A personal fix-and-balance fork of **[Spell Revisions](https://github.com/Gibberlings3/SpellRevisions)**, the Baldur's Gate II / Enhanced Edition spell overhaul created by **Demivrgvs** (Marco Montagnoli) with **Ardanis**, and maintained today by the **Gibberlings3** team (Mike1072, lambda-dom, subtledoctor, kreso and many more — see the [upstream contributors](https://github.com/Gibberlings3/SpellRevisions/graphs/contributors)). All spell design, data, art and installer architecture are their work; this fork only adds bug fixes and a few balance knobs on top of upstream, and offers every fix back.
+
+## Credit & original authors
+
+- **Upstream repository:** https://github.com/Gibberlings3/SpellRevisions
+- **Spell list / documentation:** https://gibberlings3.github.io/SpellRevisions/
+- **Forum (bug reports, discussion):** https://www.gibberlings3.net/forums/forum/118-spell-revisions/
+- **Readme shipped with the mod:** `spell_rev/readme-spell_rev.html`
+
+Spell Revisions is © 2008–2015 Marco Montagnoli and the Gibberlings3 contributors; its readme
+asks that the mod not be redistributed without the author's consent. This fork is a patch set on
+top of upstream — not a competing release. Please support and report to upstream first; the
+fixes here are written so they can be submitted as upstream pull requests
+(`docs/upstream-reports/`).
+
+## How this fork is maintained
+
+- `master` = upstream `master` + the commits listed below. Sync: `git fetch upstream && git merge upstream/master`.
+  A weekly GitHub Action (`.github/workflows/check-upstream.yml`) opens an `upstream-sync` issue when upstream moves.
+- Fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them, and mirrored as
+  **tail-installable mini-mods** in `live-patch/` for games where Spell Revisions is already installed
+  (no uninstall needed).
+- `spell_rev/setup-spell_rev.tp2` carries `VERSION ~v4.21-chriz.N~` so `WeiDU.log` shows which build an install came from.
+- `tests/` drive a real `weidu.exe` against synthetic fixtures (`python -m pytest tests`; set `WEIDU=` to a WeiDU ≥ 249 binary). No live game is touched.
+
+## Changes vs upstream
+
+| # | Change | Kind | Source | Live patch |
+|---|---|---|---|---|
+| 1 | **Protection from Magic Energy / Protection from the Elements / Protection from Energy** strip the *caster's* buff instead of refreshing the *recipient's* (the EE "refresh, non-stacking" opcode 321 was inserted with effect target 1 = Self; creature-targeted spells need target 2 = Projectile target). Casting any of them on an ally removed it from the caster, and re-casting on the same ally never replaced the old instance. | bug fix | `spell_rev/lib/refresh_non_stacking.tpa` → `MAKE_REFRESHING_DIRECT` derives the target from the ability's target type | `live-patch/SRCB_PROT_REFRESH` |
+
+Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `docs/upstream-reports/`.
+
+## Installation
+
+Same as upstream (below): copy `spell_rev/` into the game directory and run it with WeiDU.
+For an **existing** install, don't reinstall Spell Revisions mid-stack — append the relevant
+`live-patch/` mini-mod at the tail instead (see `live-patch/README.md`).
+
+---
+
+# Upstream README (Spell Revisions v4.21, unchanged below this line)
+
 Spell Revisions aims to fix, tweak, and enhance arcane and divine spells in Baldur's Gate II, either the classical or the enhanced editions, including [BGT](https://github.com/SpellholdStudios/BGT-WeiDU) and [EET](https://github.com/Gibberlings3/EET).
 
 The mod comes with documentation that you can find [here](./readme-spell_rev.html). Detailed lists of spells can be consulted [here](https://gibberlings3.github.io/SpellRevisions/).

@@ -1,0 +1,59 @@
+name: Check Upstream Changes
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/Gibberlings3/SpellRevisions.git || true
+          git fetch upstream master
+
+      - name: Check for new commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/master)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" -gt 0 ]; then
+            echo "## Upstream has $BEHIND new commit(s)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            git log --oneline HEAD..upstream/master >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Up to date with upstream." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Create issue if behind
+        if: steps.check.outputs.behind != '0'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const behind = '${{ steps.check.outputs.behind }}';
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'upstream-sync'
+            });
+            if (existing.data.length > 0) {
+              console.log('Upstream sync issue already open, skipping.');
+              return;
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Upstream has ${behind} new commit(s)`,
+              body: `The original [Spell Revisions](https://github.com/Gibberlings3/SpellRevisions) repo has ${behind} new commit(s) since our last sync.\n\nRun \`git fetch upstream && git log --oneline HEAD..upstream/master\` to review changes, then \`git merge upstream/master\`.\n\nCheck if any changes affect the files we patched:\n- \`spell_rev/lib/refresh_non_stacking.tpa\` (MAKE_REFRESHING_DIRECT)\n- \`spell_rev/setup-spell_rev.tp2\` (VERSION suffix)\n- \`README.md\` (fork banner above the upstream text)\n\nAfter merging, run \`python -m pytest tests\` and re-check \`live-patch/\` against the new upstream behaviour.`,
+              labels: ['upstream-sync']
+            });
