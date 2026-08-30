@@ -2,9 +2,9 @@
   "planPath": "docs/plans/2026-08-30-two-version-live-smoke-test.md",
   "tasks": [
     {"id": 1, "subject": "Validate clean 2.6.6.0 and 2.7.3.0 sources", "status": "completed"},
-    {"id": 2, "subject": "Create independent disposable game copies", "status": "in_progress", "blockedBy": [1]},
-    {"id": 3, "subject": "Stage mod and settings profiles", "status": "pending", "blockedBy": [2]},
-    {"id": 4, "subject": "Verify copies and deletion boundary", "status": "pending", "blockedBy": [3]}
+    {"id": 2, "subject": "Create independent disposable game copies", "status": "completed", "blockedBy": [1]},
+    {"id": 3, "subject": "Stage mod and settings profiles", "status": "completed", "blockedBy": [2]},
+    {"id": 4, "subject": "Verify copies and deletion boundary", "status": "completed", "blockedBy": [3]}
   ],
-  "lastUpdated": "2026-08-30T20:30:00+09:00"
+  "lastUpdated": "2026-08-30T22:13:29+09:00"
 }
