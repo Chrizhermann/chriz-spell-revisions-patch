@@ -532,7 +532,7 @@ def test_binary_edge_resolution_key_is_unique_case_insensitively() -> None:
     assert "duplicate binary edge resolution" in str(error.value)
 
 
-def test_seed_catalog_loads_with_pinned_provenance_and_closed_migration() -> None:
+def test_real_catalog_loads_with_pinned_provenance_and_closed_migration() -> None:
     catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
 
     assert catalog.schema_version == 1
@@ -543,7 +543,77 @@ def test_seed_catalog_loads_with_pinned_provenance_and_closed_migration() -> Non
         catalog.migration.installer_source
         == "spell_rev/components/main_component.tpa"
     )
-    assert catalog.changes == ()
+    assert len(catalog.groups) == 21
+    assert len(catalog.changes) == 321
+    assert sum(len(record.member_refs) > 1 for record in catalog.changes) == 16
+    assert len(catalog.infrastructure) == 76
+    assert sum(
+        record.activation == "consumer_selected"
+        for record in catalog.infrastructure
+    ) == 75
+    assert sum(
+        record.activation == "always" for record in catalog.infrastructure
+    ) == 1
+    assert sum(len(record.requires) for record in catalog.changes) == 0
+    assert sum(len(record.conflicts) for record in catalog.changes) == 0
+    assert sum(len(record.soft_requires) for record in catalog.changes) == 624
+    assert sum(len(record.processors) for record in catalog.changes) == 1014
+    assert sum(
+        len(record.infrastructure_requires)
+        for record in catalog.infrastructure
+    ) == 24
+    assert sum(len(record.source_spans) for record in catalog.changes) + sum(
+        len(record.source_spans) for record in catalog.infrastructure
+    ) == 498
+    assert sum(len(record.resources) for record in catalog.changes) + sum(
+        len(record.resources) for record in catalog.infrastructure
+    ) == 1625
+    assert len(catalog.component_zero_closure_roots) == 2
+    assert len(catalog.dormant_resources) == 29
+    assert len(catalog.deferred_source_scopes) == 7
+    assert len(catalog.binary_edge_resolutions) == 20
+
+    source_resolutions = tuple(
+        resolution
+        for record in catalog.infrastructure
+        for resolution in record.source_resolutions
+    )
+    include_resolutions = tuple(
+        resolution
+        for record in catalog.infrastructure
+        for resolution in record.include_resolutions
+    )
+    assert len(source_resolutions) == 55
+    assert len(include_resolutions) == 5
+    assert sum(
+        resolution.access == "read_only" for resolution in source_resolutions
+    ) == 1
+    assert sum(
+        bool(resolution.generated_owners) for resolution in source_resolutions
+    ) == 8
+    assert sum(
+        bool(resolution.internal_generated_owners)
+        for resolution in source_resolutions
+    ) == 8
+
+    leaf_settings = {record.setting for record in catalog.changes}
+    group_controls = {"sr_default", *(group.setting for group in catalog.groups)}
+    generated_settings = {
+        line.partition("=")[0].strip()
+        for line in (ROOT / "spell_rev/settings.ini").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.startswith("sr_") and "=" in line
+    }
+    generated_settings.discard("sr_config_schema")
+
+    assert len(leaf_settings) == 321
+    assert len(group_controls) == 21
+    assert generated_settings == leaf_settings | group_controls
+    assert all("hardiness" not in setting.casefold() for setting in generated_settings)
+    assert {scope.id for scope in catalog.deferred_source_scopes} >= {
+        "excluded.hardiness_spcl907"
+    }
 
 
 def test_catalog_preserves_group_source_order() -> None:
@@ -574,6 +644,18 @@ def test_catalog_preserves_group_source_order() -> None:
             )
             for level in range(1, 8)
         ],
+        (
+            "arcane.level10",
+            "sr_arcane_level_10_default",
+            "arcane",
+            -1,
+        ),
+        (
+            "divine.level8",
+            "sr_divine_level_8_default",
+            "divine",
+            -1,
+        ),
     ]
 
 

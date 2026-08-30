@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tools.sr_config.__main__ import main
-from tools.sr_config.catalog import Catalog, SourceSpan
+from tools.sr_config.catalog import Catalog, SourceSpan, load_catalog
 from tools.sr_config.coverage import audit_catalog_coverage
 from tools.sr_config.inventory import (
     build_inventory_report,
@@ -21,6 +21,14 @@ from tools.sr_config.source import SourceError, inventory_nested, resolve_span
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sr_config/main_component_sample.tpa"
+
+
+def test_real_catalog_has_zero_component_zero_coverage_issues() -> None:
+    catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
+
+    result = audit_catalog_coverage(ROOT, catalog)
+
+    assert result.issues == ()
 
 
 def _executable_nodes():
