@@ -137,6 +137,48 @@ def test_parse_tra_accepts_cr_only_assignment_separators() -> None:
     }
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_parse_tra_line_comments_end_at_every_supported_newline(
+    newline: str,
+) -> None:
+    source = (
+        f"// leading comment{newline}"
+        f"@1=~one~ // trailing comment{newline}"
+        f"@2=~two~{newline}"
+    )
+
+    assert parse_tra(source, source_name="comments.tra") == {
+        "@1": "one",
+        "@2": "two",
+    }
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+def test_parse_tra_accepts_sound_reference_after_comments_and_blank_lines(
+    newline: str,
+) -> None:
+    source = (
+        f"@1=~one~{newline}"
+        f"{newline}"
+        f"// sound follows{newline}"
+        f"/* still part of the entry */{newline}"
+        f" [voice]{newline}"
+        f"@2=~two~{newline}"
+    )
+
+    assert parse_tra(source, source_name="multiline-sound.tra") == {
+        "@1": "one",
+        "@2": "two",
+    }
+
+
+def test_parse_tra_cr_only_diagnostics_count_physical_lines() -> None:
+    source = "// first line\r@1=~one~\rorphan content\r"
+
+    with pytest.raises(TraError, match=r"cr-errors\.tra:3: unexpected content"):
+        parse_tra(source, source_name="cr-errors.tra")
+
+
 def test_tra_duplicate_identity_is_numeric() -> None:
     with pytest.raises(TraError, match="duplicate reference @1"):
         parse_tra("@01=~one~\n@1=~two~\n", source_name="duplicate.tra")

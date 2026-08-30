@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -17,9 +18,10 @@ def parse_tra(source: str, *, source_name: str = "<TRA>") -> dict[str, str]:
     locations: dict[str, int] = {}
     length = len(source)
     index = 0
+    line_starts = _line_starts(source)
 
     def line_at(offset: int) -> int:
-        return source.count("\n", 0, offset) + 1
+        return bisect_right(line_starts, offset)
 
     while index < length:
         while index < length and source[index].isspace():
@@ -27,8 +29,7 @@ def parse_tra(source: str, *, source_name: str = "<TRA>") -> dict[str, str]:
         if index >= length:
             break
         if source.startswith("//", index):
-            newline = source.find("\n", index + 2)
-            index = length if newline < 0 else newline + 1
+            index = _after_line_end(source, index + 2)
             continue
         if source.startswith("/*", index):
             end_comment = source.find("*/", index + 2)
@@ -83,7 +84,7 @@ def parse_tra(source: str, *, source_name: str = "<TRA>") -> dict[str, str]:
         # arbitrary suffix tokens remain an error so syntax is never truncated.
         sound_seen = False
         while index < length:
-            while index < length and source[index] in " \t":
+            while index < length and source[index].isspace():
                 index += 1
             if index >= length:
                 break
@@ -120,24 +121,51 @@ def parse_tra(source: str, *, source_name: str = "<TRA>") -> dict[str, str]:
                 index = sound_end + 1
                 continue
             if source.startswith("//", index):
-                newline = source.find("\n", index + 2)
-                index = length if newline < 0 else newline + 1
-                break
-            if source[index] == "\r":
-                index += (
-                    2
-                    if index + 1 < length and source[index + 1] == "\n"
-                    else 1
-                )
-                break
-            if source[index] == "\n":
-                index += 1
+                index = _after_line_end(source, index + 2)
+                continue
+            if source[index] == "@":
                 break
             raise TraError(
                 f"{source_name}:{line_at(index)}: unexpected content after {reference}"
             )
 
     return values
+
+
+def _line_starts(source: str) -> tuple[int, ...]:
+    """Return offsets for physical lines under CRLF, LF, and CR conventions."""
+
+    starts = [0]
+    index = 0
+    while index < len(source):
+        if source[index] == "\r":
+            has_line_feed = (
+                index + 1 < len(source) and source[index + 1] == "\n"
+            )
+            index += 2 if has_line_feed else 1
+            starts.append(index)
+        elif source[index] == "\n":
+            index += 1
+            starts.append(index)
+        else:
+            index += 1
+    return tuple(starts)
+
+
+def _after_line_end(source: str, start: int) -> int:
+    """Return the offset after the next CRLF, LF, or CR line ending."""
+
+    carriage_return = source.find("\r", start)
+    line_feed = source.find("\n", start)
+    positions = tuple(
+        position for position in (carriage_return, line_feed) if position >= 0
+    )
+    if not positions:
+        return len(source)
+    end = min(positions)
+    if source[end] == "\r" and end + 1 < len(source) and source[end + 1] == "\n":
+        return end + 2
+    return end + 1
 
 
 def load_english_tra(root: str | Path) -> dict[str, str]:
