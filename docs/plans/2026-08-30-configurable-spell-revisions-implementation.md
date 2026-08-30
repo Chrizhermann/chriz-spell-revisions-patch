@@ -126,12 +126,50 @@ git commit -m "feat: inventory configurable WeiDU source losslessly"
 **Files:**
 - Create: `tools/sr_config/resolve.py`
 - Create: `tools/sr_config/generate.py`
+- Create: `tools/sr_config/text.py`
 - Modify: `tools/sr_config/__main__.py`
+- Modify: `tools/sr_config/catalog.py`
+- Modify: `tests/test_sr_catalog.py`
 - Create: `tests/test_sr_resolve.py`
 - Create: `tests/test_sr_generate.py`
 - Generate: `spell_rev/settings.ini`
 - Generate: `docs/spell-revisions-change-catalog.md`
 - Modify/generated region: `spell_rev/readme-spell_rev.html`
+
+**Clarified implementation contract:**
+
+- Parse configuration assignments as an ordered sequence and reject unknown or duplicate names
+  case-insensitively before constructing a mapping. Aggregate independent validation errors in a
+  deterministic order. Booleans are not valid integers.
+- A leaf value of `0` is the only explicit veto against hard-dependency or multi-record atomic
+  closure. An inherited `0` from a group may be overridden by closure; otherwise enabling one
+  leaf under a disabled tradition could not safely bring in its required leaves. A contradictory
+  explicit leaf veto is an error. Apply conflicts after transitive hard/atomic closure. Soft edges
+  never force enablement or fail resolution, but expose whether both endpoints are active.
+- An explicitly enabled leaf that is unavailable on the selected game is an error; an inherited
+  enablement resolves off. An active leaf whose hard/atomic requirement is unavailable is an
+  error. Reject unknown games. Catalog game values use `all` or the supported installer/source
+  vocabulary (`soa`, `tob`, `bgee`, `bg2ee`, `eet`, `iwdee`, `tutu`, `tutu_totsc`, `bgt`), with
+  nonempty unique values and `all` mutually exclusive with named games.
+- Every public leaf defaults to `-1`. Mechanically inseparable resources should normally be one
+  public `Change`; multi-record `atomic_group` closure is a safety backstop, not an invitation to
+  expose redundant switches.
+- Resolve `name_ref` and `description_ref` against the current English `arcane.tra`, `divine.tra`,
+  and `setup.tra`. Fail on missing, duplicate, malformed, or unterminated references rather than
+  emitting raw `@123` tokens.
+- The editable metadata contract is `sr_config_schema = 1` and
+  `SPRINT sr_catalog_fingerprint ~<64 lowercase hex>~`; `install_tobex = 1` remains the first
+  non-comment assignment. Fingerprint canonical semantic JSON so line-ending changes do not
+  alter it. Keep metadata separate from catalog assignments when calling the resolver.
+- Assign collision-free WeiDU flags by complete catalog order (`sr_feature_000001`, etc.); game
+  filtering must not renumber them.
+- The production HTML is ISO-8859-1 with CRLF and initially lacks generator markers. Bootstrap
+  exactly one marker pair around the stale spell-overview region, retain exactly one
+  `id="spell_changes"`, encode generated characters safely, and preserve every byte outside the
+  markers. Missing, duplicate, or reversed markers after bootstrap are errors.
+- Compute and validate all generated outputs before writing any of them. Preserve each target's
+  existing newline convention. `--check` normalizes only for comparison where appropriate,
+  writes nothing, and emits stable unified diffs.
 
 **Step 1: Write failing resolution tests**
 
