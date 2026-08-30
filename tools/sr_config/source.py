@@ -314,15 +314,22 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
             if open_node.pipeline_terminated and lexed.has_code:
                 finish(open_node)
                 open_node = None
-            elif candidate is not None and _starts_after_pipeline(
-                first,
-                complete_operands=_pipeline_operands_complete(
+            elif candidate is not None:
+                complete_operands = _pipeline_operands_complete(
                     open_node.command,
                     source[open_node.start : open_node.end],
-                ),
-            ):
-                finish(open_node)
-                open_node = None
+                )
+                if open_node.command == "ADD_SPELL" and not complete_operands:
+                    raise SourceError(
+                        f"{display_path}: incomplete ADD_SPELL operands opened "
+                        f"at line {open_node.line} before {first} at line "
+                        f"{line_number}; expected source, type, level, and IDS name"
+                    )
+                if _starts_after_pipeline(
+                    first, complete_operands=complete_operands
+                ):
+                    finish(open_node)
+                    open_node = None
 
         if open_node is not None and open_node.mode == "include" and depth_before == 0:
             if candidate is not None:
@@ -630,7 +637,8 @@ def _pipeline_operands_complete(command: str, raw: bytes) -> bool:
     if command in _COPY_COMMANDS:
         values = _copy_operand_values(raw)
         return len(values) >= 2 and len(values) % 2 == 0
-    if command not in {"ADD_SPELL", "APPEND"}:
+    required = {"ADD_SPELL": 4, "APPEND": 2}.get(command)
+    if required is None:
         return False
     atoms = _source_atoms(_copy_prefix(raw))
     command_index = next(
@@ -641,7 +649,10 @@ def _pipeline_operands_complete(command: str, raw: bytes) -> bool:
         ),
         None,
     )
-    return command_index is not None and len(atoms[command_index + 1 :]) >= 2
+    return (
+        command_index is not None
+        and len(atoms[command_index + 1 :]) >= required
+    )
 
 
 def _else_awaits_begin(tokens: tuple[str, ...]) -> bool:

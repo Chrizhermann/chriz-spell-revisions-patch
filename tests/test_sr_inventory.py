@@ -259,7 +259,7 @@ def test_unknown_depth_zero_statement_ends_complete_copy_operands(
 @pytest.mark.parametrize(
     ("command", "head"),
     [
-        ("ADD_SPELL", "ADD_SPELL ~a.spl~ ~WIZARD_A~\n"),
+        ("ADD_SPELL", "ADD_SPELL ~a.spl~ 2 3 ~WIZARD_A~\n"),
         ("APPEND", "APPEND ~spell.ids~ ~1702 CLERIC_TEST~\n"),
     ],
 )
@@ -282,6 +282,47 @@ def test_unknown_depth_zero_statement_ends_complete_non_copy_pipeline(
         ("executable", "PRINT"),
     ]
     assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
+
+
+def test_multiline_add_spell_waits_for_all_four_operands(tmp_path: Path) -> None:
+    path = tmp_path / "multiline-add-spell.tpa"
+    path.write_text(
+        "ADD_SPELL ~a.spl~\n"
+        "  2 3\n"
+        "  ~WIZARD_A~\n"
+        "MYSTERY_STATEMENT ~odd~\n"
+        "PRINT ~next action~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "ADD_SPELL"),
+        ("unknown", "MYSTERY_STATEMENT"),
+        ("executable", "PRINT"),
+    ]
+    assert b"2 3" in nodes[0].raw
+    assert b"WIZARD_A" in nodes[0].raw
+
+
+def test_incomplete_add_spell_fails_closed_before_unknown_statement(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "incomplete-add-spell.tpa"
+    path.write_text(
+        "ADD_SPELL ~a.spl~ 2\n"
+        "MYSTERY_STATEMENT ~odd~\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        SourceError,
+        match="incomplete ADD_SPELL operands.*line 1.*MYSTERY_STATEMENT.*line 2",
+    ) as error:
+        inventory(path)
+
+    assert path.name in str(error.value)
 
 
 def test_inventory_keeps_unless_modifier_with_append(tmp_path: Path) -> None:
