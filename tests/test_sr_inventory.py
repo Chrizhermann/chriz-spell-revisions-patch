@@ -1778,6 +1778,93 @@ def test_infrastructure_edges_require_an_explicit_infrastructure_dependency(
     }
 
 
+def test_dormant_binary_shadow_is_excluded_while_live_candidate_classifies(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    live = assets / "live"
+    shadow = assets / "shadow"
+    live.mkdir(parents=True)
+    shadow.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (live / "child.spl").write_bytes(_minimal_coverage_spl())
+    (shadow / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {
+                        "path": "spell_rev/assets/live/child.spl",
+                        "kind": "asset",
+                    },
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/shadow/child.spl",
+                "reason": "Shadowed upstream payload is not installed.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.binary_edges[0].classification == "owned"
+
+
+def test_dormant_binary_shadow_does_not_hide_unowned_live_candidate(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    live = assets / "live"
+    shadow = assets / "shadow"
+    live.mkdir(parents=True)
+    shadow.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (live / "child.spl").write_bytes(_minimal_coverage_spl())
+    (shadow / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/shadow/child.spl",
+                "reason": "Shadowed upstream payload is not installed.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.binary_edges[0].classification is None
+    assert sum(
+        issue.code == "unclassified_local_binary_edge" for issue in result.issues
+    ) == 1
+    assert not any(
+        issue.code == "missing_binary_edge_resolution" for issue in result.issues
+    )
+
+
 def test_binary_external_override_is_exact_and_only_changes_one_edge(
     tmp_path: Path,
 ) -> None:
@@ -1799,6 +1886,7 @@ def test_binary_external_override_is_exact_and_only_changes_one_edge(
         changes=[
             _coverage_change(
                 "source",
+                documentation_only_reason="Binary coverage fixture.",
                 resources=[
                     {"path": "spell_rev/assets/source.spl", "kind": "asset"}
                 ],
@@ -1814,12 +1902,9 @@ def test_binary_external_override_is_exact_and_only_changes_one_edge(
         "external",
         None,
     ]
-    assert sum(
-        issue.code == "unclassified_local_binary_edge" for issue in result.issues
-    ) == 1
-    assert sum(
-        issue.code == "missing_binary_edge_resolution" for issue in result.issues
-    ) == 1
+    assert [issue.code for issue in result.issues] == [
+        "missing_binary_edge_resolution"
+    ]
 
 
 @pytest.mark.parametrize(

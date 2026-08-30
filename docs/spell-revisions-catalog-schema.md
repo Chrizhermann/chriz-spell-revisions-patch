@@ -35,6 +35,11 @@ candidate list to match, requires every candidate to be dormant and unowned, and
 requires the override to be consumed exactly once. A stale, mismatched, missing,
 or multiply consumed override fails coverage without changing any other edge.
 
+Deferred scopes may own only closed internal edge islands. A local source or binary
+edge that crosses between deferred ownership and an active change or infrastructure
+record remains unclassified and fails coverage until the deferred scope is resolved;
+dependency metadata cannot make that boundary executable.
+
 ## Infrastructure
 
 Every infrastructure record explicitly declares:

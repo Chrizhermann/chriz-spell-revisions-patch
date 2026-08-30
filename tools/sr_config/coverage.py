@@ -1518,42 +1518,50 @@ def _audit_binary_edges(
             if edge.classification == "external":
                 classification = "external"
             elif edge.classification == "local":
-                if (
-                    resolution is None
-                    and full_candidates
-                    and all(
-                        candidate.casefold() in dormant_paths
-                        for candidate in full_candidates
+                runtime_candidates = tuple(
+                    (candidate, full_candidate)
+                    for candidate, full_candidate in zip(
+                        edge.local_candidates, full_candidates, strict=True
                     )
-                ):
-                    issues.append(
-                        CoverageIssue(
-                            "missing_binary_edge_resolution",
-                            location,
-                            "local scanner edge resolves only to dormant payloads and "
-                            "needs an exact external override",
-                        )
-                    )
-                target_hits = tuple(
-                    resource_owners.get(
-                        f"{resource_root}/{candidate}".casefold(), ()
-                    )
-                    for candidate in edge.local_candidates
+                    if full_candidate.casefold() not in dormant_paths
                 )
-                classification = _classify_candidate_hits(source_hits, target_hits)
-                if classification is None:
-                    flattened = tuple(hit for group in target_hits for hit in group)
-                    issues.append(
-                        CoverageIssue(
-                            "unclassified_local_binary_edge",
-                            location,
-                            _unclassified_message(
-                                ", ".join(edge.local_candidates),
-                                source_hits,
-                                flattened,
-                            ),
+                if not runtime_candidates:
+                    classification = None
+                    if resolution is None:
+                        issues.append(
+                            CoverageIssue(
+                                "missing_binary_edge_resolution",
+                                location,
+                                "local scanner edge resolves only to dormant payloads "
+                                "and needs an exact external override",
+                            )
                         )
+                else:
+                    target_hits = tuple(
+                        resource_owners.get(full_candidate.casefold(), ())
+                        for _, full_candidate in runtime_candidates
                     )
+                    classification = _classify_candidate_hits(
+                        source_hits, target_hits
+                    )
+                    if classification is None:
+                        flattened = tuple(
+                            hit for group in target_hits for hit in group
+                        )
+                        issues.append(
+                            CoverageIssue(
+                                "unclassified_local_binary_edge",
+                                location,
+                                _unclassified_message(
+                                    ", ".join(
+                                        candidate
+                                        for candidate, _ in runtime_candidates
+                                    ),
+                                    source_hits,
+                                    flattened,
+                                ),
+                            )
+                        )
             else:
                 classification = None
                 issues.append(
