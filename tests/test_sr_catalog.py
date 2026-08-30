@@ -542,6 +542,44 @@ def test_invalid_tri_state_defaults_are_rejected(
     assert str(error.value).startswith(f"{expected_path}:")
 
 
+def test_public_change_default_must_inherit() -> None:
+    raw = minimal_catalog(changes=[change("a", default=0)])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].default:")
+    assert "public change default must be -1" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    "games",
+    [[], ["unknown"], ["all", "bg2ee"], ["bg2ee", "BG2EE"]],
+)
+def test_change_games_use_supported_unique_nonempty_vocabulary(
+    games: list[str],
+) -> None:
+    raw = minimal_catalog(changes=[change("a", games=games)])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].games")
+
+
+@pytest.mark.parametrize("field", ["name_ref", "description_ref"])
+@pytest.mark.parametrize("reference", ["1", "@", "@-1", "@name", "@1 trailing"])
+def test_tra_references_must_use_at_decimal_syntax(
+    field: str, reference: str
+) -> None:
+    raw = minimal_catalog(changes=[change("a", **{field: reference})])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"changes[0].{field}:")
+
+
 def test_catalog_requires_one_root_group() -> None:
     with pytest.raises(CatalogError) as error:
         Catalog.from_dict(minimal_catalog(groups=[]))
@@ -817,7 +855,7 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
                 "Mixed.Change",
                 setting="sr_mixed_change",
                 display_name="Mixed change",
-                default=0,
+                default=-1,
                 group="ARCANE",
                 component=65,
                 games=["bg2ee", "iwdee"],
@@ -888,7 +926,7 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
         "Mixed.Change",
         "sr_mixed_change",
         "Mixed change",
-        0,
+        -1,
         "ARCANE",
         65,
         ("bg2ee", "iwdee"),

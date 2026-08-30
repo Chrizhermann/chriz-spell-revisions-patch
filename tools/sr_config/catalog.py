@@ -12,9 +12,23 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+SUPPORTED_GAMES = frozenset(
+    {
+        "soa",
+        "tob",
+        "bgee",
+        "bg2ee",
+        "eet",
+        "iwdee",
+        "tutu",
+        "tutu_totsc",
+        "bgt",
+    }
+)
 _TRI_STATE_VALUES = frozenset({-1, 0, 1})
 _HEX_DIGITS = frozenset(string.hexdigits)
 _SETTING_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
+_TRA_REFERENCE_PATTERN = re.compile(r"@[0-9]+\Z")
 _WINDOWS_FORBIDDEN_PATH_CHARACTERS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_PATH_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -319,9 +333,9 @@ def _parse_change(value: Any, path: str) -> Change:
         default=_tri_state(raw["default"], f"{path}.default"),
         group=_identifier(raw["group"], f"{path}.group"),
         component=component,
-        games=_string_tuple(raw.get("games", []), f"{path}.games"),
-        name_ref=_optional_string(raw.get("name_ref"), f"{path}.name_ref"),
-        description_ref=_optional_string(
+        games=_games(raw.get("games", []), f"{path}.games"),
+        name_ref=_optional_tra_reference(raw.get("name_ref"), f"{path}.name_ref"),
+        description_ref=_optional_tra_reference(
             raw.get("description_ref"), f"{path}.description_ref"
         ),
         source_spans=tuple(
@@ -430,6 +444,11 @@ def _validate_catalog(catalog: Catalog) -> None:
     _validate_root_group(catalog.groups)
 
     for index, record in enumerate(catalog.changes):
+        if record.default != -1:
+            raise CatalogError(
+                f"changes[{index}].default: public change default must be -1 "
+                "so it inherits from its group"
+            )
         if _normalize(record.group) not in group_ids:
             raise CatalogError(
                 f"changes[{index}].group: unknown group ID {record.group!r}"
@@ -715,6 +734,13 @@ def _optional_string(value: Any, path: str) -> str | None:
     return _string(value, path)
 
 
+def _optional_tra_reference(value: Any, path: str) -> str | None:
+    reference = _optional_string(value, path)
+    if reference is not None and _TRA_REFERENCE_PATTERN.fullmatch(reference) is None:
+        raise CatalogError(f"{path}: expected a TRA reference such as @123")
+    return reference
+
+
 def _identifier(value: Any, path: str) -> str:
     identifier = _string(value, path)
     if identifier != identifier.strip():
@@ -782,6 +808,26 @@ def _tri_state(value: Any, path: str) -> int:
 def _string_tuple(value: Any, path: str) -> tuple[str, ...]:
     values = _list(value, path)
     return tuple(_string(item, f"{path}[{index}]") for index, item in enumerate(values))
+
+
+def _games(value: Any, path: str) -> tuple[str, ...]:
+    games = _string_tuple(value, path)
+    if not games:
+        raise CatalogError(f"{path}: must contain at least one game or 'all'")
+    seen: dict[str, int] = {}
+    for index, game in enumerate(games):
+        normalized = _normalize(game)
+        if normalized != "all" and normalized not in SUPPORTED_GAMES:
+            raise CatalogError(f"{path}[{index}]: unsupported game {game!r}")
+        if normalized in seen:
+            raise CatalogError(
+                f"{path}[{index}]: duplicate game {game!r}; first declared at "
+                f"{path}[{seen[normalized]}]"
+            )
+        seen[normalized] = index
+    if "all" in seen and len(games) != 1:
+        raise CatalogError(f"{path}: 'all' cannot be combined with named games")
+    return games
 
 
 def _identifier_tuple(value: Any, path: str) -> tuple[str, ...]:
