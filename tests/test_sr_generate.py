@@ -389,12 +389,12 @@ def test_docs_resolve_tra_and_escape_markdown_and_html() -> None:
 
 
 def test_singleton_fallback_renders_game_name_note_before_description() -> None:
-    raw = json.loads(json.dumps(asdict(_catalog())))
+    raw = json.loads(json.dumps(asdict(_catalog(display_name="Righteous Fury"))))
     record = raw["changes"][0]
     record["name_ref"] = None
     record["name_fallback"] = {
         "kind": "game_resource",
-        "resource": "SPWI101",
+        "resource": "SPPR311",
     }
     catalog = Catalog.from_dict(raw)
     texts = {"@2": "Resolved <description>."}
@@ -402,16 +402,16 @@ def test_singleton_fallback_renders_game_name_note_before_description() -> None:
     markdown = render_markdown_catalog(catalog, texts)
     html_region = render_html_catalog(catalog, texts, newline="\n")
 
-    markdown_name = "Game\\-provided name \\(SPWI101\\)"
-    html_name = "Game-provided name (SPWI101)"
     rendered_description = (
-        "Name retained from installed game resource SPWI101. "
+        "Name retained from installed game resource SPPR311. "
         "Resolved &lt;description&gt;."
     )
-    assert markdown_name in markdown
+    assert "| Righteous Fury | `sr_wizard_magic_missile` |" in markdown
+    assert "Game\\-provided name \\(SPPR311\\)" not in markdown
     assert rendered_description in markdown
     assert markdown.index("Name retained") < markdown.index("Resolved &lt;description&gt;")
-    assert html_name in html_region
+    assert "<tr><td>Righteous Fury</td><td>sr_wizard_magic_missile</td>" in html_region
+    assert "Game-provided name (SPPR311)" not in html_region
     assert rendered_description in html_region
 
 

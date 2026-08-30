@@ -631,11 +631,12 @@ def _change_text(
             f"One atomic option controls {len(change.member_refs)} member spells "
             "listed below.",
         )
-    name = _resolved_name(
-        change.name_ref,
-        change.name_fallback,
-        texts,
-        path=f"changes[{index}]",
+    name = (
+        resolve_tra_reference(
+            texts, change.name_ref, path=f"changes[{index}].name_ref"
+        )
+        if change.name_ref is not None
+        else change.display_name
     )
     assert change.description_ref is not None
     description = resolve_tra_reference(
