@@ -1013,6 +1013,7 @@ def _literal_include_path_hits(
     operand: str,
     source_hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
     target_hits: tuple[_OwnershipHit, ...],
+    target_source_file_hits: tuple[_OwnershipHit, ...],
 ) -> tuple[_OwnershipHit, ...]:
     """Remove deferred path owners only for a same-owner literal INCLUDE."""
 
@@ -1035,6 +1036,10 @@ def _literal_include_path_hits(
         not deferred_hits
         or len(active_hits) != 1
         or not _owner_identity_matches(source_owner, active_hits[0].owner)
+        or not any(
+            _owner_identity_matches(active_hits[0].owner, hit.owner)
+            for hit in target_source_file_hits
+        )
     ):
         return target_hits
     return active_hits
@@ -1156,6 +1161,9 @@ def _audit_source_edges(
                                 operand.value,
                                 source_hits,
                                 raw_target_hits,
+                                source_file_owners.get(
+                                    include_edge.resolved.casefold(), ()
+                                ),
                             )
                             classification = _classify_candidate_hits(
                                 tuple(source_hits), (target_hits,)

@@ -540,6 +540,40 @@ def test_literal_include_exception_does_not_hide_unowned_deferred_nodes(
     assert "unowned_source_node" in {issue.code for issue in result.issues}
 
 
+def test_literal_include_does_not_treat_active_resource_metadata_as_source_ownership(
+    tmp_path: Path,
+) -> None:
+    main = b"// main\nINCLUDE ~spell_rev/lib/deferred.tph~\n"
+    deferred = b"// deferred\nPRINT ~future~\n"
+    target = "spell_rev/lib/deferred.tph"
+    _write(tmp_path, ENTRY, main)
+    _write(tmp_path, target, deferred)
+    _write_languages(tmp_path)
+    catalog = _catalog(
+        infrastructure=[
+            _infra(
+                "active_owner",
+                source_spans=[_span(ENTRY, main, b"// main")],
+                resources=[{"path": target, "kind": "source"}],
+            )
+        ],
+        deferred=[
+            _deferred(
+                "deferred.code",
+                source_spans=[_span(target, deferred, b"// deferred")],
+            )
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    edge = next(edge for edge in result.source_edges if edge.target == target)
+    assert edge.classification is None
+    assert "unclassified_local_source_edge" in {
+        issue.code for issue in result.issues
+    }
+
+
 def _root_span(path: str, source: bytes) -> dict[str, object]:
     return _span(path, source, b"// root")
 
