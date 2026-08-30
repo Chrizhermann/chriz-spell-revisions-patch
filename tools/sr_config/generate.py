@@ -8,6 +8,7 @@ import html
 import json
 import os
 import re
+import stat
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -308,7 +309,16 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
     html_newline_bytes = _detect_newline_bytes(html_bytes, _HTML_PATH)
     html_newline = html_newline_bytes.decode("ascii")
     markdown_path = root_path / _MARKDOWN_PATH
-    markdown_current = markdown_path.read_bytes() if markdown_path.exists() else b""
+    try:
+        markdown_current = markdown_path.read_bytes()
+        markdown_existed = True
+    except FileNotFoundError:
+        markdown_current = b""
+        markdown_existed = False
+    except OSError as error:
+        raise GenerationError(
+            f"{markdown_path}: unable to read Markdown: {error}"
+        ) from error
     markdown_newline = (
         _detect_newline_bytes(markdown_current, _MARKDOWN_PATH).decode("ascii")
         if markdown_current
@@ -330,7 +340,7 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
         (
             markdown_path,
             _MARKDOWN_PATH,
-            markdown_path.exists(),
+            markdown_existed,
             markdown_current,
             rendered_markdown,
             "utf-8",
@@ -349,26 +359,41 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
     if not check and changed:
         staged: list[tuple[Path, Path, Path | None]] = []
         published: list[tuple[Path, Path | None]] = []
+        transaction_error: OSError | None = None
+        operation = "preparing generated-file transaction"
+        rollback_errors: list[str] = []
+        cleanup_errors: list[str] = []
+        preserved_backups: set[Path] = set()
         try:
+            default_mode = _default_file_mode()
             for path, _, existed, current, expected, _ in outputs:
                 if current == expected:
                     continue
+                operation = f"creating parent directory {path.parent} for {path}"
                 path.parent.mkdir(parents=True, exist_ok=True)
+                operation = f"reading permission mode for {path}"
+                mode = _publication_mode(path, existed, default_mode)
+                operation = f"staging generated output for {path}"
                 temporary = _stage_bytes(
-                    path, expected, suffix=".tmp"
+                    path, expected, suffix=".tmp", mode=mode
                 )
                 staged.append((temporary, path, None))
+                operation = f"staging rollback backup for {path}"
                 backup = (
-                    _stage_bytes(path, current, suffix=".rollback.tmp")
+                    _stage_bytes(
+                        path, current, suffix=".rollback.tmp", mode=mode
+                    )
                     if existed
                     else None
                 )
                 staged[-1] = (temporary, path, backup)
             for temporary, path, backup in staged:
+                operation = f"publishing {temporary} to {path}"
                 os.replace(temporary, path)
                 published.append((path, backup))
         except OSError as error:
-            rollback_errors: list[str] = []
+            transaction_error = error
+            cleanup_errors.extend(getattr(error, "__notes__", ()))
             for path, backup in reversed(published):
                 try:
                     if backup is None:
@@ -376,20 +401,44 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
                     else:
                         os.replace(backup, path)
                 except OSError as rollback_error:
-                    rollback_errors.append(f"{path}: {rollback_error}")
-            detail = (
-                "; rollback errors: " + "; ".join(rollback_errors)
-                if rollback_errors
-                else ""
-            )
-            raise GenerationError(
-                f"generated-file transaction failed: {error}{detail}"
-            ) from error
+                    if backup is not None:
+                        preserved_backups.add(backup)
+                        source = str(backup)
+                    else:
+                        source = "<new target; no backup>"
+                    rollback_errors.append(
+                        f"{path} from {source}: {rollback_error}"
+                    )
         finally:
             for temporary, _, backup in staged:
                 for candidate in (temporary, backup):
-                    if candidate is not None:
+                    if candidate is None or candidate in preserved_backups:
+                        continue
+                    try:
                         candidate.unlink(missing_ok=True)
+                    except OSError as cleanup_error:
+                        cleanup_errors.append(f"{candidate}: {cleanup_error}")
+
+        if transaction_error is not None:
+            details = [
+                f"generated-file transaction failed while {operation}: "
+                f"{transaction_error}"
+            ]
+            if rollback_errors:
+                details.append("rollback errors: " + "; ".join(rollback_errors))
+            if preserved_backups:
+                details.append(
+                    "preserved rollback backups: "
+                    + ", ".join(str(path) for path in sorted(preserved_backups))
+                )
+            if cleanup_errors:
+                details.append("cleanup errors: " + "; ".join(cleanup_errors))
+            raise GenerationError("; ".join(details)) from transaction_error
+        if cleanup_errors:
+            raise GenerationError(
+                "generated-file cleanup failed; cleanup errors: "
+                + "; ".join(cleanup_errors)
+            )
 
     return GenerationResult(
         tuple(path for path, *_ in outputs),
@@ -398,7 +447,9 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
     )
 
 
-def _stage_bytes(path: Path, payload: bytes, *, suffix: str) -> Path:
+def _stage_bytes(
+    path: Path, payload: bytes, *, suffix: str, mode: int | None = None
+) -> Path:
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=suffix, dir=path.parent
     )
@@ -408,10 +459,35 @@ def _stage_bytes(path: Path, payload: bytes, *, suffix: str) -> Path:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-    except BaseException:
-        temporary.unlink(missing_ok=True)
+        if mode is not None:
+            os.chmod(temporary, mode)
+    except BaseException as error:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            error.add_note(
+                f"also failed to clean staging file {temporary}: {cleanup_error}"
+            )
         raise
     return temporary
+
+
+def _default_file_mode() -> int | None:
+    if os.name == "nt":
+        return None
+    current_umask = os.umask(0)
+    os.umask(current_umask)
+    return 0o666 & ~current_umask
+
+
+def _publication_mode(
+    path: Path, existed: bool, default_mode: int | None
+) -> int | None:
+    if os.name == "nt":
+        return None
+    if not existed:
+        return default_mode
+    return stat.S_IMODE(path.stat().st_mode)
 
 
 def _tobex_prefix(existing: str) -> str:
@@ -430,7 +506,13 @@ def _tobex_prefix(existing: str) -> str:
             continue
         if first_assignment_seen:
             break
-        if re.match(r"(?i)^install_tobex\s*=\s*1(?:\s|//|$)", stripped) is None:
+        if (
+            re.fullmatch(
+                r"(?i)install_tobex[ \t]*=[ \t]*1(?:[ \t]*//[^\r\n]*)?",
+                stripped,
+            )
+            is None
+        ):
             raise GenerationError(
                 "install_tobex = 1 must remain the first non-comment settings assignment"
             )
@@ -523,11 +605,21 @@ def _detect_newline_text(source: str, path: Path) -> str:
 
 
 def _detect_newline_bytes(source: bytes, path: Path) -> bytes:
-    if b"\r\n" in source:
-        if source.replace(b"\r\n", b"").find(b"\n") >= 0:
+    has_crlf = b"\r\n" in source
+    without_crlf = source.replace(b"\r\n", b"")
+    has_lone_cr = b"\r" in without_crlf
+    has_lone_lf = b"\n" in without_crlf
+    if has_lone_cr:
+        if has_crlf or has_lone_lf:
+            raise GenerationError(f"{path.as_posix()}: mixed newline conventions")
+        raise GenerationError(
+            f"{path.as_posix()}: unsupported lone CR newline convention"
+        )
+    if has_crlf:
+        if has_lone_lf:
             raise GenerationError(f"{path.as_posix()}: mixed newline conventions")
         return b"\r\n"
-    if b"\n" in source:
+    if has_lone_lf:
         return b"\n"
     return b"\n"
 

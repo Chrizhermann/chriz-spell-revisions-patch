@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +110,33 @@ def test_parse_tra_supports_multiline_tildes_and_quoted_actual_syntax() -> None:
     }
 
 
+def test_parse_tra_supports_sound_refs_and_trailing_comments() -> None:
+    source = (
+        "@1=~Spoken~ [voice]\n"
+        "@2=~Block~ /* trailing block comment */\n"
+        "@3=~Both~ [sound_01] /* block */ // line comment\n"
+        "@4=~Multiline comment~ /* first\nsecond */\n"
+        "@5=~Comment first~ /* ignored by WeiDU */ [after]\n"
+        "@6=~Empty sound is accepted by WeiDU~ []\n"
+    )
+
+    assert parse_tra(source, source_name="suffixes.tra") == {
+        "@1": "Spoken",
+        "@2": "Block",
+        "@3": "Both",
+        "@4": "Multiline comment",
+        "@5": "Comment first",
+        "@6": "Empty sound is accepted by WeiDU",
+    }
+
+
+def test_parse_tra_accepts_cr_only_assignment_separators() -> None:
+    assert parse_tra("@1=~one~\r@2=~two~\r", source_name="cr-only.tra") == {
+        "@1": "one",
+        "@2": "two",
+    }
+
+
 def test_tra_duplicate_identity_is_numeric() -> None:
     with pytest.raises(TraError, match="duplicate reference @1"):
         parse_tra("@01=~one~\n@1=~two~\n", source_name="duplicate.tra")
@@ -121,6 +150,10 @@ def test_tra_duplicate_identity_is_numeric() -> None:
         ("@1 one\n", "malformed assignment"),
         ("@1=~unterminated\n", "unterminated '~' value for @1"),
         ('@1="unterminated\n', "unterminated '\"' value for @1"),
+        ("@1=~value~ [unterminated\n", "unterminated sound reference"),
+        ("@1=~value~ /* unterminated\n", "unterminated block comment"),
+        ("@1=~value~ arbitrary\n", "unexpected content after @1"),
+        ("@1=~value~ [voice] arbitrary\n", "unexpected content after @1"),
         ("orphan content\n", "unexpected content"),
     ],
 )
@@ -204,6 +237,22 @@ def test_config_preserves_tobex_prefix_and_emits_exact_metadata_and_defaults() -
     assert "sr_arcane_level_1_default = -1" in assignments
     assert "sr_wizard_magic_missile = -1" in assignments
     assert rendered.count("\r\n") == rendered.count("\n")
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "install_tobex = 1 garbage",
+        "install_tobex = 1 sr_default = 0",
+        "install_tobex = 1 /* not a line comment */",
+        "install_tobex = 10",
+    ],
+)
+def test_config_rejects_trailing_tokens_on_tobex_assignment(
+    assignment: str,
+) -> None:
+    with pytest.raises(GenerationError, match="first non-comment settings assignment"):
+        render_config(_catalog(), f"// Main\n{assignment}\n", newline="\n")
 
 
 def test_docs_resolve_tra_and_escape_markdown_and_html() -> None:
@@ -416,6 +465,114 @@ def test_generation_rolls_back_every_target_if_publication_fails(
     assert not (tmp_path / "docs" / "spell-revisions-change-catalog.md").exists()
 
 
+def test_failed_rollback_preserves_backup_and_reports_exact_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_repo(tmp_path)
+    settings = tmp_path / "spell_rev" / "settings.ini"
+    before_settings = settings.read_bytes()
+    module = importlib.import_module("tools.sr_config.generate")
+    real_replace = module.os.replace
+    publication_calls = 0
+
+    def fail_publication_and_rollback(source: object, target: object) -> None:
+        nonlocal publication_calls
+        source_text = str(source)
+        if source_text.endswith(".rollback.tmp"):
+            raise OSError("simulated rollback failure")
+        if source_text.endswith(".tmp"):
+            publication_calls += 1
+            if publication_calls == 2:
+                raise OSError("simulated publication failure")
+        real_replace(source, target)
+
+    monkeypatch.setattr(module.os, "replace", fail_publication_and_rollback)
+
+    with pytest.raises(GenerationError) as caught:
+        generate(tmp_path)
+
+    backups = list(tmp_path.rglob("*.rollback.tmp"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == before_settings
+    assert str(settings) in str(caught.value)
+    assert str(backups[0]) in str(caught.value)
+    assert "simulated publication failure" in str(caught.value)
+    assert "simulated rollback failure" in str(caught.value)
+
+
+def test_cleanup_failure_does_not_mask_primary_transaction_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_repo(tmp_path)
+    module = importlib.import_module("tools.sr_config.generate")
+    real_replace = module.os.replace
+    real_unlink = type(tmp_path).unlink
+    publication_calls = 0
+    cleanup_failed = False
+
+    def fail_second_publication(source: object, target: object) -> None:
+        nonlocal publication_calls
+        source_text = str(source)
+        if source_text.endswith(".tmp") and not source_text.endswith(".rollback.tmp"):
+            publication_calls += 1
+            if publication_calls == 2:
+                raise OSError("primary publication failure")
+        real_replace(source, target)
+
+    def fail_one_cleanup(
+        path: Path, missing_ok: bool = False
+    ) -> None:
+        nonlocal cleanup_failed
+        if not cleanup_failed and str(path).endswith(".tmp"):
+            cleanup_failed = True
+            raise OSError("secondary cleanup failure")
+        real_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(module.os, "replace", fail_second_publication)
+    monkeypatch.setattr(type(tmp_path), "unlink", fail_one_cleanup)
+
+    with pytest.raises(GenerationError) as caught:
+        generate(tmp_path)
+
+    assert "primary publication failure" in str(caught.value)
+    assert "secondary cleanup failure" in str(caught.value)
+    assert "cleanup errors" in str(caught.value)
+
+
+def test_staging_cleanup_failure_is_reported_with_primary_error_and_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_repo(tmp_path)
+    module = importlib.import_module("tools.sr_config.generate")
+    real_unlink = type(tmp_path).unlink
+    cleanup_failed = False
+
+    def fail_staging_write(_descriptor: int) -> None:
+        raise OSError("primary staging write failure")
+
+    def fail_staging_cleanup(
+        path: Path, missing_ok: bool = False
+    ) -> None:
+        nonlocal cleanup_failed
+        if not cleanup_failed and str(path).endswith(".tmp"):
+            cleanup_failed = True
+            raise OSError("secondary staging cleanup failure")
+        real_unlink(path, missing_ok=missing_ok)
+
+    monkeypatch.setattr(module.os, "fsync", fail_staging_write)
+    monkeypatch.setattr(type(tmp_path), "unlink", fail_staging_cleanup)
+
+    with pytest.raises(GenerationError) as caught:
+        generate(tmp_path)
+
+    leaked = list(tmp_path.rglob("*.tmp"))
+    assert len(leaked) == 1
+    assert "primary staging write failure" in str(caught.value)
+    assert "secondary staging cleanup failure" in str(caught.value)
+    assert str(leaked[0]) in str(caught.value)
+    assert "cleanup errors" in str(caught.value)
+
+
 def test_generation_cleans_staging_files_if_backup_staging_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -426,12 +583,18 @@ def test_generation_cleans_staging_files_if_backup_staging_fails(
     real_stage = module._stage_bytes
     calls = 0
 
-    def fail_first_backup(path: Path, payload: bytes, *, suffix: str) -> Path:
+    def fail_first_backup(
+        path: Path,
+        payload: bytes,
+        *,
+        suffix: str,
+        mode: int | None = None,
+    ) -> Path:
         nonlocal calls
         calls += 1
         if calls == 2:
             raise OSError("simulated staging failure")
-        return real_stage(path, payload, suffix=suffix)
+        return real_stage(path, payload, suffix=suffix, mode=mode)
 
     monkeypatch.setattr(module, "_stage_bytes", fail_first_backup)
 
@@ -440,3 +603,78 @@ def test_generation_cleans_staging_files_if_backup_staging_fails(
 
     assert settings.read_bytes() == before
     assert not list(tmp_path.rglob("*.tmp"))
+
+
+@pytest.mark.parametrize("target_name", ["settings", "html", "markdown"])
+def test_generation_rejects_cr_only_target_newlines(
+    tmp_path: Path, target_name: str
+) -> None:
+    _seed_repo(tmp_path)
+    if target_name == "markdown":
+        generate(tmp_path)
+        target = tmp_path / "docs" / "spell-revisions-change-catalog.md"
+    elif target_name == "html":
+        target = tmp_path / "spell_rev" / "readme-spell_rev.html"
+    else:
+        target = tmp_path / "spell_rev" / "settings.ini"
+    target.write_bytes(
+        target.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r")
+    )
+
+    with pytest.raises(GenerationError, match="lone CR newline"):
+        generate(tmp_path, check=True)
+
+
+@pytest.mark.parametrize("target_name", ["settings", "html", "markdown"])
+def test_generation_rejects_crlf_mixed_with_lone_cr(
+    tmp_path: Path, target_name: str
+) -> None:
+    _seed_repo(tmp_path, newline="\r\n")
+    if target_name == "markdown":
+        generate(tmp_path)
+        target = tmp_path / "docs" / "spell-revisions-change-catalog.md"
+    elif target_name == "html":
+        target = tmp_path / "spell_rev" / "readme-spell_rev.html"
+    else:
+        target = tmp_path / "spell_rev" / "settings.ini"
+    target.write_bytes(target.read_bytes() + b"\r")
+
+    with pytest.raises(GenerationError, match="mixed newline conventions"):
+        generate(tmp_path, check=True)
+
+
+def test_markdown_read_error_is_wrapped_for_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _seed_repo(tmp_path)
+    markdown_path = tmp_path / "docs" / "spell-revisions-change-catalog.md"
+    markdown_path.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["generate", "--check"]) == 1
+    output = capsys.readouterr()
+    assert "generation failed:" in output.err
+    assert "unable to read Markdown" in output.err
+    assert "Traceback" not in output.err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission modes")
+def test_generation_preserves_existing_modes_and_uses_umask_for_new_files(
+    tmp_path: Path,
+) -> None:
+    _seed_repo(tmp_path)
+    settings = tmp_path / "spell_rev" / "settings.ini"
+    html_path = tmp_path / "spell_rev" / "readme-spell_rev.html"
+    markdown_path = tmp_path / "docs" / "spell-revisions-change-catalog.md"
+    settings.chmod(0o640)
+    html_path.chmod(0o604)
+    current_umask = os.umask(0)
+    os.umask(current_umask)
+
+    generate(tmp_path)
+
+    assert stat.S_IMODE(settings.stat().st_mode) == 0o640
+    assert stat.S_IMODE(html_path.stat().st_mode) == 0o604
+    assert stat.S_IMODE(markdown_path.stat().st_mode) == 0o666 & ~current_umask

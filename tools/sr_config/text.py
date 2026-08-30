@@ -77,19 +77,65 @@ def parse_tra(source: str, *, source_name: str = "<TRA>") -> dict[str, str]:
         values[reference] = source[value_start:value_end]
         locations[reference] = assignment_line
         index = value_end + 1
-        # After a value, only horizontal whitespace and a line comment may share
-        # the physical line. The next assignment begins after a newline.
-        while index < length and source[index] in " \t\r":
-            index += 1
-        if index < length and source.startswith("//", index):
-            newline = source.find("\n", index + 2)
-            index = length if newline < 0 else newline + 1
-        elif index < length and source[index] != "\n":
+
+        # WeiDU permits one optional bracketed sound reference after the text.
+        # Block comments are ignored tokens and may appear on either side of it;
+        # arbitrary suffix tokens remain an error so syntax is never truncated.
+        sound_seen = False
+        while index < length:
+            while index < length and source[index] in " \t":
+                index += 1
+            if index >= length:
+                break
+            if source.startswith("/*", index):
+                comment_line = line_at(index)
+                end_comment = source.find("*/", index + 2)
+                if end_comment < 0:
+                    raise TraError(
+                        f"{source_name}:{comment_line}: unterminated block comment "
+                        f"after {reference}"
+                    )
+                index = end_comment + 2
+                while index < length and source[index] in " \t":
+                    index += 1
+                continue
+            if source[index] == "[" and not sound_seen:
+                sound_line = line_at(index)
+                sound_end = source.find("]", index + 1)
+                newline_positions = tuple(
+                    position
+                    for position in (
+                        source.find("\r", index + 1),
+                        source.find("\n", index + 1),
+                    )
+                    if position >= 0
+                )
+                first_newline = min(newline_positions, default=length)
+                if sound_end < 0 or sound_end > first_newline:
+                    raise TraError(
+                        f"{source_name}:{sound_line}: unterminated sound reference "
+                        f"after {reference}"
+                    )
+                sound_seen = True
+                index = sound_end + 1
+                continue
+            if source.startswith("//", index):
+                newline = source.find("\n", index + 2)
+                index = length if newline < 0 else newline + 1
+                break
+            if source[index] == "\r":
+                index += (
+                    2
+                    if index + 1 < length and source[index + 1] == "\n"
+                    else 1
+                )
+                break
+            if source[index] == "\n":
+                index += 1
+                break
             raise TraError(
                 f"{source_name}:{line_at(index)}: unexpected content after {reference}"
             )
-        elif index < length:
-            index += 1
 
     return values
 

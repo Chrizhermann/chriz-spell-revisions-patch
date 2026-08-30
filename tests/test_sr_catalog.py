@@ -482,11 +482,13 @@ def test_metadata_setting_names_are_reserved_case_insensitively(
 @pytest.mark.parametrize(
     ("owner", "setting", "expected_path"),
     [
-        ("group", "SR_FEATURE_000002", "groups[0].setting"),
+        ("group", "SR_FEATURE_000003", "groups[0].setting"),
         ("change", "sr_feature_000001", "changes[0].setting"),
+        ("change", "Sr_FeAtUrE_999999", "changes[0].setting"),
+        ("change", "sr_feature_future", "changes[0].setting"),
     ],
 )
-def test_complete_generated_feature_symbol_set_is_reserved_case_insensitively(
+def test_generated_feature_namespace_is_reserved_case_insensitively(
     owner: str, setting: str, expected_path: str
 ) -> None:
     changes = [change("a"), change("b")]
@@ -509,6 +511,14 @@ def test_complete_generated_feature_symbol_set_is_reserved_case_insensitively(
 
     assert str(error.value).startswith(f"{expected_path}:")
     assert "reserved generated setting" in str(error.value)
+
+
+def test_similar_non_namespace_feature_setting_is_allowed() -> None:
+    catalog = Catalog.from_dict(
+        minimal_catalog(changes=[change("a", setting="sr_featurex")])
+    )
+
+    assert catalog.changes[0].setting == "sr_featurex"
 
 
 @pytest.mark.parametrize(

@@ -402,11 +402,7 @@ def _validate_catalog(catalog: Catalog) -> None:
     all_ids: dict[str, tuple[str, int, str]] = {}
     settings: dict[str, tuple[str, int, str]] = {}
     reserved_settings = {
-        value.casefold(): value
-        for value in (
-            *CONFIG_METADATA_SETTINGS,
-            *(feature_symbol(index) for index in range(1, len(catalog.changes) + 1)),
-        )
+        value.casefold(): value for value in CONFIG_METADATA_SETTINGS
     }
 
     for index, record in enumerate(catalog.groups):
@@ -555,11 +551,17 @@ def _record_unique_setting(
 def _validate_setting_not_reserved(
     setting: str, *, path: str, reserved: Mapping[str, str]
 ) -> None:
-    generated_name = reserved.get(_normalize(setting))
+    normalized = _normalize(setting)
+    generated_name = reserved.get(normalized)
     if generated_name is not None:
         raise CatalogError(
             f"{path}: setting {setting!r} collides with reserved generated "
             f"setting {generated_name!r}"
+        )
+    if normalized.startswith("sr_feature_"):
+        raise CatalogError(
+            f"{path}: setting {setting!r} collides with reserved generated "
+            "setting namespace 'sr_feature_*'"
         )
 
 
