@@ -9,9 +9,19 @@ exact spelling for checkout validation.
 The catalog remains at `schema_version: 1`. No populated catalog has shipped, so
 these additions tighten the unshipped version rather than introducing a migration.
 
-## Top-level classification collections
+## Top-level coverage collections
 
 The following arrays are required, including while empty:
+
+- `component_zero_closure_roots`: exact supplemental entry spans for component
+  zero that live outside `migration.installer_source`. Each record contains an
+  Infrastructure `owner` plus a complete `source_span` that must exactly equal
+  one of that owner's declared spans. Coverage inventories only those pinned
+  bytes, then recursively follows only `INCLUDE`/`REINCLUDE` occurrences reached
+  inside them. Bytes before, between, and after the roots stay inert, so later
+  `setup-spell_rev.tp2` components cannot enter component-zero coverage merely
+  because they share the setup file. Roots add traversal, not ownership: their
+  existing Infrastructure span remains the sole ownership declaration.
 
 - `dormant_resources`: package payloads that exist exactly in the repository but
   are not owned or reachable from component-zero source. Each record contains an
@@ -65,10 +75,16 @@ multiply owned live candidate still fails classification. If no runtime candidat
 remains, coverage requires an exact `binary_edge_resolutions` entry; it never
 assumes that an unknown game lookup is safe.
 
-## Dynamic source resolutions
+## Occurrence-specific source resolutions
 
-Each `infrastructure.source_resolutions` record identifies one physical dynamic
+Each `infrastructure.source_resolutions` record identifies one physical source
 operand by exact `source`, `line`, `command`, `operand_index`, and `operand`.
+The operand may be percent-dynamic or static. A matching declaration is consumed
+exactly once and takes precedence over ordinary static lookup; a static operand
+without a declaration retains ordinary resolution. Percent-dynamic operands
+still require a declaration. A shifted line, changed command, wrong operand
+index, changed literal, stale source path, or duplicate physical match fails
+closed instead of falling back to a nearby declaration.
 Exactly one primary resolution mode is required:
 
 - ordered concrete `targets`;
@@ -94,6 +110,13 @@ be reciprocal with the resolution-owner Infrastructure. Reciprocity means either
 the same Infrastructure record or both sides of a Change processor/Infrastructure
 consumer pair. A one-way `infrastructure_requires` edge is not reciprocity;
 deferred, stale, resource-less, and unrelated owners fail coverage.
+
+`LAF CREATE_SPELL STR_VAR spell=~...~ END` has one conservative special role:
+the exact `spell` argument is a generated output, not a source dependency. The
+output itself emits no dependency edge. A later `COPY_EXISTING` of `<spell>.spl`
+is classified normally through the owning record's exact `generated_resource`.
+Other action functions and other `STR_VAR` names keep their ordinary argument
+semantics.
 
 ## Infrastructure
 

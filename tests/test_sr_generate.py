@@ -97,6 +97,7 @@ def _catalog(
             }
         ],
         "infrastructure": [],
+        "component_zero_closure_roots": [],
         "dormant_resources": [],
         "deferred_source_scopes": [],
         "binary_edge_resolutions": [],
@@ -113,6 +114,12 @@ def _texts() -> dict[str, str]:
 
 def _catalog_with_support_metadata() -> Catalog:
     raw = json.loads(json.dumps(asdict(_catalog())))
+    closure_span = {
+        "path": "spell_rev/setup-spell_rev.tp2",
+        "start": "// support postlude",
+        "end": "// next component",
+        "sha256": "c" * 64,
+    }
     raw["changes"][0]["processors"] = ["support.processor"]
     raw["infrastructure"] = [
         {
@@ -120,7 +127,7 @@ def _catalog_with_support_metadata() -> Catalog:
             "activation": "consumer_selected",
             "infrastructure_requires": ["metadata.index"],
             "category": "derived",
-            "source_spans": [],
+            "source_spans": [closure_span],
             "resources": [
                 {"path": "spell_rev/lib/support.tpa", "kind": "source"}
             ],
@@ -139,6 +146,9 @@ def _catalog_with_support_metadata() -> Catalog:
             "include_resolutions": [],
             "source_resolutions": [],
         },
+    ]
+    raw["component_zero_closure_roots"] = [
+        {"owner": "support.processor", "source_span": closure_span}
     ]
     raw["deferred_source_scopes"] = [
         {
@@ -364,6 +374,7 @@ def test_fingerprint_is_canonical_semantic_json_not_source_formatting() -> None:
                 ],
                 "changes": [],
                 "infrastructure": [],
+                "component_zero_closure_roots": [],
                 "dormant_resources": [],
                 "deferred_source_scopes": [],
                 "binary_edge_resolutions": [],
@@ -444,6 +455,7 @@ def test_support_metadata_is_documented_but_never_becomes_a_setting() -> None:
 
     for heading in (
         "Support infrastructure",
+        "Component-zero supplemental closure roots",
         "Deferred source scopes",
         "Dormant payloads",
         "Audited binary-external overrides",
@@ -466,6 +478,8 @@ def test_support_metadata_is_documented_but_never_becomes_a_setting() -> None:
     ):
         assert value in markdown
         assert value in html_region
+    assert "spell\\_rev/setup\\-spell\\_rev.tp2" in markdown
+    assert "spell_rev/setup-spell_rev.tp2" in html_region
 
     assignments = [
         line
@@ -509,6 +523,14 @@ def test_fingerprint_includes_every_support_metadata_collection() -> None:
         changed = json.loads(json.dumps(raw))
         changed[collection][0]["reason"] += " Updated."
         variants.append(Catalog.from_dict(changed))
+    changed_closure_root = json.loads(json.dumps(raw))
+    changed_closure_root["component_zero_closure_roots"][0]["source_span"][
+        "sha256"
+    ] = "d" * 64
+    changed_closure_root["infrastructure"][0]["source_spans"][0][
+        "sha256"
+    ] = "d" * 64
+    variants.append(Catalog.from_dict(changed_closure_root))
     changed_requirements = json.loads(json.dumps(raw))
     changed_requirements["infrastructure"][0]["infrastructure_requires"] = []
     variants.append(Catalog.from_dict(changed_requirements))
@@ -522,7 +544,7 @@ def test_fingerprint_includes_every_support_metadata_collection() -> None:
     }
 
     assert baseline.schema_version == 1
-    assert len(fingerprints) == 6
+    assert len(fingerprints) == 7
 
 
 def test_fingerprint_includes_source_access_and_supplemental_owner_order() -> None:
@@ -592,6 +614,7 @@ def test_support_metadata_uses_table_safe_variable_length_code_spans() -> None:
     raw = json.loads(json.dumps(asdict(_catalog_with_support_metadata())))
     raw["changes"][0]["processors"] = ["support`|processor"]
     raw["infrastructure"][0]["id"] = "support`|processor"
+    raw["component_zero_closure_roots"][0]["owner"] = "support`|processor"
     raw["binary_edge_resolutions"][0]["field"] = (
         "ability[0].effect[`tick`|0].resource"
     )

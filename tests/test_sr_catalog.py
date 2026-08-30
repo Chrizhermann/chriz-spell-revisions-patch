@@ -115,6 +115,7 @@ def minimal_catalog(
     dormant_resources: list[dict[str, Any]] | None = None,
     deferred_source_scopes: list[dict[str, Any]] | None = None,
     binary_edge_resolutions: list[dict[str, Any]] | None = None,
+    component_zero_closure_roots: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -130,6 +131,7 @@ def minimal_catalog(
         "infrastructure": infrastructure_records
         if infrastructure_records is not None
         else [],
+        "component_zero_closure_roots": component_zero_closure_roots or [],
         "dormant_resources": dormant_resources or [],
         "deferred_source_scopes": deferred_source_scopes or [],
         "binary_edge_resolutions": binary_edge_resolutions or [],
@@ -164,6 +166,60 @@ def test_catalog_accepts_explicit_empty_classification_collections() -> None:
     assert catalog.dormant_resources == ()
     assert catalog.deferred_source_scopes == ()
     assert catalog.binary_edge_resolutions == ()
+    assert catalog.component_zero_closure_roots == ()
+
+
+def test_component_zero_closure_root_reuses_exact_infrastructure_span() -> None:
+    span = {
+        "path": "spell_rev/setup-spell_rev.tp2",
+        "start": "// component-zero postlude",
+        "end": "// next component",
+        "sha256": "1" * 64,
+    }
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("postlude", source_spans=[span])
+        ],
+        component_zero_closure_roots=[
+            {"owner": "postlude", "source_span": span}
+        ],
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    root = catalog.component_zero_closure_roots[0]
+    assert root.owner == "postlude"
+    assert root.source_span == catalog.infrastructure[0].source_spans[0]
+
+
+@pytest.mark.parametrize(
+    ("owner", "span_override", "expected"),
+    [
+        ("missing", {}, "unknown Infrastructure owner"),
+        ("postlude", {"sha256": "2" * 64}, "exact source_span"),
+    ],
+)
+def test_component_zero_closure_root_rejects_unbacked_declarations(
+    owner: str, span_override: dict[str, Any], expected: str
+) -> None:
+    span = {
+        "path": "spell_rev/setup-spell_rev.tp2",
+        "start": "// component-zero postlude",
+        "end": "// next component",
+        "sha256": "1" * 64,
+    }
+    declared = {**span, **span_override}
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("postlude", source_spans=[span])
+        ],
+        component_zero_closure_roots=[
+            {"owner": owner, "source_span": declared}
+        ],
+    )
+
+    with pytest.raises(CatalogError, match=expected):
+        Catalog.from_dict(raw)
 
 
 def dormant_resource(
@@ -216,7 +272,12 @@ def binary_edge_resolution(**overrides: Any) -> dict[str, Any]:
 
 @pytest.mark.parametrize(
     "field",
-    ["dormant_resources", "deferred_source_scopes", "binary_edge_resolutions"],
+    [
+        "component_zero_closure_roots",
+        "dormant_resources",
+        "deferred_source_scopes",
+        "binary_edge_resolutions",
+    ],
 )
 def test_classification_collections_are_required(field: str) -> None:
     raw = minimal_catalog()
@@ -2245,18 +2306,6 @@ def test_internal_generated_source_owners_are_ordered_unique_and_executable() ->
                 "line": 10,
                 "command": "COPY",
                 "operand_index": 0,
-                "operand": "spell_rev/assets/a.spl",
-                "reason": "Reviewed occurrence",
-                "targets": ["spell_rev/assets/a.spl"],
-            },
-            "infrastructure[0].source_resolutions[0].operand",
-        ),
-        (
-            {
-                "source": "spell_rev/components/main_component.tpa",
-                "line": 10,
-                "command": "COPY",
-                "operand_index": 0,
                 "operand": "spell_rev/assets/%SPELL%.spl",
                 "reason": "Reviewed occurrence",
                 "targets": ["spell_rev/assets/%SPELL%.spl"],
@@ -2341,6 +2390,34 @@ def test_source_resolution_requires_one_strict_resolution_mode(
     assert str(error.value).startswith(f"{expected_path}:")
 
 
+def test_source_resolution_accepts_an_exact_static_operand() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "static_source",
+                source_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 10,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/assets/A.spl",
+                        "reason": "Resolve the reviewed case-only source literal",
+                        "targets": ["spell_rev/assets/a.spl"],
+                    }
+                ],
+            )
+        ]
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    assert (
+        catalog.infrastructure[0].source_resolutions[0].operand
+        == "spell_rev/assets/A.spl"
+    )
+
+
 def test_dynamic_source_resolution_key_is_unique_across_infrastructure() -> None:
     resolution = {
         "source": "spell_rev/components/main_component.tpa",
@@ -2363,7 +2440,7 @@ def test_dynamic_source_resolution_key_is_unique_across_infrastructure() -> None
         ]
     )
 
-    with pytest.raises(CatalogError, match="duplicate dynamic source resolution"):
+    with pytest.raises(CatalogError, match="duplicate source occurrence resolution"):
         Catalog.from_dict(raw)
 
 

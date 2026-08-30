@@ -982,6 +982,7 @@ def _coverage_catalog(
     dormant_resources: list[dict[str, object]] | None = None,
     deferred_source_scopes: list[dict[str, object]] | None = None,
     binary_edge_resolutions: list[dict[str, object]] | None = None,
+    component_zero_closure_roots: list[dict[str, object]] | None = None,
 ) -> Catalog:
     return Catalog.from_dict(
         {
@@ -1005,6 +1006,7 @@ def _coverage_catalog(
             ],
             "changes": changes or [],
             "infrastructure": infrastructure or [],
+            "component_zero_closure_roots": component_zero_closure_roots or [],
             "dormant_resources": dormant_resources or [],
             "deferred_source_scopes": deferred_source_scopes or [],
             "binary_edge_resolutions": binary_edge_resolutions or [],
@@ -1374,6 +1376,7 @@ def test_inventory_check_catalog_is_read_only_and_diagnostics_are_deterministic(
         ],
         "changes": [],
         "infrastructure": [],
+        "component_zero_closure_roots": [],
         "dormant_resources": [],
         "deferred_source_scopes": [],
         "binary_edge_resolutions": [],
@@ -4004,4 +4007,278 @@ def test_stale_and_multiply_declared_shipped_resources_fail_coverage(
     assert [issue.code for issue in result.issues] == [
         "missing_shipped_resource",
         "multiply_declared_resource",
+    ]
+
+
+def test_component_zero_closure_roots_inventory_only_pinned_setup_spans_and_includes(
+    tmp_path: Path,
+) -> None:
+    main = tmp_path / "spell_rev/components/main_component.tpa"
+    main.parent.mkdir(parents=True)
+    main.write_bytes(b"")
+    setup_source = (
+        b"PRINT ~outside before~\n"
+        b"// component-zero postlude\n"
+        b"INCLUDE ~spell_rev/lib/postlude.tph~\n"
+        b"PRINT ~inside postlude~\n"
+        b"// next component\n"
+        b"BEGIN ~Optional component~\n"
+        b"INCLUDE ~spell_rev/lib/forbidden.tph~\n"
+    )
+    setup = tmp_path / "spell_rev/setup-spell_rev.tp2"
+    setup.write_bytes(setup_source)
+    library = tmp_path / "spell_rev/lib/postlude.tph"
+    library.parent.mkdir(parents=True)
+    library_source = (
+        b"PRINT ~postlude library~\n"
+        b"INCLUDE ~spell_rev/lib/nested.tph~\n"
+    )
+    library.write_bytes(library_source)
+    nested_source = b"PRINT ~nested library~\n"
+    (tmp_path / "spell_rev/lib/nested.tph").write_bytes(nested_source)
+    (tmp_path / "spell_rev/lib/forbidden.tph").write_bytes(
+        b"MYSTERY_STATEMENT ~must-not-be-inventoried.spl~\n"
+    )
+    _write_coverage_language_files(tmp_path)
+    root_span = _coverage_span(
+        "spell_rev/setup-spell_rev.tp2",
+        setup_source,
+        b"// component-zero postlude",
+        b"// next component",
+    )
+    catalog = _coverage_catalog(
+        infrastructure=[
+            {
+                "id": "postlude",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [
+                    root_span,
+                    _coverage_span(
+                        "spell_rev/lib/postlude.tph",
+                        library_source,
+                        b"PRINT ~postlude library~",
+                        None,
+                    ),
+                    _coverage_span(
+                        "spell_rev/lib/nested.tph",
+                        nested_source,
+                        b"PRINT ~nested library~",
+                        None,
+                    ),
+                ],
+                "resources": [],
+                "consumers": [],
+            }
+        ],
+        component_zero_closure_roots=[
+            {"owner": "postlude", "source_span": root_span}
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.source_node_count == 5
+    assert {edge.target for edge in result.source_edges} == {
+        "spell_rev/lib/postlude.tph",
+        "spell_rev/lib/nested.tph",
+    }
+    assert all("forbidden" not in edge.target for edge in result.source_edges)
+
+
+def test_exact_static_source_resolution_overrides_ordinary_literal_resolution(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/Assets/A.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    target = tmp_path / "spell_rev/assets/a.spl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[{"path": "spell_rev/assets/a.spl", "kind": "asset"}],
+                processors=["literal_resolution"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "literal_resolution",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/Assets/A.spl",
+                        "reason": "Exact checkout spelling for this occurrence",
+                        "targets": ["spell_rev/assets/a.spl"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/assets/a.spl", "owned")
+    ]
+
+
+@pytest.mark.parametrize(
+    "changed_key",
+    [
+        {"source": "spell_rev/components/other.tpa"},
+        {"line": 3},
+        {"command": "COPY"},
+        {"operand_index": 1},
+        {"operand": "other.spl"},
+    ],
+)
+def test_static_source_resolution_key_drift_fails_closed(
+    tmp_path: Path, changed_key: dict[str, object]
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~game.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    resolution: dict[str, object] = {
+        "source": "spell_rev/components/main_component.tpa",
+        "line": 2,
+        "command": "COPY_EXISTING",
+        "operand_index": 0,
+        "operand": "game.spl",
+        "reason": "Reviewed base-game occurrence",
+        "external": True,
+    }
+    resolution.update(changed_key)
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["literal_resolution"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "literal_resolution",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [resolution],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "stale_source_resolution" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_create_spell_spell_argument_is_generated_output_not_source_dependency(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\n"
+        b"LAF CREATE_SPELL STR_VAR spell=~k1#scre~ END\n"
+        b"COPY_EXISTING ~k1#scre.spl~ ~override~\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    nodes = tuple(node for node in inventory(component) if node.kind != "trivia")
+
+    assert [(operand.role, operand.value) for operand in nodes[0].resource_operands] == [
+        ("generated_output", "k1#scre")
+    ]
+
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[
+                    {"path": "K1#SCRE.SPL", "kind": "generated_resource"}
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("k1#scre.spl", "owned")
+    ]
+
+
+def test_non_create_spell_str_var_is_not_reclassified_as_generated_output(
+    tmp_path: Path,
+) -> None:
+    source = b"LAF OTHER_FUNCTION STR_VAR spell=~k1#scre~ END\n"
+    path = tmp_path / "other.tpa"
+    path.write_bytes(source)
+
+    node = next(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(operand.role, operand.value) for operand in node.resource_operands] == [
+        ("argument", "k1#scre")
+    ]
+
+
+def test_create_spell_comment_cannot_synthesize_a_generated_output(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"LAF CREATE_SPELL STR_VAR // spell=~not-an-assignment~\n"
+        b"  other=~ordinary-value~ END\n"
+    )
+    path = tmp_path / "commented.tpa"
+    path.write_bytes(source)
+
+    node = next(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(operand.role, operand.value) for operand in node.resource_operands] == [
+        ("argument", "ordinary-value")
     ]

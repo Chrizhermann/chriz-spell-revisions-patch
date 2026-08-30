@@ -145,6 +145,7 @@
   ],
   "changes": [],
   "infrastructure": [],
+  "component_zero_closure_roots": [],
   "dormant_resources": [],
   "deferred_source_scopes": [],
   "binary_edge_resolutions": []

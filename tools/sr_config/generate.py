@@ -771,6 +771,22 @@ def _append_markdown_support_sections(lines: list[str], catalog: Catalog) -> Non
     else:
         lines.append("No support infrastructure is declared.")
 
+    lines.extend(("", "## Component-zero supplemental closure roots", ""))
+    if catalog.component_zero_closure_roots:
+        lines.extend(
+            (
+                "| Infrastructure owner | Exact entry span |",
+                "|---|---|",
+            )
+        )
+        for root in catalog.component_zero_closure_roots:
+            lines.append(
+                f"| {_markdown_code(root.owner)} | "
+                f"{_markdown(_span_provenance((root.source_span,)))} |"
+            )
+    else:
+        lines.append("No supplemental component-zero closure roots are declared.")
+
     lines.extend(("", "## Deferred source scopes", ""))
     if catalog.deferred_source_scopes:
         lines.extend(
@@ -872,6 +888,25 @@ def _append_html_support_sections(lines: list[str], catalog: Catalog) -> None:
         )
     else:
         lines.append("<p>No support infrastructure is declared.</p>")
+
+    lines.append("<h4>Component-zero supplemental closure roots</h4>")
+    if catalog.component_zero_closure_roots:
+        _append_html_table(
+            lines,
+            ("Infrastructure owner", "Exact entry span"),
+            [
+                (
+                    root.owner,
+                    _span_provenance((root.source_span,)),
+                )
+                for root in catalog.component_zero_closure_roots
+            ],
+            "sr-config-closure-roots",
+        )
+    else:
+        lines.append(
+            "<p>No supplemental component-zero closure roots are declared.</p>"
+        )
 
     lines.append("<h4>Deferred source scopes</h4>")
     if catalog.deferred_source_scopes:

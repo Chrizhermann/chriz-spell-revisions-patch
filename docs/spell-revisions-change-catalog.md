@@ -13,6 +13,10 @@ No public changes have been cataloged yet. The migration gate remains closed unt
 
 No support infrastructure is declared.
 
+## Component-zero supplemental closure roots
+
+No supplemental component-zero closure roots are declared.
+
 ## Deferred source scopes
 
 No deferred source scopes are declared.

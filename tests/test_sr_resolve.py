@@ -77,6 +77,7 @@ def sample_catalog(*changes: dict[str, Any]) -> Catalog:
         ],
         "changes": list(changes),
         "infrastructure": [],
+        "component_zero_closure_roots": [],
         "dormant_resources": [],
         "deferred_source_scopes": [],
         "binary_edge_resolutions": [],

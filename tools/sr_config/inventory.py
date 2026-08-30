@@ -5,11 +5,19 @@ from __future__ import annotations
 import json
 from bisect import bisect_right
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
+from .catalog import SourceSpan
 from .resources import scan_package_resources
-from .source import ResourceOperand, SourceError, SourceNode, inventory
+from .source import (
+    ResourceOperand,
+    ResolvedSourceSpan,
+    SourceError,
+    SourceNode,
+    inventory,
+    resolve_span_offsets,
+)
 
 
 DEFAULT_ENTRY = "spell_rev/components/main_component.tpa"
@@ -48,6 +56,118 @@ def inventory_tree_with_edges(
         entry,
         include_resolutions=include_resolutions,
     )
+
+
+def inventory_source_spans_with_edges(
+    root: str | Path,
+    spans: tuple[SourceSpan, ...],
+    *,
+    include_resolutions: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
+    visited_paths: tuple[str, ...] = (),
+) -> tuple[tuple[SourceNode, ...], tuple[IncludeEdge, ...]]:
+    """Inventory only pinned source spans plus INCLUDEs reached inside them.
+
+    Bytes outside a root span are represented as trivia solely to preserve each
+    node's physical offset. They are never parsed for commands or INCLUDEs.
+    Included files are inventoried in full, recursively, and a path already
+    visited by the primary component-zero closure is not traversed twice.
+    """
+
+    root_path = Path(root).resolve()
+    resolutions = include_resolutions or {}
+    visited = {path.casefold() for path in visited_paths}
+    result: list[SourceNode] = []
+    include_edges: list[IncludeEdge] = []
+
+    def follow_include(source: str, include: str, line: int) -> None:
+        resolved = _resolve_include(include, source=source)
+        if resolved is not None:
+            include_edges.append(IncludeEdge(source, line, include, resolved))
+            visit_file(resolved)
+            return
+        key = (source.casefold(), include.replace("\\", "/").casefold())
+        explicit_targets = resolutions.get(key, ())
+        if not explicit_targets:
+            include_edges.append(IncludeEdge(source, line, include, None))
+            return
+        for target in explicit_targets:
+            concrete = _repository_include_path(target, source=source)
+            include_edges.append(IncludeEdge(source, line, include, concrete))
+            visit_file(concrete)
+
+    def visit_file(relative: str) -> None:
+        key = relative.casefold()
+        if key in visited:
+            return
+        visited.add(key)
+        path = root_path / PurePosixPath(relative)
+        if not path.is_file():
+            raise SourceError(f"{relative}: included source does not exist")
+        nodes = inventory(path, root=root_path)
+        result.extend(nodes)
+        try:
+            source = path.read_bytes()
+        except OSError as error:
+            raise SourceError(
+                f"{relative}: unable to read included source: {error}"
+            ) from error
+        for include, line in _include_occurrences(source):
+            follow_include(relative, include, line)
+
+    grouped: dict[str, list[tuple[SourceSpan, ResolvedSourceSpan]]] = {}
+    path_order: list[str] = []
+    for span in spans:
+        resolved = resolve_span_offsets(root_path, span)
+        key = span.path.casefold()
+        if key not in grouped:
+            grouped[key] = []
+            path_order.append(key)
+        grouped[key].append((span, resolved))
+
+    for key in path_order:
+        records = grouped[key]
+        display_path = records[0][0].path
+        if key in visited:
+            continue
+        visited.add(key)
+        records.sort(key=lambda item: (item[1].start, item[1].end))
+        source = records[0][1].source
+        cursor = 0
+        for span, resolved in records:
+            if resolved.source != source:
+                raise SourceError(
+                    f"{display_path}: closure roots resolved inconsistent source bytes"
+                )
+            if resolved.start < cursor:
+                raise SourceError(
+                    f"{display_path}: component-zero closure root spans overlap"
+                )
+            if cursor < resolved.start:
+                result.append(
+                    SourceNode(
+                        path=display_path,
+                        line=source[:cursor].count(b"\n") + 1,
+                        kind="trivia",
+                        command=None,
+                        section_comments=(),
+                        resource_operands=(),
+                        raw=source[cursor : resolved.start],
+                    )
+                )
+            line_delta = source[: resolved.start].count(b"\n")
+            span_nodes = inventory(
+                root_path / PurePosixPath(display_path),
+                _source=resolved.raw,
+                _display_path_override=display_path,
+            )
+            result.extend(
+                replace(node, line=node.line + line_delta) for node in span_nodes
+            )
+            for include, line in _include_occurrences(resolved.raw):
+                follow_include(display_path, include, line + line_delta)
+            cursor = resolved.end
+
+    return tuple(result), tuple(include_edges)
 
 
 def _inventory_tree(
@@ -366,6 +486,7 @@ __all__ = [
     "inventory",
     "inventory_tree",
     "inventory_tree_with_edges",
+    "inventory_source_spans_with_edges",
     "report_json_bytes",
     "write_inventory_report",
 ]

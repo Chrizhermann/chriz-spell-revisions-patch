@@ -94,6 +94,12 @@ class SourceSpan:
 
 
 @dataclass(frozen=True)
+class ComponentZeroClosureRoot:
+    owner: str
+    source_span: SourceSpan
+
+
+@dataclass(frozen=True)
 class ResourceOwnership:
     path: str
     kind: str
@@ -208,6 +214,7 @@ class Catalog:
     groups: tuple[Group, ...]
     changes: tuple[Change, ...]
     infrastructure: tuple[Infrastructure, ...]
+    component_zero_closure_roots: tuple[ComponentZeroClosureRoot, ...]
     dormant_resources: tuple[DormantResource, ...]
     deferred_source_scopes: tuple[DeferredSourceScope, ...]
     binary_edge_resolutions: tuple[BinaryEdgeResolution, ...]
@@ -225,6 +232,7 @@ class Catalog:
                 "groups",
                 "changes",
                 "infrastructure",
+                "component_zero_closure_roots",
                 "dormant_resources",
                 "deferred_source_scopes",
                 "binary_edge_resolutions",
@@ -236,6 +244,7 @@ class Catalog:
                 "groups",
                 "changes",
                 "infrastructure",
+                "component_zero_closure_roots",
                 "dormant_resources",
                 "deferred_source_scopes",
                 "binary_edge_resolutions",
@@ -272,6 +281,17 @@ class Catalog:
             for index, value in enumerate(infrastructure_raw)
         )
 
+        closure_roots_raw = _list(
+            catalog_raw["component_zero_closure_roots"],
+            "component_zero_closure_roots",
+        )
+        component_zero_closure_roots = tuple(
+            _parse_component_zero_closure_root(
+                value, f"component_zero_closure_roots[{index}]"
+            )
+            for index, value in enumerate(closure_roots_raw)
+        )
+
         dormant_raw = _list(catalog_raw["dormant_resources"], "dormant_resources")
         dormant_resources = tuple(
             _parse_dormant_resource(value, f"dormant_resources[{index}]")
@@ -305,6 +325,7 @@ class Catalog:
             groups=groups,
             changes=changes,
             infrastructure=infrastructure,
+            component_zero_closure_roots=component_zero_closure_roots,
             dormant_resources=dormant_resources,
             deferred_source_scopes=deferred_source_scopes,
             binary_edge_resolutions=binary_edge_resolutions,
@@ -404,6 +425,24 @@ def _parse_source_span(value: Any, path: str) -> SourceSpan:
         start=_string(raw["start"], f"{path}.start"),
         end=_optional_string(raw["end"], f"{path}.end"),
         sha256=sha256,
+    )
+
+
+def _parse_component_zero_closure_root(
+    value: Any, path: str
+) -> ComponentZeroClosureRoot:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={"owner", "source_span"},
+        required={"owner", "source_span"},
+    )
+    return ComponentZeroClosureRoot(
+        owner=_identifier(raw["owner"], f"{path}.owner"),
+        source_span=_parse_source_span(
+            raw["source_span"], f"{path}.source_span"
+        ),
     )
 
 
@@ -621,8 +660,8 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
             f"{path}.operand_index: expected a non-negative integer"
         )
     operand = _string(raw["operand"], f"{path}.operand")
-    if "%" not in operand:
-        raise CatalogError(f"{path}.operand: expected a dynamic source operand")
+    if not operand:
+        raise CatalogError(f"{path}.operand: expected a non-empty source operand")
     reason = _string(raw["reason"], f"{path}.reason")
     if not reason.strip():
         raise CatalogError(f"{path}.reason: must not be blank")
@@ -1099,11 +1138,43 @@ def _validate_catalog(catalog: Catalog) -> None:
                 previous_infrastructure, previous_resolution = previous
                 raise CatalogError(
                     f"infrastructure[{index}].source_resolutions[{resolution_index}]: "
-                    "duplicate dynamic source resolution; first declared at "
+                    "duplicate source occurrence resolution; first declared at "
                     f"infrastructure[{previous_infrastructure}].source_resolutions"
                     f"[{previous_resolution}]"
                 )
             source_resolutions[key] = (index, resolution_index)
+
+    closure_root_keys: dict[
+        tuple[str, str, str, str | None, str], int
+    ] = {}
+    for index, root in enumerate(catalog.component_zero_closure_roots):
+        owner_entry = infrastructure_ids.get(_normalize(root.owner))
+        if owner_entry is None:
+            raise CatalogError(
+                f"component_zero_closure_roots[{index}].owner: unknown "
+                f"Infrastructure owner {root.owner!r}"
+            )
+        _, owner_index = owner_entry
+        if root.source_span not in catalog.infrastructure[owner_index].source_spans:
+            raise CatalogError(
+                f"component_zero_closure_roots[{index}].source_span: must reuse "
+                "an exact source_span declared by its Infrastructure owner"
+            )
+        span = root.source_span
+        key = (
+            _normalize(root.owner),
+            _normalize(span.path),
+            span.start,
+            span.end,
+            span.sha256.casefold(),
+        )
+        previous = closure_root_keys.get(key)
+        if previous is not None:
+            raise CatalogError(
+                f"component_zero_closure_roots[{index}]: duplicate closure root; "
+                f"first declared at component_zero_closure_roots[{previous}]"
+            )
+        closure_root_keys[key] = index
 
     for index, record in enumerate(catalog.deferred_source_scopes):
         normalized_id = _normalize(record.id)

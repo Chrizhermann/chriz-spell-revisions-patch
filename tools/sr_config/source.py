@@ -1003,6 +1003,10 @@ def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
         if command_index is None or command_index + 1 >= len(atoms):
             return ()
         return (ResourceOperand("target", atoms[command_index + 1][0]),)
+    if command == "LAF":
+        generated_output = _create_spell_output(raw)
+        if generated_output is not None:
+            return (ResourceOperand("generated_output", generated_output),)
     if command in _CALL_COMMANDS:
         return tuple(ResourceOperand("argument", value) for value in quoted)
     if command in _BLOCK_COMMANDS:
@@ -1014,6 +1018,44 @@ def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
         # The quoted macro name is executable identity, not a resource dependency.
         return ()
     return tuple(ResourceOperand("argument", value) for value in quoted)
+
+
+def _create_spell_output(raw: bytes) -> str | None:
+    """Return only CREATE_SPELL's exact ``STR_VAR spell`` output operand."""
+
+    atoms = _source_atoms(raw)
+    if len(atoms) < 5 or tuple(
+        (value.upper(), quoted) for value, quoted in atoms[:3]
+    ) != (
+        ("LAF", False),
+        ("CREATE_SPELL", False),
+        ("STR_VAR", False),
+    ):
+        return None
+    matches: list[str] = []
+    index = 3
+    while index < len(atoms):
+        value, quoted = atoms[index]
+        if not quoted and value.upper() in {"END", "INT_VAR", "RET", "RET_ARRAY"}:
+            break
+        if not quoted and value.casefold() == "spell=":
+            if index + 1 < len(atoms) and atoms[index + 1][1]:
+                matches.append(atoms[index + 1][0])
+                index += 2
+                continue
+        if not quoted and value.casefold() == "spell":
+            if (
+                index + 2 < len(atoms)
+                and atoms[index + 1] == ("=", False)
+                and atoms[index + 2][1]
+            ):
+                matches.append(atoms[index + 2][0])
+                index += 3
+                continue
+        index += 1
+    if len(matches) != 1 or not matches[0]:
+        return None
+    return matches[0]
 
 
 def _copy_prefix(raw: bytes) -> bytes:

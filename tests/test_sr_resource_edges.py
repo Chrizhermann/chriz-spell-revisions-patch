@@ -884,6 +884,7 @@ def _write_binary_coverage_fixture(
                     "consumers": ["source"],
                 }
             ],
+            "component_zero_closure_roots": [],
             "dormant_resources": [],
             "deferred_source_scopes": [],
             "binary_edge_resolutions": [],

@@ -18,6 +18,7 @@ from .inventory import (
     DEFAULT_ENTRY,
     DEFAULT_RESOURCE_ROOT,
     IncludeEdge,
+    inventory_source_spans_with_edges,
     inventory_tree_with_edges,
 )
 from .resources import scan_package_resources
@@ -195,6 +196,52 @@ def audit_catalog_coverage(
             for key, resolution in include_resolutions.items()
         },
     )
+    valid_closure_spans = []
+    closure_ranges: dict[str, list[tuple[int, int, int]]] = {}
+    for root_index, closure_root in enumerate(
+        catalog.component_zero_closure_roots
+    ):
+        declaration = f"component_zero_closure_roots[{root_index}].source_span"
+        try:
+            resolved = resolve_span_offsets(root_path, closure_root.source_span)
+        except SourceError as error:
+            issues.append(
+                CoverageIssue("invalid_closure_root", declaration, str(error))
+            )
+            continue
+        path_key = closure_root.source_span.path.casefold()
+        prior_ranges = closure_ranges.setdefault(path_key, [])
+        overlap = next(
+            (
+                previous_index
+                for start, end, previous_index in prior_ranges
+                if resolved.start < end and resolved.end > start
+            ),
+            None,
+        )
+        if overlap is not None:
+            issues.append(
+                CoverageIssue(
+                    "overlapping_closure_root",
+                    declaration,
+                    "span overlaps component_zero_closure_roots"
+                    f"[{overlap}].source_span",
+                )
+            )
+            continue
+        prior_ranges.append((resolved.start, resolved.end, root_index))
+        valid_closure_spans.append(closure_root.source_span)
+    supplemental_nodes, supplemental_edges = inventory_source_spans_with_edges(
+        root_path,
+        tuple(valid_closure_spans),
+        include_resolutions={
+            key: resolution.targets
+            for key, resolution in include_resolutions.items()
+        },
+        visited_paths=tuple(dict.fromkeys(node.path for node in source_nodes)),
+    )
+    source_nodes += supplemental_nodes
+    include_edges += supplemental_edges
     entry_path = Path(entry)
     if entry_path.is_absolute():
         entry_display = entry_path.resolve().relative_to(root_path).as_posix()
@@ -964,28 +1011,32 @@ def _audit_source_edges(
                     continue
             literal_operand = operand.value
             normalized_operand = _normalize_source_operand(operand.value)
-            if (
+            resolvable_source_operand = (
                 node.kind != "unknown"
                 and operand.role != "include"
-                and "%" in normalized_operand
                 and _is_dynamic_source_operand(
                     node, operand.role, operand.value
                 )
-            ):
-                location = (
-                    f"{node.path}:{node.line}:{node.command}.operand"
-                    f"[{operand_index}]"
-                )
+            )
+            resolution_key = None
+            resolution = None
+            if resolvable_source_operand:
                 assert node.command is not None
-                key = _source_resolution_key(
+                resolution_key = _source_resolution_key(
                     node.path,
                     node.line,
                     node.command,
                     operand_index,
                     literal_operand,
                 )
-                consumed_source_resolutions[key] += 1
-                resolution = source_resolutions.get(key)
+                resolution = source_resolutions.get(resolution_key)
+            if resolution is not None or (
+                resolvable_source_operand and "%" in normalized_operand
+            ):
+                location = (
+                    f"{node.path}:{node.line}:{node.command}.operand"
+                    f"[{operand_index}]"
+                )
                 if resolution is None:
                     result.append(
                         CoveredEdge(
@@ -1005,6 +1056,8 @@ def _audit_source_edges(
                         )
                     )
                     continue
+                assert resolution_key is not None
+                consumed_source_resolutions[resolution_key] += 1
                 related = _source_resolution_owner_is_reciprocal(
                     resolution.owner, source_hits
                 )
@@ -1188,7 +1241,7 @@ def _audit_source_edges(
                 CoverageIssue(
                     "stale_source_resolution",
                     resolution.declaration,
-                    "declared dynamic source does not occur in the component-zero closure",
+                    "declared source occurrence does not occur in the component-zero closure",
                 )
             )
         elif consumed > 1:
@@ -1196,7 +1249,7 @@ def _audit_source_edges(
                 CoverageIssue(
                     "multiply_consumed_source_resolution",
                     resolution.declaration,
-                    f"declared dynamic source matched {consumed} occurrences; expected exactly 1",
+                    f"declared source occurrence matched {consumed} times; expected exactly 1",
                 )
             )
     return result
@@ -1290,14 +1343,6 @@ def _candidate_ownership_hits(
     return tuple(unique.values())
 
 
-def _is_create_spell_resource(node: SourceNode, role: str) -> bool:
-    return (
-        role == "argument"
-        and node.command == "LAF"
-        and re.search(rb"(?i)\bLAF\s+CREATE_SPELL\b", node.raw) is not None
-    )
-
-
 def _is_resource_operand(node: SourceNode, role: str, value: str) -> bool:
     laf_resource = _is_laf_resource(node, role, value)
     return (
@@ -1305,7 +1350,6 @@ def _is_resource_operand(node: SourceNode, role: str, value: str) -> bool:
         or (role == "argument" and node.command == "ADD_PROJECTILE")
         or (role == "argument" and node.kind == "unknown")
         or laf_resource
-        or _is_create_spell_resource(node, role)
     )
 
 
@@ -1316,7 +1360,6 @@ def _is_dynamic_source_operand(
         role in {"source", "target"}
         or (role == "argument" and node.command == "ADD_PROJECTILE")
         or _is_laf_resource(node, role, value)
-        or _is_create_spell_resource(node, role)
     )
 
 
@@ -1344,7 +1387,6 @@ def _source_reference(
 ) -> tuple[str, bool | None, tuple[str, ...]] | None:
     if not _is_resource_operand(node, role, value):
         return None
-    create_spell_resource = _is_create_spell_resource(node, role)
     laf_resource = _is_laf_resource(node, role, value)
     normalized = _normalize_source_operand(value)
     path = PurePosixPath(normalized)
@@ -1359,9 +1401,6 @@ def _source_reference(
             else (normalized, False, ())
         )
     canonical = path.as_posix()
-    if create_spell_resource and not path.suffix:
-        canonical += ".spl"
-        path = PurePosixPath(canonical)
     if "%" not in canonical and _repository_directory_exists_exact(root, canonical):
         prefix = f"{canonical}/".casefold()
         return (
@@ -1384,7 +1423,7 @@ def _source_reference(
     ):
         return canonical, True, ()
     bare_fallback = len(path.parts) == 1 and (
-        laf_resource or create_spell_resource
+        laf_resource
     )
     basename_candidates = (
         tuple(
@@ -1412,8 +1451,6 @@ def _source_reference(
         return canonical, True, candidates
     if node.kind == "unknown":
         return canonical, None, ()
-    if create_spell_resource:
-        return canonical, True, (canonical,)
     return canonical, False, ()
 
 
