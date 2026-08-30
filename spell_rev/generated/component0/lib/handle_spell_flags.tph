@@ -1,0 +1,76 @@
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.ee_spell_flags
+ACTION_IF (sr_infra_000048 = 1) BEGIN
+//Auxiliary functions.
+//Bit-twiddling.
+//Set ith bit (0-indexed, least-to-most significant order) of byte at offset to 1.
+DEFINE_PATCH_FUNCTION set_bit INT_VAR offset = 0 bit = 0 BEGIN
+    PATCH_IF (0 <= bit) AND (bit <= 7) BEGIN
+        WRITE_BYTE offset (THIS BOR (1 << bit))
+    END ELSE BEGIN
+        PATCH_FAIL "set_bit: bit '%bit%' not between 0 and 7."
+    END
+END
+
+//Set ith bit (0-indexed, least-to-most significant order) of byte at offset to 0.
+DEFINE_PATCH_FUNCTION clear_bit INT_VAR offset = 0 bit = 0 BEGIN
+    PATCH_IF (0 <= bit) AND (bit <= 7) BEGIN
+        WRITE_BYTE offset (THIS BAND (BNOT (1 << bit)))
+    END ELSE BEGIN
+        PATCH_FAIL "clear_bit: bit '%bit%' not between 0 and 7."
+    END
+END
+
+//Dispatch call functions on the value to set the bit with.
+DEFINE_PATCH_FUNCTION toggle_bit INT_VAR offset = 0 bit = 0 value = 0 - 1 BEGIN
+    PATCH_MATCH value WITH
+        //Do nothing case.
+        0 - 1 BEGIN END
+        0 BEGIN LPF clear_bit INT_VAR offset = offset bit = bit END END
+        1 BEGIN LPF set_bit INT_VAR offset = offset bit = bit END END
+        DEFAULT
+            PATCH_FAIL "toggle_bit: '%value%' not between -1 and 1."
+    END
+END
+
+//Set break invisible and hostile flags.
+DEFINE_ACTION_FUNCTION ee_handle_spell_flags BEGIN
+    //Read no-write table.
+    COPY - ~spell_rev/lib/dv_spell_flags.2da~ ~override~
+        COUNT_2DA_COLS cols
+        READ_2DA_ENTRIES_NOW spell_flags cols
+        FOR (row = 0; row < spell_flags; ++row) BEGIN
+            READ_2DA_ENTRY_FORMER spell_flags row 0 spell
+            READ_2DA_ENTRY_FORMER spell_flags row 1 break_invisible
+            READ_2DA_ENTRY_FORMER spell_flags row 2 hostile
+            READ_2DA_ENTRY_FORMER spell_flags row 3 outdoors_only
+            READ_2DA_ENTRY_FORMER spell_flags row 4 ignore_dead_zone
+            READ_2DA_ENTRY_FORMER spell_flags row 5 ignore_wild_surge
+            READ_2DA_ENTRY_FORMER spell_flags row 6 non_combat
+            READ_2DA_ENTRY_FORMER spell_flags row 7 target_invisible
+            READ_2DA_ENTRY_FORMER spell_flags row 8 cast_silenced
+
+            //Check first spell is in spell.ids.
+            spell_nbr = IDS_OF_SYMBOL ("spell" "%spell%")
+            PATCH_IF NOT (spell_nbr = 0 - 1) BEGIN
+                LPF RES_NUM_OF_SPELL_NAME STR_VAR spell_name = EVAL "%spell%" RET spell_res END
+                PATCH_IF (FILE_EXISTS_IN_GAME "%spell_res%.spl") BEGIN
+                    INNER_ACTION BEGIN
+                        COPY_EXISTING ~%spell_res%.spl~ ~override~
+                            LPF toggle_bit INT_VAR offset = 0x19 bit = 1 value = break_invisible END
+                            LPF toggle_bit INT_VAR offset = 0x19 bit = 2 value = hostile END
+                            LPF toggle_bit INT_VAR offset = 0x19 bit = 5 value = outdoors_only END
+                            LPF toggle_bit INT_VAR offset = 0x19 bit = 6 value = ignore_dead_zone END
+                            LPF toggle_bit INT_VAR offset = 0x19 bit = 7 value = ignore_wild_surge END
+                            LPF toggle_bit INT_VAR offset = 0x1a bit = 0 value = non_combat END
+                            LPF toggle_bit INT_VAR offset = 0x1b bit = 0 value = target_invisible END
+                            LPF toggle_bit INT_VAR offset = 0x1b bit = 1 value = cast_silenced END
+                        BUT_ONLY
+                    END
+                END ELSE BEGIN
+                    PATCH_PRINT "Debug warning: ee_handle_spell_flags: spell '%spell%' not found in 'spell.ids'."
+                END
+            END
+        END
+END
+END
+// SR_CONFIG_GUARD_END infrastructure:global.ee_spell_flags

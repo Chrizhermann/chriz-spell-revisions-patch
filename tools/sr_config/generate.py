@@ -20,14 +20,18 @@ from .catalog import (
     Group,
     MemberReference,
     NameFallback,
+    SourceSpan,
     load_catalog,
 )
 from .resolve import feature_symbols
+from .source import SourceError, inventory, resolve_span_offsets_in_source
 from .text import TraError, load_english_tra, resolve_tra_reference
 
 
 BEGIN_MARKER = "<!-- SR_CONFIG_CATALOG_BEGIN -->"
 END_MARKER = "<!-- SR_CONFIG_CATALOG_END -->"
+CONFIG_GUIDE_BEGIN_MARKER = "<!-- SR_CONFIG_GUIDE_BEGIN -->"
+CONFIG_GUIDE_END_MARKER = "<!-- SR_CONFIG_GUIDE_END -->"
 
 _CATALOG_PATH = Path("spell_rev/catalog/changes.json")
 _CONFIG_PATH = Path("spell_rev/settings.ini")
@@ -41,6 +45,12 @@ _LEGACY_START = re.compile(
 )
 _LEGACY_END = re.compile(
     rb'(?m)^</div>\r?\n\r?\n<h2>Contact Information</h2>'
+)
+_LEGACY_CONFIG_GUIDE_START = re.compile(
+    rb"(?m)^  <p><strong>How to Prevent Certain Spells from Being Installed</strong>"
+)
+_LEGACY_CONFIG_GUIDE_END = re.compile(
+    rb"(?m)^</div>\r?\n\r?\n<h2>Components</h2>"
 )
 
 
@@ -69,6 +79,309 @@ def catalog_fingerprint(catalog: Catalog) -> str:
         separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
+
+
+def render_component_zero_sources(
+    root: str | Path, catalog: Catalog
+) -> dict[Path, bytes]:
+    """Render guarded component-zero source variants from exact catalog spans."""
+
+    root_path = Path(root).resolve()
+    feature_flags = feature_symbols(catalog)
+    infrastructure_flags = {
+        record.id: f"sr_infra_{index:06d}"
+        for index, record in enumerate(catalog.infrastructure, start=1)
+    }
+    owned: list[tuple[str, SourceSpan, str | None]] = []
+    for record in catalog.changes:
+        if record.component != 0:
+            continue
+        for span in record.source_spans:
+            owned.append(
+                (f"change:{record.id}", span, feature_flags[record.id])
+            )
+    for record in catalog.infrastructure:
+        guard = (
+            None
+            if record.activation == "always"
+            else infrastructure_flags[record.id]
+        )
+        for span in record.source_spans:
+            owned.append((f"infrastructure:{record.id}", span, guard))
+    for record in catalog.deferred_source_scopes:
+        guard = "exclude" if record.id.casefold() == "excluded.hardiness_spcl907" else None
+        for span in record.source_spans:
+            owned.append((f"deferred:{record.id}", span, guard))
+
+    closure_spans = {
+        (
+            root.source_span.path.casefold(),
+            root.source_span.start,
+            root.source_span.end,
+            root.source_span.sha256.casefold(),
+        )
+        for root in catalog.component_zero_closure_roots
+    }
+    by_path_spans: dict[str, list[tuple[str, SourceSpan, str | None]]] = {}
+    for owner, span, guard in owned:
+        if (
+            span.path.casefold(),
+            span.start,
+            span.end,
+            span.sha256.casefold(),
+        ) in closure_spans:
+            continue
+        by_path_spans.setdefault(span.path, []).append((owner, span, guard))
+
+    by_path: dict[str, list[tuple[int, int, str, str | None]]] = {}
+    sources: dict[str, bytes] = {}
+    for source_path, declarations in sorted(by_path_spans.items()):
+        try:
+            source = (root_path / source_path).read_bytes()
+        except OSError as error:
+            raise GenerationError(
+                f"{source_path}: unable to read source: {error}"
+            ) from error
+        sources[source_path] = source
+        for owner, span, guard in declarations:
+            try:
+                resolved = resolve_span_offsets_in_source(source, span)
+            except SourceError as error:
+                raise GenerationError(str(error)) from error
+            by_path.setdefault(source_path, []).append(
+                (resolved.start, resolved.end, owner, guard)
+            )
+
+    outputs: dict[Path, bytes] = {}
+    for source_path, intervals in sorted(by_path.items()):
+        source = sources[source_path]
+        _validate_component_source_coverage(source_path, source, intervals)
+        newline = _detect_newline_bytes(source, Path(source_path))
+        chunks: list[bytes] = []
+        cursor = 0
+        for start, end, owner, guard in sorted(intervals):
+            if start < cursor:
+                raise GenerationError(
+                    f"{source_path}: overlapping source span at {owner}"
+                )
+            chunks.append(source[cursor:start])
+            raw = source[start:end]
+            if guard == "exclude":
+                pass
+            elif guard is None:
+                chunks.append(raw)
+            else:
+                owner_bytes = owner.encode("utf-8")
+                guard_bytes = guard.encode("ascii")
+                chunks.extend(
+                    (
+                        b"// SR_CONFIG_GUARD_BEGIN " + owner_bytes + newline,
+                        b"ACTION_IF (" + guard_bytes + b" = 1) BEGIN" + newline,
+                        raw,
+                        b"" if raw.endswith((b"\n", b"\r")) else newline,
+                        b"END" + newline,
+                        b"// SR_CONFIG_GUARD_END " + owner_bytes + newline,
+                    )
+                )
+            cursor = end
+        chunks.append(source[cursor:])
+        relative = _component_zero_generated_path(Path(source_path))
+        outputs[relative] = _rewrite_internal_source_paths(
+            b"".join(chunks), by_path
+        )
+
+    entry = _render_component_zero_entry(
+        root_path, catalog, infrastructure_flags, by_path
+    )
+    outputs[Path("spell_rev/generated/component0/entry.tpa")] = entry
+    return outputs
+
+
+def _component_zero_generated_path(source_path: Path) -> Path:
+    parts = source_path.parts
+    if not parts or parts[0].casefold() != "spell_rev":
+        raise GenerationError(
+            f"{source_path.as_posix()}: component-zero source must be below spell_rev"
+        )
+    return Path("spell_rev/generated/component0").joinpath(*parts[1:])
+
+
+def _validate_component_source_coverage(
+    source_path: str,
+    source: bytes,
+    intervals: list[tuple[int, int, str, str | None]],
+) -> None:
+    ordered = sorted(intervals)
+    for previous, current in zip(ordered, ordered[1:]):
+        if current[0] < previous[1]:
+            raise GenerationError(
+                f"{source_path}: overlapping source span at {current[2]}"
+            )
+    offset = 0
+    try:
+        nodes = inventory(
+            source_path,
+            _source=source,
+            _display_path_override=source_path,
+        )
+    except SourceError as error:
+        raise GenerationError(str(error)) from error
+    for node in nodes:
+        start = offset
+        end = start + len(node.raw)
+        offset = end
+        if node.kind == "trivia":
+            continue
+        containing = [
+            owner
+            for span_start, span_end, owner, _ in ordered
+            if span_start <= start and end <= span_end
+        ]
+        if not containing:
+            partial = [
+                owner
+                for span_start, span_end, owner, _ in ordered
+                if span_start < end and span_end > start
+            ]
+            if partial:
+                raise GenerationError(
+                    f"{source_path}:{node.line}: source span cuts through "
+                    f"{node.command} ({', '.join(partial)})"
+                )
+            raise GenerationError(
+                f"{source_path}:{node.line}: uncovered executable source "
+                f"command {node.command}"
+            )
+
+
+def _rewrite_internal_source_paths(
+    source: bytes,
+    compiled_paths: Mapping[str, object],
+) -> bytes:
+    replacements: dict[bytes, bytes] = {}
+    for original in compiled_paths:
+        path = Path(original)
+        generated = _component_zero_generated_path(path).as_posix()
+        relative = "/".join(path.parts[1:])
+        for old in {
+            original.replace("\\", "/"),
+            original.replace("/", "\\"),
+            f"%MOD_FOLDER%/{relative}",
+            f"%MOD_FOLDER%\\{relative.replace('/', chr(92))}",
+        }:
+            replacements[old.encode("utf-8")] = generated.encode("utf-8")
+    for old, new in sorted(
+        replacements.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        source = source.replace(old, new)
+    return source
+
+
+def _render_component_zero_entry(
+    root: Path,
+    catalog: Catalog,
+    infrastructure_flags: Mapping[str, str],
+    compiled_paths: Mapping[str, object],
+) -> bytes:
+    lines = ["// Generated from spell_rev/catalog/changes.json. Do not edit."]
+    direct = {record.id: tuple(record.consumers) for record in catalog.infrastructure}
+    effective = {identifier: set(consumers) for identifier, consumers in direct.items()}
+    changed = True
+    while changed:
+        changed = False
+        for record in catalog.infrastructure:
+            for requirement in record.infrastructure_requires:
+                before = len(effective[requirement])
+                effective[requirement].update(effective[record.id])
+                changed = changed or len(effective[requirement]) != before
+    flags = feature_symbols(catalog)
+    for record in catalog.infrastructure:
+        target = infrastructure_flags[record.id]
+        lines.append(f"// SR_CONFIG_INFRA_BEGIN {record.id}")
+        if record.activation == "always" or not effective[record.id]:
+            lines.append(f"OUTER_SET {target} = 1")
+            lines.append(f"// SR_CONFIG_INFRA_END {record.id}")
+            continue
+        lines.append(f"OUTER_SET {target} = 0")
+        for consumer in catalog.changes:
+            if consumer.id not in effective[record.id]:
+                continue
+            lines.extend(
+                (
+                    f"ACTION_IF ({flags[consumer.id]} = 1) BEGIN",
+                    f"  OUTER_SET {target} = 1",
+                    "END",
+                )
+            )
+        lines.append(f"// SR_CONFIG_INFRA_END {record.id}")
+    main_path = _component_zero_generated_path(Path(catalog.migration.installer_source))
+    if not catalog.component_zero_closure_roots:
+        lines.extend(("", f"INCLUDE ~{main_path.as_posix()}~"))
+    else:
+        lines.append("")
+    entry = ("\n".join(lines).rstrip() + "\n").encode("utf-8")
+
+    infrastructure_by_id = {record.id: record for record in catalog.infrastructure}
+    primary_include = f"INCLUDE ~{main_path.as_posix()}~".encode("utf-8")
+    primary_include_count = 0
+    for closure_root in catalog.component_zero_closure_roots:
+        record = infrastructure_by_id[closure_root.owner]
+        try:
+            original = (root / closure_root.source_span.path).read_bytes()
+            resolved = resolve_span_offsets_in_source(
+                original, closure_root.source_span
+            )
+        except OSError as error:
+            raise GenerationError(
+                f"{closure_root.source_span.path}: unable to read source: {error}"
+            ) from error
+        except SourceError as error:
+            raise GenerationError(str(error)) from error
+        raw = _rewrite_internal_source_paths(resolved.raw, compiled_paths)
+        owner = f"infrastructure:{record.id}".encode("utf-8")
+        flag = (
+            None
+            if record.activation == "always"
+            else infrastructure_flags[record.id].encode("ascii")
+        )
+        matches = raw.count(primary_include)
+        if matches > 1:
+            raise GenerationError(
+                f"{closure_root.source_span.path}: closure root contains the "
+                "primary component INCLUDE more than once"
+            )
+        if matches == 0:
+            entry += _render_guarded_block(raw, owner, flag)
+            continue
+        primary_include_count += 1
+        include_start = raw.index(primary_include)
+        line_start = raw.rfind(b"\n", 0, include_start) + 1
+        line_end = raw.find(b"\n", include_start)
+        line_end = len(raw) if line_end < 0 else line_end + 1
+        entry += _render_guarded_block(raw[:line_start], owner, flag)
+        entry += raw[line_start:line_end]
+        entry += _render_guarded_block(raw[line_end:], owner, flag)
+    if catalog.component_zero_closure_roots and primary_include_count != 1:
+        raise GenerationError(
+            "component-zero closure roots must contain the primary component "
+            "INCLUDE exactly once"
+        )
+    return entry
+
+
+def _render_guarded_block(
+    raw: bytes, owner: bytes, guard: bytes | None
+) -> bytes:
+    if not raw:
+        return b""
+    if guard is None:
+        return raw + (b"" if raw.endswith((b"\n", b"\r")) else b"\n")
+    rendered = b"// SR_CONFIG_GUARD_BEGIN " + owner + b"\n"
+    rendered += b"ACTION_IF (" + guard + b" = 1) BEGIN\n"
+    rendered += raw
+    if not raw.endswith((b"\n", b"\r")):
+        rendered += b"\n"
+    return rendered + b"END\n// SR_CONFIG_GUARD_END " + owner + b"\n"
 
 
 def render_config(catalog: Catalog, existing: str, *, newline: str) -> str:
@@ -835,6 +1148,73 @@ def render_html_document(document: bytes, region: str) -> bytes:
     return rendered
 
 
+def render_html_config_guide(document: bytes) -> bytes:
+    """Keep the player-facing selection instructions synchronized with settings.ini."""
+
+    begin = CONFIG_GUIDE_BEGIN_MARKER.encode("ascii")
+    end = CONFIG_GUIDE_END_MARKER.encode("ascii")
+    begin_count = document.count(begin)
+    end_count = document.count(end)
+    newline = _detect_newline_bytes(document, _HTML_PATH)
+    lines = (
+        b"  <p><strong>Choosing Which Spell Changes to Install</strong>",
+        b"    <br />Before installing, edit <strong>spell_rev/settings.ini</strong>. "
+        b"Each documented setting accepts <code>1</code> to enable, <code>0</code> "
+        b"to disable, or <code>-1</code> to inherit its group/default. Leaving the "
+        b"settings unchanged installs all applicable upstream changes.",
+        b"  </p>",
+        b"  <p>For example, to leave Oracle unchanged:</p>",
+        b"  <pre>sr_wizard_oracle = 0</pre>",
+        b"  <p>Reinstall component 0 after changing the configuration. The generated "
+        b"installer sources should not be edited by hand.</p>",
+    )
+    guide = newline.join(lines) + newline
+
+    if begin_count == 1 and end_count == 1:
+        begin_offset = document.index(begin)
+        end_offset = document.index(end)
+        if begin_offset >= end_offset:
+            raise GenerationError("HTML config-guide markers are reversed")
+        return (
+            document[: begin_offset + len(begin)]
+            + newline
+            + guide
+            + document[end_offset:]
+        )
+
+    if begin_count == 0 and end_count == 0:
+        starts = tuple(_LEGACY_CONFIG_GUIDE_START.finditer(document))
+        if not starts:
+            # Minimal generator fixtures predate the upstream installation guide.
+            return document
+        ends = tuple(_LEGACY_CONFIG_GUIDE_END.finditer(document))
+        if len(starts) != 1 or len(ends) != 1:
+            raise GenerationError(
+                "legacy HTML config-guide anchors are not unique"
+            )
+        start_offset = starts[0].start()
+        end_offset = ends[0].start()
+        if start_offset >= end_offset:
+            raise GenerationError("legacy HTML config-guide anchors are reversed")
+        stale = document[start_offset:end_offset]
+        if stale.count(b"setup-spell_rev.tp2") != 2 or b"Oracle" not in stale:
+            raise GenerationError("legacy HTML config guide is not the expected shape")
+        return (
+            document[:start_offset]
+            + begin
+            + newline
+            + guide
+            + end
+            + newline
+            + document[end_offset:]
+        )
+
+    raise GenerationError(
+        f"HTML config-guide markers must occur exactly once each; found "
+        f"{begin_count} begin and {end_count} end markers"
+    )
+
+
 def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
     """Compute and validate all artifacts, then atomically replace stale targets."""
 
@@ -888,14 +1268,16 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
         render_markdown_catalog(catalog, texts), markdown_newline
     ).encode("utf-8")
     html_region = render_html_catalog(catalog, texts, newline=html_newline)
-    rendered_html = render_html_document(html_bytes, html_region)
+    rendered_html = render_html_config_guide(
+        render_html_document(html_bytes, html_region)
+    )
     schema_path = root_path / _WEIDU_SCHEMA_PATH
     selection_path = root_path / _WEIDU_SELECTION_PATH
     schema_existed, schema_current = _read_optional_generated(schema_path)
     selection_existed, selection_current = _read_optional_generated(selection_path)
     rendered_schema = render_weidu_config_schema(catalog).encode("utf-8")
     rendered_selection = render_weidu_selection(catalog).encode("utf-8")
-    outputs = (
+    outputs = [
         (config_path, _CONFIG_PATH, True, config_bytes, rendered_config, "utf-8"),
         (
             markdown_path,
@@ -922,7 +1304,17 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
             rendered_selection,
             "utf-8",
         ),
-    )
+    ]
+    installer_source = root_path / catalog.migration.installer_source
+    if installer_source.is_file():
+        for relative, expected in render_component_zero_sources(
+            root_path, catalog
+        ).items():
+            path = root_path / relative
+            existed, current = _read_optional_generated(path)
+            outputs.append(
+                (path, relative, existed, current, expected, "utf-8")
+            )
 
     changed = tuple(
         path for path, _, _, current, expected, _ in outputs if current != expected

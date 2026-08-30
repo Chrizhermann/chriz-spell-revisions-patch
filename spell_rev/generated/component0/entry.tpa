@@ -1,0 +1,3974 @@
+// Generated from spell_rev/catalog/changes.json. Do not edit.
+// SR_CONFIG_INFRA_BEGIN global.cre_spell_immunity_library
+OUTER_SET sr_infra_000001 = 1
+// SR_CONFIG_INFRA_END global.cre_spell_immunity_library
+// SR_CONFIG_INFRA_BEGIN global.add_spell_reference_rewrite
+OUTER_SET sr_infra_000002 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000002 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000003 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000010 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000011 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000013 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000019 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000022 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000023 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000026 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000028 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000031 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000032 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000036 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000039 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000048 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000049 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000052 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000056 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000061 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000062 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000063 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000070 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000071 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000073 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000075 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000080 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000081 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000083 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000087 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000092 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000093 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000095 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000101 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000109 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000111 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000118 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000119 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000120 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000127 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000133 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000134 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000136 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000137 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000138 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000144 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000145 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000149 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000153 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000155 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000158 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000159 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000161 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000162 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000166 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000167 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000168 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000176 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000177 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000178 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000184 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000190 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000191 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000193 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000194 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000198 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000199 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000200 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000201 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000202 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000206 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000207 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000208 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000213 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000217 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000218 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000220 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000221 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000229 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000230 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000234 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000237 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000238 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000243 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000247 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000248 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000251 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000253 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000256 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000264 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000265 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000271 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000273 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000275 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000284 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000287 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000293 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000294 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000295 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000296 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000300 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000302 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000303 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000306 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000309 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000314 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000315 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000316 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000318 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000319 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000320 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+ACTION_IF (sr_feature_000321 = 1) BEGIN
+  OUTER_SET sr_infra_000002 = 1
+END
+// SR_CONFIG_INFRA_END global.add_spell_reference_rewrite
+// SR_CONFIG_INFRA_BEGIN compat.iwdee_bone_circle_cleanup
+OUTER_SET sr_infra_000003 = 1
+// SR_CONFIG_INFRA_END compat.iwdee_bone_circle_cleanup
+// SR_CONFIG_INFRA_BEGIN compat.iwdee_cause_wounds_gate
+OUTER_SET sr_infra_000004 = 0
+ACTION_IF (sr_feature_000197 = 1) BEGIN
+  OUTER_SET sr_infra_000004 = 1
+END
+ACTION_IF (sr_feature_000280 = 1) BEGIN
+  OUTER_SET sr_infra_000004 = 1
+END
+// SR_CONFIG_INFRA_END compat.iwdee_cause_wounds_gate
+// SR_CONFIG_INFRA_BEGIN compat.legacy_restoration_scroll
+OUTER_SET sr_infra_000005 = 0
+ACTION_IF (sr_feature_000182 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000189 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000201 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000205 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000239 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000243 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000255 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000267 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000274 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000292 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000300 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+ACTION_IF (sr_feature_000308 = 1) BEGIN
+  OUTER_SET sr_infra_000005 = 1
+END
+// SR_CONFIG_INFRA_END compat.legacy_restoration_scroll
+// SR_CONFIG_INFRA_BEGIN global.install_markers
+OUTER_SET sr_infra_000006 = 1
+// SR_CONFIG_INFRA_END global.install_markers
+// SR_CONFIG_INFRA_BEGIN compat.global_string_updates
+OUTER_SET sr_infra_000007 = 0
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000007 = 1
+END
+ACTION_IF (sr_feature_000066 = 1) BEGIN
+  OUTER_SET sr_infra_000007 = 1
+END
+ACTION_IF (sr_feature_000267 = 1) BEGIN
+  OUTER_SET sr_infra_000007 = 1
+END
+// SR_CONFIG_INFRA_END compat.global_string_updates
+// SR_CONFIG_INFRA_BEGIN global.maze_imprisonment_intmod
+OUTER_SET sr_infra_000008 = 0
+ACTION_IF (sr_feature_000154 = 1) BEGIN
+  OUTER_SET sr_infra_000008 = 1
+END
+ACTION_IF (sr_feature_000165 = 1) BEGIN
+  OUTER_SET sr_infra_000008 = 1
+END
+// SR_CONFIG_INFRA_END global.maze_imprisonment_intmod
+// SR_CONFIG_INFRA_BEGIN global.contingency_table
+OUTER_SET sr_infra_000009 = 0
+ACTION_IF (sr_feature_000121 = 1) BEGIN
+  OUTER_SET sr_infra_000009 = 1
+END
+ACTION_IF (sr_feature_000131 = 1) BEGIN
+  OUTER_SET sr_infra_000009 = 1
+END
+ACTION_IF (sr_feature_000150 = 1) BEGIN
+  OUTER_SET sr_infra_000009 = 1
+END
+ACTION_IF (sr_feature_000163 = 1) BEGIN
+  OUTER_SET sr_infra_000009 = 1
+END
+// SR_CONFIG_INFRA_END global.contingency_table
+// SR_CONFIG_INFRA_BEGIN shared.fatigue_effect
+OUTER_SET sr_infra_000010 = 0
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000010 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000010 = 1
+END
+ACTION_IF (sr_feature_000212 = 1) BEGIN
+  OUTER_SET sr_infra_000010 = 1
+END
+ACTION_IF (sr_feature_000252 = 1) BEGIN
+  OUTER_SET sr_infra_000010 = 1
+END
+ACTION_IF (sr_feature_000304 = 1) BEGIN
+  OUTER_SET sr_infra_000010 = 1
+END
+// SR_CONFIG_INFRA_END shared.fatigue_effect
+// SR_CONFIG_INFRA_BEGIN shared.banishment_effect
+OUTER_SET sr_infra_000011 = 0
+ACTION_IF (sr_feature_000113 = 1) BEGIN
+  OUTER_SET sr_infra_000011 = 1
+END
+ACTION_IF (sr_feature_000288 = 1) BEGIN
+  OUTER_SET sr_infra_000011 = 1
+END
+// SR_CONFIG_INFRA_END shared.banishment_effect
+// SR_CONFIG_INFRA_BEGIN global.power_word_visual
+OUTER_SET sr_infra_000012 = 0
+ACTION_IF (sr_feature_000042 = 1) BEGIN
+  OUTER_SET sr_infra_000012 = 1
+END
+ACTION_IF (sr_feature_000117 = 1) BEGIN
+  OUTER_SET sr_infra_000012 = 1
+END
+ACTION_IF (sr_feature_000136 = 1) BEGIN
+  OUTER_SET sr_infra_000012 = 1
+END
+ACTION_IF (sr_feature_000155 = 1) BEGIN
+  OUTER_SET sr_infra_000012 = 1
+END
+ACTION_IF (sr_feature_000167 = 1) BEGIN
+  OUTER_SET sr_infra_000012 = 1
+END
+// SR_CONFIG_INFRA_END global.power_word_visual
+// SR_CONFIG_INFRA_BEGIN shared.elemental_visuals
+OUTER_SET sr_infra_000013 = 0
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000013 = 1
+END
+// SR_CONFIG_INFRA_END shared.elemental_visuals
+// SR_CONFIG_INFRA_BEGIN shared.illusion_visual
+OUTER_SET sr_infra_000014 = 0
+ACTION_IF (sr_feature_000019 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000029 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000055 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000074 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000128 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+ACTION_IF (sr_feature_000268 = 1) BEGIN
+  OUTER_SET sr_infra_000014 = 1
+END
+// SR_CONFIG_INFRA_END shared.illusion_visual
+// SR_CONFIG_INFRA_BEGIN global.spell_deflection_visual
+OUTER_SET sr_infra_000015 = 0
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000015 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000015 = 1
+END
+// SR_CONFIG_INFRA_END global.spell_deflection_visual
+// SR_CONFIG_INFRA_BEGIN shared.sunlight_visuals
+OUTER_SET sr_infra_000016 = 0
+ACTION_IF (sr_feature_000194 = 1) BEGIN
+  OUTER_SET sr_infra_000016 = 1
+END
+ACTION_IF (sr_feature_000281 = 1) BEGIN
+  OUTER_SET sr_infra_000016 = 1
+END
+ACTION_IF (sr_feature_000286 = 1) BEGIN
+  OUTER_SET sr_infra_000016 = 1
+END
+// SR_CONFIG_INFRA_END shared.sunlight_visuals
+// SR_CONFIG_INFRA_BEGIN shared.invisibility_shape_helpers
+OUTER_SET sr_infra_000017 = 0
+ACTION_IF (sr_feature_000085 = 1) BEGIN
+  OUTER_SET sr_infra_000017 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000017 = 1
+END
+ACTION_IF (sr_feature_000320 = 1) BEGIN
+  OUTER_SET sr_infra_000017 = 1
+END
+ACTION_IF (sr_feature_000321 = 1) BEGIN
+  OUTER_SET sr_infra_000017 = 1
+END
+// SR_CONFIG_INFRA_END shared.invisibility_shape_helpers
+// SR_CONFIG_INFRA_BEGIN global.wing_assets
+OUTER_SET sr_infra_000018 = 0
+ACTION_IF (sr_feature_000177 = 1) BEGIN
+  OUTER_SET sr_infra_000018 = 1
+END
+ACTION_IF (sr_feature_000178 = 1) BEGIN
+  OUTER_SET sr_infra_000018 = 1
+END
+// SR_CONFIG_INFRA_END global.wing_assets
+// SR_CONFIG_INFRA_BEGIN shared.undead_death_effect
+OUTER_SET sr_infra_000019 = 0
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000019 = 1
+END
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000019 = 1
+END
+ACTION_IF (sr_feature_000298 = 1) BEGIN
+  OUTER_SET sr_infra_000019 = 1
+END
+// SR_CONFIG_INFRA_END shared.undead_death_effect
+// SR_CONFIG_INFRA_BEGIN shared.true_sight_highlight
+OUTER_SET sr_infra_000020 = 0
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000020 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000020 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000020 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000020 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000020 = 1
+END
+// SR_CONFIG_INFRA_END shared.true_sight_highlight
+// SR_CONFIG_INFRA_BEGIN shared.summon_ai
+OUTER_SET sr_infra_000021 = 0
+ACTION_IF (sr_feature_000007 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000048 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000057 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000093 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000096 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000110 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000127 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000138 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000139 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000140 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000144 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000177 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000178 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000198 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000216 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000217 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000233 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000246 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000255 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000273 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000274 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000276 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000309 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000315 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+ACTION_IF (sr_feature_000316 = 1) BEGIN
+  OUTER_SET sr_infra_000021 = 1
+END
+// SR_CONFIG_INFRA_END shared.summon_ai
+// SR_CONFIG_INFRA_BEGIN shared.creature_type_items
+OUTER_SET sr_infra_000022 = 0
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000036 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000093 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000217 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000247 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000273 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000293 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000294 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000295 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000022 = 1
+END
+// SR_CONFIG_INFRA_END shared.creature_type_items
+// SR_CONFIG_INFRA_BEGIN shared.fear_aura
+OUTER_SET sr_infra_000023 = 0
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000161 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000251 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+ACTION_IF (sr_feature_000294 = 1) BEGIN
+  OUTER_SET sr_infra_000023 = 1
+END
+// SR_CONFIG_INFRA_END shared.fear_aura
+// SR_CONFIG_INFRA_BEGIN global.gaseous_form
+OUTER_SET sr_infra_000024 = 0
+ACTION_IF (sr_feature_000138 = 1) BEGIN
+  OUTER_SET sr_infra_000024 = 1
+END
+ACTION_IF (sr_feature_000139 = 1) BEGIN
+  OUTER_SET sr_infra_000024 = 1
+END
+// SR_CONFIG_INFRA_END global.gaseous_form
+// SR_CONFIG_INFRA_BEGIN global.teleport_without_error
+OUTER_SET sr_infra_000025 = 0
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000025 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000025 = 1
+END
+ACTION_IF (sr_feature_000161 = 1) BEGIN
+  OUTER_SET sr_infra_000025 = 1
+END
+// SR_CONFIG_INFRA_END global.teleport_without_error
+// SR_CONFIG_INFRA_BEGIN compat.flame_arrow_bg2_cutscene
+OUTER_SET sr_infra_000026 = 0
+ACTION_IF (sr_feature_000051 = 1) BEGIN
+  OUTER_SET sr_infra_000026 = 1
+END
+// SR_CONFIG_INFRA_END compat.flame_arrow_bg2_cutscene
+// SR_CONFIG_INFRA_BEGIN compat.enchanted_weapon_icons
+OUTER_SET sr_infra_000027 = 0
+ACTION_IF (sr_feature_000086 = 1) BEGIN
+  OUTER_SET sr_infra_000027 = 1
+END
+// SR_CONFIG_INFRA_END compat.enchanted_weapon_icons
+// SR_CONFIG_INFRA_BEGIN shared.fire_elemental_summon_substrate
+OUTER_SET sr_infra_000028 = 0
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000028 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000028 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000028 = 1
+END
+// SR_CONFIG_INFRA_END shared.fire_elemental_summon_substrate
+// SR_CONFIG_INFRA_BEGIN shared.air_elemental_summon_substrate
+OUTER_SET sr_infra_000029 = 0
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000029 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000029 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000029 = 1
+END
+// SR_CONFIG_INFRA_END shared.air_elemental_summon_substrate
+// SR_CONFIG_INFRA_BEGIN shared.earth_elemental_summon_substrate
+OUTER_SET sr_infra_000030 = 0
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000030 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000030 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000030 = 1
+END
+// SR_CONFIG_INFRA_END shared.earth_elemental_summon_substrate
+// SR_CONFIG_INFRA_BEGIN shared.skeleton_warrior_icons
+OUTER_SET sr_infra_000031 = 0
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000031 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000031 = 1
+END
+// SR_CONFIG_INFRA_END shared.skeleton_warrior_icons
+// SR_CONFIG_INFRA_BEGIN shared.death_knight_substrate
+OUTER_SET sr_infra_000032 = 0
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000032 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000032 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000032 = 1
+END
+ACTION_IF (sr_feature_000294 = 1) BEGIN
+  OUTER_SET sr_infra_000032 = 1
+END
+// SR_CONFIG_INFRA_END shared.death_knight_substrate
+// SR_CONFIG_INFRA_BEGIN shared.chaos_icons
+OUTER_SET sr_infra_000033 = 0
+ACTION_IF (sr_feature_000132 = 1) BEGIN
+  OUTER_SET sr_infra_000033 = 1
+END
+ACTION_IF (sr_feature_000300 = 1) BEGIN
+  OUTER_SET sr_infra_000033 = 1
+END
+// SR_CONFIG_INFRA_END shared.chaos_icons
+// SR_CONFIG_INFRA_BEGIN shared.energy_blade_item
+OUTER_SET sr_infra_000034 = 0
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000034 = 1
+END
+ACTION_IF (sr_feature_000310 = 1) BEGIN
+  OUTER_SET sr_infra_000034 = 1
+END
+// SR_CONFIG_INFRA_END shared.energy_blade_item
+// SR_CONFIG_INFRA_BEGIN global.ardanis_spell_shield
+OUTER_SET sr_infra_000035 = 0
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000035 = 1
+END
+// SR_CONFIG_INFRA_END global.ardanis_spell_shield
+// SR_CONFIG_INFRA_BEGIN global.haste_slow_secondary_types
+OUTER_SET sr_infra_000036 = 0
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000036 = 1
+END
+// SR_CONFIG_INFRA_END global.haste_slow_secondary_types
+// SR_CONFIG_INFRA_BEGIN global.petrification_secondary_types
+OUTER_SET sr_infra_000037 = 0
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000037 = 1
+END
+// SR_CONFIG_INFRA_END global.petrification_secondary_types
+// SR_CONFIG_INFRA_BEGIN global.dispelling_screen
+OUTER_SET sr_infra_000038 = 0
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000038 = 1
+END
+// SR_CONFIG_INFRA_END global.dispelling_screen
+// SR_CONFIG_INFRA_BEGIN global.insects_processor_include
+OUTER_SET sr_infra_000039 = 0
+ACTION_IF (sr_feature_000215 = 1) BEGIN
+  OUTER_SET sr_infra_000039 = 1
+END
+// SR_CONFIG_INFRA_END global.insects_processor_include
+// SR_CONFIG_INFRA_BEGIN compat.refinements
+OUTER_SET sr_infra_000040 = 0
+ACTION_IF (sr_feature_000176 = 1) BEGIN
+  OUTER_SET sr_infra_000040 = 1
+END
+ACTION_IF (sr_feature_000179 = 1) BEGIN
+  OUTER_SET sr_infra_000040 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000040 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000040 = 1
+END
+ACTION_IF (sr_feature_000317 = 1) BEGIN
+  OUTER_SET sr_infra_000040 = 1
+END
+// SR_CONFIG_INFRA_END compat.refinements
+// SR_CONFIG_INFRA_BEGIN global.imprisonment_processor
+OUTER_SET sr_infra_000041 = 0
+ACTION_IF (sr_feature_000165 = 1) BEGIN
+  OUTER_SET sr_infra_000041 = 1
+END
+// SR_CONFIG_INFRA_END global.imprisonment_processor
+// SR_CONFIG_INFRA_BEGIN global.true_sight_compatibility
+OUTER_SET sr_infra_000042 = 0
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000042 = 1
+END
+ACTION_IF (sr_feature_000199 = 1) BEGIN
+  OUTER_SET sr_infra_000042 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000042 = 1
+END
+// SR_CONFIG_INFRA_END global.true_sight_compatibility
+// SR_CONFIG_INFRA_BEGIN global.secondary_type_fixes
+OUTER_SET sr_infra_000043 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000017 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000173 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000184 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000262 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000275 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000314 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+ACTION_IF (sr_feature_000319 = 1) BEGIN
+  OUTER_SET sr_infra_000043 = 1
+END
+// SR_CONFIG_INFRA_END global.secondary_type_fixes
+// SR_CONFIG_INFRA_BEGIN global.removed_spell_string_cleanup
+OUTER_SET sr_infra_000044 = 0
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000044 = 1
+END
+// SR_CONFIG_INFRA_END global.removed_spell_string_cleanup
+// SR_CONFIG_INFRA_BEGIN global.ee_compatibility_processors
+OUTER_SET sr_infra_000045 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000002 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000003 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000010 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000011 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000013 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000019 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000022 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000026 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000028 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000031 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000032 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000039 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000049 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000052 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000056 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000061 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000062 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000063 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000070 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000071 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000073 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000075 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000080 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000081 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000083 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000087 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000092 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000095 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000101 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000109 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000111 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000118 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000119 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000120 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000133 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000134 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000136 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000145 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000149 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000153 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000158 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000166 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000167 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000168 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000176 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000184 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000190 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000191 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000193 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000194 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000200 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000201 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000202 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000206 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000207 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000208 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000213 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000218 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000220 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000221 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000229 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000230 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000237 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000238 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000243 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000247 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000248 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000251 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000253 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000256 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000264 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000265 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000271 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000275 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000284 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000287 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000296 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000300 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000302 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000306 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000314 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+ACTION_IF (sr_feature_000319 = 1) BEGIN
+  OUTER_SET sr_infra_000045 = 1
+END
+// SR_CONFIG_INFRA_END global.ee_compatibility_processors
+// SR_CONFIG_INFRA_BEGIN compat.tutu_scroll_backups
+OUTER_SET sr_infra_000046 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000002 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000003 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000005 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000006 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000007 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000010 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000011 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000012 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000013 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000014 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000016 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000017 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000018 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000026 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000027 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000028 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000029 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000030 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000031 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000032 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000033 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000034 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000036 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000037 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000039 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000040 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000041 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000048 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000049 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000051 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000052 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000056 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000057 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000059 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000060 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000061 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000062 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000063 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000069 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000071 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000074 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000075 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000079 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000080 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000081 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000082 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000083 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000085 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000096 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000101 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000182 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000240 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000243 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000244 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000260 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+ACTION_IF (sr_feature_000261 = 1) BEGIN
+  OUTER_SET sr_infra_000046 = 1
+END
+// SR_CONFIG_INFRA_END compat.tutu_scroll_backups
+// SR_CONFIG_INFRA_BEGIN global.spell_school_assignment
+OUTER_SET sr_infra_000047 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000002 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000003 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000005 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000006 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000007 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000009 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000010 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000011 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000012 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000013 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000014 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000016 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000017 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000018 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000019 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000020 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000021 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000022 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000023 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000025 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000026 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000027 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000028 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000029 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000030 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000031 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000032 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000033 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000034 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000036 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000037 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000039 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000040 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000041 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000042 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000044 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000045 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000046 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000048 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000049 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000050 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000051 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000052 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000055 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000056 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000057 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000059 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000060 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000061 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000062 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000063 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000066 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000067 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000068 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000069 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000070 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000071 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000073 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000074 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000075 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000077 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000078 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000079 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000080 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000081 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000082 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000083 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000085 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000086 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000087 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000088 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000089 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000090 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000091 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000092 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000093 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000095 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000096 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000097 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000101 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000102 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000103 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000104 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000106 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000109 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000110 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000111 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000112 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000113 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000114 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000116 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000117 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000118 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000119 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000120 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000121 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000126 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000127 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000128 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000131 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000132 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000133 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000134 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000135 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000136 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000137 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000138 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000139 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000140 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000141 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000142 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000143 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000144 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000145 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000146 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000147 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000149 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000150 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000151 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000153 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000154 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000155 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000158 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000159 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000160 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000161 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000162 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000163 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000164 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000165 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000166 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000167 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000168 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000169 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000170 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000172 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000173 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000175 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000176 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000177 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000178 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+ACTION_IF (sr_feature_000179 = 1) BEGIN
+  OUTER_SET sr_infra_000047 = 1
+END
+// SR_CONFIG_INFRA_END global.spell_school_assignment
+// SR_CONFIG_INFRA_BEGIN global.ee_spell_flags
+OUTER_SET sr_infra_000048 = 0
+ACTION_IF (sr_feature_000001 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000002 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000003 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000005 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000006 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000007 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000009 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000010 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000011 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000012 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000013 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000014 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000016 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000017 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000018 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000019 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000020 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000021 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000022 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000023 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000025 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000026 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000027 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000028 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000029 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000030 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000031 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000032 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000033 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000034 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000035 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000036 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000037 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000038 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000039 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000040 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000041 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000042 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000044 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000045 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000046 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000048 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000049 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000050 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000051 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000052 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000053 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000055 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000056 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000057 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000059 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000060 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000061 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000062 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000063 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000066 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000067 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000068 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000069 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000070 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000071 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000073 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000074 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000075 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000077 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000078 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000079 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000080 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000081 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000082 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000083 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000085 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000086 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000087 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000088 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000089 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000090 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000091 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000092 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000093 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000094 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000095 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000096 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000097 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000100 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000101 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000102 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000103 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000104 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000105 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000106 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000107 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000108 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000109 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000110 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000111 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000112 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000113 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000114 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000116 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000117 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000118 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000119 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000120 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000121 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000122 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000123 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000124 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000126 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000127 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000128 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000129 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000131 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000132 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000133 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000134 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000135 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000136 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000137 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000138 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000139 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000140 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000141 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000142 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000143 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000144 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000145 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000146 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000147 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000149 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000150 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000151 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000153 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000154 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000155 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000158 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000159 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000160 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000161 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000162 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000163 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000164 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000165 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000166 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000167 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000168 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000169 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000170 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000172 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000173 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000175 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000176 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000177 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000178 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000179 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000180 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000181 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000182 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000183 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000184 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000185 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000186 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000187 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000188 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000189 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000190 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000191 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000192 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000193 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000194 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000196 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000197 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000198 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000199 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000200 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000201 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000202 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000204 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000205 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000206 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000207 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000208 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000209 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000210 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000211 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000212 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000213 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000215 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000216 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000217 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000218 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000219 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000220 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000221 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000223 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000224 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000225 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000226 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000227 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000228 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000229 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000230 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000231 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000232 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000233 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000234 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000236 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000237 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000238 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000239 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000240 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000241 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000243 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000244 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000245 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000246 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000247 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000248 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000249 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000250 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000251 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000252 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000253 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000255 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000256 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000257 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000259 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000260 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000261 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000262 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000263 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000264 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000265 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000266 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000267 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000268 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000271 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000273 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000274 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000275 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000276 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000277 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000278 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000279 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000280 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000281 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000282 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000283 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000284 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000285 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000286 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000287 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000288 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000289 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000290 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000292 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000293 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000294 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000295 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000296 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000297 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000298 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000299 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000300 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000301 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000302 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000303 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000304 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000305 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000306 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000308 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000309 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000310 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000311 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000312 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000314 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000315 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000316 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000317 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000318 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000319 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000320 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+ACTION_IF (sr_feature_000321 = 1) BEGIN
+  OUTER_SET sr_infra_000048 = 1
+END
+// SR_CONFIG_INFRA_END global.ee_spell_flags
+// SR_CONFIG_INFRA_BEGIN compat.item_revisions
+OUTER_SET sr_infra_000049 = 0
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000049 = 1
+END
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000049 = 1
+END
+ACTION_IF (sr_feature_000212 = 1) BEGIN
+  OUTER_SET sr_infra_000049 = 1
+END
+ACTION_IF (sr_feature_000265 = 1) BEGIN
+  OUTER_SET sr_infra_000049 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000049 = 1
+END
+// SR_CONFIG_INFRA_END compat.item_revisions
+// SR_CONFIG_INFRA_BEGIN compat.bgee_displayed_strings
+OUTER_SET sr_infra_000050 = 0
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000102 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000116 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000169 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000172 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000231 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000278 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000282 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000292 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+ACTION_IF (sr_feature_000310 = 1) BEGIN
+  OUTER_SET sr_infra_000050 = 1
+END
+// SR_CONFIG_INFRA_END compat.bgee_displayed_strings
+// SR_CONFIG_INFRA_BEGIN global.utilities_library
+OUTER_SET sr_infra_000051 = 0
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000021 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000025 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000044 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000102 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000116 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000126 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000143 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000165 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000169 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000172 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000182 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000196 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000197 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000199 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000231 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000276 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000278 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000282 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000292 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+ACTION_IF (sr_feature_000310 = 1) BEGIN
+  OUTER_SET sr_infra_000051 = 1
+END
+// SR_CONFIG_INFRA_END global.utilities_library
+// SR_CONFIG_INFRA_BEGIN global.dispelling_screen_macros
+OUTER_SET sr_infra_000052 = 0
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000052 = 1
+END
+// SR_CONFIG_INFRA_END global.dispelling_screen_macros
+// SR_CONFIG_INFRA_BEGIN global.detectable_spells
+OUTER_SET sr_infra_000053 = 0
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000053 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000053 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000053 = 1
+END
+ACTION_IF (sr_feature_000215 = 1) BEGIN
+  OUTER_SET sr_infra_000053 = 1
+END
+ACTION_IF (sr_feature_000285 = 1) BEGIN
+  OUTER_SET sr_infra_000053 = 1
+END
+// SR_CONFIG_INFRA_END global.detectable_spells
+// SR_CONFIG_INFRA_BEGIN global.hidespl
+OUTER_SET sr_infra_000054 = 0
+ACTION_IF (sr_feature_000008 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000021 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000024 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000025 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000044 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000072 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000076 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000126 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000143 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000182 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000196 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000197 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+ACTION_IF (sr_feature_000276 = 1) BEGIN
+  OUTER_SET sr_infra_000054 = 1
+END
+// SR_CONFIG_INFRA_END global.hidespl
+// SR_CONFIG_INFRA_BEGIN shared.entangle_effect
+OUTER_SET sr_infra_000055 = 0
+ACTION_IF (sr_feature_000184 = 1) BEGIN
+  OUTER_SET sr_infra_000055 = 1
+END
+ACTION_IF (sr_feature_000189 = 1) BEGIN
+  OUTER_SET sr_infra_000055 = 1
+END
+// SR_CONFIG_INFRA_END shared.entangle_effect
+// SR_CONFIG_INFRA_BEGIN shared.animal_summoning_i_aura
+OUTER_SET sr_infra_000056 = 0
+ACTION_IF (sr_feature_000198 = 1) BEGIN
+  OUTER_SET sr_infra_000056 = 1
+END
+ACTION_IF (sr_feature_000236 = 1) BEGIN
+  OUTER_SET sr_infra_000056 = 1
+END
+// SR_CONFIG_INFRA_END shared.animal_summoning_i_aura
+// SR_CONFIG_INFRA_BEGIN shared.animal_summoning_ii_aura
+OUTER_SET sr_infra_000057 = 0
+ACTION_IF (sr_feature_000216 = 1) BEGIN
+  OUTER_SET sr_infra_000057 = 1
+END
+ACTION_IF (sr_feature_000236 = 1) BEGIN
+  OUTER_SET sr_infra_000057 = 1
+END
+// SR_CONFIG_INFRA_END shared.animal_summoning_ii_aura
+// SR_CONFIG_INFRA_BEGIN shared.animal_summoning_iii_aura
+OUTER_SET sr_infra_000058 = 0
+ACTION_IF (sr_feature_000233 = 1) BEGIN
+  OUTER_SET sr_infra_000058 = 1
+END
+ACTION_IF (sr_feature_000236 = 1) BEGIN
+  OUTER_SET sr_infra_000058 = 1
+END
+// SR_CONFIG_INFRA_END shared.animal_summoning_iii_aura
+// SR_CONFIG_INFRA_BEGIN shared.skeleton_warrior_summon
+OUTER_SET sr_infra_000059 = 0
+ACTION_IF (sr_feature_000125 = 1) BEGIN
+  OUTER_SET sr_infra_000059 = 1
+END
+ACTION_IF (sr_feature_000217 = 1) BEGIN
+  OUTER_SET sr_infra_000059 = 1
+END
+ACTION_IF (sr_feature_000291 = 1) BEGIN
+  OUTER_SET sr_infra_000059 = 1
+END
+// SR_CONFIG_INFRA_END shared.skeleton_warrior_summon
+// SR_CONFIG_INFRA_BEGIN shared.animal_summoning_iii_iv_icons
+OUTER_SET sr_infra_000060 = 0
+ACTION_IF (sr_feature_000233 = 1) BEGIN
+  OUTER_SET sr_infra_000060 = 1
+END
+ACTION_IF (sr_feature_000236 = 1) BEGIN
+  OUTER_SET sr_infra_000060 = 1
+END
+ACTION_IF (sr_feature_000239 = 1) BEGIN
+  OUTER_SET sr_infra_000060 = 1
+END
+// SR_CONFIG_INFRA_END shared.animal_summoning_iii_iv_icons
+// SR_CONFIG_INFRA_BEGIN shared.regeneration_icons
+OUTER_SET sr_infra_000061 = 0
+ACTION_IF (sr_feature_000287 = 1) BEGIN
+  OUTER_SET sr_infra_000061 = 1
+END
+ACTION_IF (sr_feature_000302 = 1) BEGIN
+  OUTER_SET sr_infra_000061 = 1
+END
+// SR_CONFIG_INFRA_END shared.regeneration_icons
+// SR_CONFIG_INFRA_BEGIN shared.animal_summoning_vi_bear
+OUTER_SET sr_infra_000062 = 0
+ACTION_IF (sr_feature_000274 = 1) BEGIN
+  OUTER_SET sr_infra_000062 = 1
+END
+ACTION_IF (sr_feature_000276 = 1) BEGIN
+  OUTER_SET sr_infra_000062 = 1
+END
+// SR_CONFIG_INFRA_END shared.animal_summoning_vi_bear
+// SR_CONFIG_INFRA_BEGIN shared.blade_barrier_children
+OUTER_SET sr_infra_000063 = 0
+ACTION_IF (sr_feature_000082 = 1) BEGIN
+  OUTER_SET sr_infra_000063 = 1
+END
+ACTION_IF (sr_feature_000275 = 1) BEGIN
+  OUTER_SET sr_infra_000063 = 1
+END
+ACTION_IF (sr_feature_000313 = 1) BEGIN
+  OUTER_SET sr_infra_000063 = 1
+END
+// SR_CONFIG_INFRA_END shared.blade_barrier_children
+// SR_CONFIG_INFRA_BEGIN shared.charm_auxiliary_sources
+OUTER_SET sr_infra_000064 = 0
+ACTION_IF (sr_feature_000004 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000015 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000043 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000047 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000064 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000098 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000102 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000116 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000130 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000169 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000171 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000172 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000174 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000195 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000203 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000214 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000222 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000231 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000235 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000242 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000254 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000270 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000278 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000282 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000292 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+ACTION_IF (sr_feature_000310 = 1) BEGIN
+  OUTER_SET sr_infra_000064 = 1
+END
+// SR_CONFIG_INFRA_END shared.charm_auxiliary_sources
+// SR_CONFIG_INFRA_BEGIN projectile.bignarea_radius
+OUTER_SET sr_infra_000065 = 0
+ACTION_IF (sr_feature_000027 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000104 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000168 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000173 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000225 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000258 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000301 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+ACTION_IF (sr_feature_000305 = 1) BEGIN
+  OUTER_SET sr_infra_000065 = 1
+END
+// SR_CONFIG_INFRA_END projectile.bignarea_radius
+// SR_CONFIG_INFRA_BEGIN projectile.symbol_glyph_normalization
+OUTER_SET sr_infra_000066 = 0
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+ACTION_IF (sr_feature_000297 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+ACTION_IF (sr_feature_000306 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000066 = 1
+END
+// SR_CONFIG_INFRA_END projectile.symbol_glyph_normalization
+// SR_CONFIG_INFRA_BEGIN projectile.fire_trap_glyph_normalization
+OUTER_SET sr_infra_000067 = 0
+ACTION_IF (sr_feature_000213 = 1) BEGIN
+  OUTER_SET sr_infra_000067 = 1
+END
+ACTION_IF (sr_feature_000220 = 1) BEGIN
+  OUTER_SET sr_infra_000067 = 1
+END
+// SR_CONFIG_INFRA_END projectile.fire_trap_glyph_normalization
+// SR_CONFIG_INFRA_BEGIN projectile.dispel_magic_radius
+OUTER_SET sr_infra_000068 = 0
+ACTION_IF (sr_feature_000069 = 1) BEGIN
+  OUTER_SET sr_infra_000068 = 1
+END
+// SR_CONFIG_INFRA_END projectile.dispel_magic_radius
+// SR_CONFIG_INFRA_BEGIN projectile.remove_magic_radius
+OUTER_SET sr_infra_000069 = 0
+ACTION_IF (sr_feature_000050 = 1) BEGIN
+  OUTER_SET sr_infra_000069 = 1
+END
+ACTION_IF (sr_feature_000219 = 1) BEGIN
+  OUTER_SET sr_infra_000069 = 1
+END
+// SR_CONFIG_INFRA_END projectile.remove_magic_radius
+// SR_CONFIG_INFRA_BEGIN projectile.small_area_radius
+OUTER_SET sr_infra_000070 = 0
+ACTION_IF (sr_feature_000055 = 1) BEGIN
+  OUTER_SET sr_infra_000070 = 1
+END
+ACTION_IF (sr_feature_000296 = 1) BEGIN
+  OUTER_SET sr_infra_000070 = 1
+END
+// SR_CONFIG_INFRA_END projectile.small_area_radius
+// SR_CONFIG_INFRA_BEGIN projectile.chain_lightning_speed
+OUTER_SET sr_infra_000071 = 0
+ACTION_IF (sr_feature_000119 = 1) BEGIN
+  OUTER_SET sr_infra_000071 = 1
+END
+// SR_CONFIG_INFRA_END projectile.chain_lightning_speed
+// SR_CONFIG_INFRA_BEGIN projectile.small_no_center_radius
+OUTER_SET sr_infra_000072 = 0
+ACTION_IF (sr_feature_000215 = 1) BEGIN
+  OUTER_SET sr_infra_000072 = 1
+END
+ACTION_IF (sr_feature_000314 = 1) BEGIN
+  OUTER_SET sr_infra_000072 = 1
+END
+// SR_CONFIG_INFRA_END projectile.small_no_center_radius
+// SR_CONFIG_INFRA_BEGIN projectile.hold_radius
+OUTER_SET sr_infra_000073 = 0
+ACTION_IF (sr_feature_000054 = 1) BEGIN
+  OUTER_SET sr_infra_000073 = 1
+END
+ACTION_IF (sr_feature_000099 = 1) BEGIN
+  OUTER_SET sr_infra_000073 = 1
+END
+ACTION_IF (sr_feature_000206 = 1) BEGIN
+  OUTER_SET sr_infra_000073 = 1
+END
+ACTION_IF (sr_feature_000221 = 1) BEGIN
+  OUTER_SET sr_infra_000073 = 1
+END
+// SR_CONFIG_INFRA_END projectile.hold_radius
+// SR_CONFIG_INFRA_BEGIN projectile.hold_undead_radius
+OUTER_SET sr_infra_000074 = 0
+ACTION_IF (sr_feature_000067 = 1) BEGIN
+  OUTER_SET sr_infra_000074 = 1
+END
+ACTION_IF (sr_feature_000140 = 1) BEGIN
+  OUTER_SET sr_infra_000074 = 1
+END
+// SR_CONFIG_INFRA_END projectile.hold_undead_radius
+// SR_CONFIG_INFRA_BEGIN projectile.meteor_swarm_speed
+OUTER_SET sr_infra_000075 = 0
+ACTION_IF (sr_feature_000296 = 1) BEGIN
+  OUTER_SET sr_infra_000075 = 1
+END
+// SR_CONFIG_INFRA_END projectile.meteor_swarm_speed
+// SR_CONFIG_INFRA_BEGIN projectile.trap_trigger_speed
+OUTER_SET sr_infra_000076 = 0
+ACTION_IF (sr_feature_000060 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000133 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000152 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000156 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000157 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000213 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000220 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000297 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000306 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+ACTION_IF (sr_feature_000307 = 1) BEGIN
+  OUTER_SET sr_infra_000076 = 1
+END
+// SR_CONFIG_INFRA_END projectile.trap_trigger_speed
+// SR_CONFIG_INFRA_BEGIN shared.contagion_delivery_spell
+OUTER_SET sr_infra_000077 = 0
+ACTION_IF (sr_feature_000078 = 1) BEGIN
+  OUTER_SET sr_infra_000077 = 1
+END
+ACTION_IF (sr_feature_000232 = 1) BEGIN
+  OUTER_SET sr_infra_000077 = 1
+END
+// SR_CONFIG_INFRA_END shared.contagion_delivery_spell
+// SR_CONFIG_INFRA_BEGIN shared.polymorph_squirrel_item
+OUTER_SET sr_infra_000078 = 0
+ACTION_IF (sr_feature_000084 = 1) BEGIN
+  OUTER_SET sr_infra_000078 = 1
+END
+ACTION_IF (sr_feature_000269 = 1) BEGIN
+  OUTER_SET sr_infra_000078 = 1
+END
+ACTION_IF (sr_feature_000304 = 1) BEGIN
+  OUTER_SET sr_infra_000078 = 1
+END
+// SR_CONFIG_INFRA_END shared.polymorph_squirrel_item
+// SR_CONFIG_INFRA_BEGIN shared.true_seeing_detection_spell
+OUTER_SET sr_infra_000079 = 0
+ACTION_IF (sr_feature_000058 = 1) BEGIN
+  OUTER_SET sr_infra_000079 = 1
+END
+ACTION_IF (sr_feature_000065 = 1) BEGIN
+  OUTER_SET sr_infra_000079 = 1
+END
+ACTION_IF (sr_feature_000115 = 1) BEGIN
+  OUTER_SET sr_infra_000079 = 1
+END
+ACTION_IF (sr_feature_000148 = 1) BEGIN
+  OUTER_SET sr_infra_000079 = 1
+END
+// SR_CONFIG_INFRA_END shared.true_seeing_detection_spell
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.detectable_spells
+ACTION_IF (sr_infra_000053 = 1) BEGIN
+INCLUDE ~spell_rev/generated/component0/lib/ds.tph~
+
+// actual component
+END
+// SR_CONFIG_GUARD_END infrastructure:global.detectable_spells
+INCLUDE ~spell_rev/generated/component0/components/main_component.tpa~
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.detectable_spells
+ACTION_IF (sr_infra_000053 = 1) BEGIN
+
+// Detectable Spells
+LAF detectable_spells END
+
+LAF detectable_spells
+  INT_VAR
+    append_stats = 0
+    fix_khelben = 0
+    fix_old_ds = 0
+  STR_VAR
+    table = ~spell_rev/lib/ds_sr_extra.2da~
+END
+
+END
+// SR_CONFIG_GUARD_END infrastructure:global.detectable_spells
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.hidespl
+ACTION_IF (sr_infra_000054 = 1) BEGIN
+// Remove Disabled Spells from Spell Selection Screens (Chargen, Sorcerer Level-Up)
+INCLUDE ~spell_rev/generated/component0/lib/hidespl_patching.tph~
+LAF hide_spells END
+
+
+END
+// SR_CONFIG_GUARD_END infrastructure:global.hidespl

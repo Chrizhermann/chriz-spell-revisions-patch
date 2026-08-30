@@ -701,6 +701,14 @@ def resolve_span_offsets(root: str | Path, span: SourceSpan) -> ResolvedSourceSp
     except OSError as error:
         raise SourceError(f"{span.path}: unable to read source: {error}") from error
 
+    return resolve_span_offsets_in_source(source, span)
+
+
+def resolve_span_offsets_in_source(
+    source: bytes, span: SourceSpan
+) -> ResolvedSourceSpan:
+    """Resolve *span* against already-loaded bytes without rereading its file."""
+
     normalized_source, boundaries = _normalize_newlines_with_boundaries(source)
     start_anchor = _normalize_newlines(span.start.encode("utf-8"))
     start_matches = _occurrences(normalized_source, start_anchor)

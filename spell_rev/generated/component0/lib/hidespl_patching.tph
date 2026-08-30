@@ -1,0 +1,132 @@
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.hidespl
+ACTION_IF (sr_infra_000054 = 1) BEGIN
+//Libraries.
+INCLUDE "spell_rev/generated/component0/lib/utilities/utilities.tpa"
+
+
+//Read table into array.
+DEFINE_ACTION_FUNCTION get_spells_hide_array STR_VAR engine = "ee" RET_ARRAY spells BEGIN
+    //Sanitize engine.
+    ACTION_IF NOT (
+        ("%engine%" STRING_EQUAL_CASE "ee") OR
+        ("%engine%" STRING_EQUAL_CASE "iwd") OR
+        ("%engine%" STRING_EQUAL_CASE "tobex")
+    ) BEGIN
+        FAIL "get_spells_hide_array: engine '%engine%' must be 'ee', 'iwd' or 'tobex'."
+    END
+
+    ACTION_DEFINE_ASSOCIATIVE_ARRAY spells BEGIN END
+
+    //Read table of spells to patch.
+    COPY - ~%MOD_FOLDER%/lib/hidespl_patch.2da~ ~override~
+        COUNT_2DA_COLS cols
+        //Sanitize number of columns.
+        PATCH_IF NOT (cols = 4) BEGIN
+            PATCH_FAIL "get_spells_hide_array: table has '%cols%' columns, should be 4."
+        END
+
+        //Loop through table.
+        READ_2DA_ENTRIES_NOW "spells_hide#table" cols
+        FOR (i = 0; i < spells_hide#table; ++i) BEGIN
+            //Gather data.
+            READ_2DA_ENTRY_FORMER "spells_hide#table" i 0 spell
+            READ_2DA_ENTRY_FORMER "spells_hide#table" i 1 ee
+            READ_2DA_ENTRY_FORMER "spells_hide#table" i 2 iwd
+            READ_2DA_ENTRY_FORMER "spells_hide#table" i 3 tobex
+
+            PATCH_IF ("%engine%" STRING_EQUAL_CASE "ee") BEGIN
+                TEXT_SPRINT $spells("%spell%") "%ee%"
+            END
+
+            PATCH_IF ("%engine%" STRING_EQUAL_CASE "iwd") BEGIN
+                TEXT_SPRINT $spells("%spell%") "%iwd%"
+            END
+
+            PATCH_IF ("%engine%" STRING_EQUAL_CASE "tobex") BEGIN
+                TEXT_SPRINT $spells("%spell%") "%tobex%"
+            END
+        END
+END
+
+DEFINE_ACTION_FUNCTION hide_spells_from_array STR_VAR engine = "ee" BEGIN
+    //EVAL needed because weidu.
+    LAF get_spells_hide_array STR_VAR engine = EVAL "%engine%" RET_ARRAY spells END
+
+    //Patch table.
+    COPY_EXISTING ~hidespl.2da~ ~override~
+        COUNT_2DA_COLS cols
+        //Sanitize columns value. tobex has 2 columns, ee have 4, iwd has 3.
+        PATCH_IF ("%engine%" STRING_EQUAL_CASE "ee") AND (cols != 4) BEGIN
+            PATCH_FAIL "hide_spells_from_array: unexpected number of columns '%cols%' for ee."
+        END
+
+        PATCH_IF ("%engine%" STRING_EQUAL_CASE "tobex") AND (cols != 2) BEGIN
+            PATCH_FAIL "hide_spells_from_array: unexpected number of columns '%cols%' for tobex."
+        END
+
+        PATCH_IF ("%engine%" STRING_EQUAL_CASE "iwd") AND (cols != 3) BEGIN
+            PATCH_FAIL "hide_spells_from_array: unexpected number of columns '%cols%' for iwd."
+        END
+
+        PHP_EACH spells AS spell => flag BEGIN
+            //Fetch resource name. EVAL needed because weidu.
+            LPF get_spell_res STR_VAR spell = EVAL "%spell%" RET res_name = resource END
+            PATCH_IF NOT ("%res_name%" STRING_EQUAL_CASE "*") BEGIN
+                //Check if it is already in table. EVAL needed because weidu.
+                LPF find_first_row STR_VAR key = EVAL "%res_name%" RET row = index END
+                PATCH_IF NOT (row = 0 - 1) BEGIN
+                    SET_2DA_ENTRY row 1 cols flag
+                END ELSE BEGIN
+                    //Append row.
+                    COUNT_2DA_ROWS cols rows
+
+                    PATCH_IF ("%engine%" STRING_EQUAL_CASE "ee") BEGIN
+                        INSERT_2DA_ROW rows cols "%res_name% %flag% 0 0"
+                    END
+
+                    PATCH_IF ("%engine%" STRING_EQUAL_CASE "tobex") BEGIN
+                        INSERT_2DA_ROW rows cols "%res_name% %flag%"
+                    END
+
+                    PATCH_IF ("%engine%" STRING_EQUAL_CASE "iwd") BEGIN
+                        INSERT_2DA_ROW rows cols "%res_name% %flag% 0"
+                    END                        
+                END
+            END ELSE BEGIN
+                //Skip failing on not found and spell is to be hidden.
+                PATCH_IF (flag = 1) BEGIN
+                    PATCH_WARN "hide_spells_from_array: resource name for spell '%spell%' not found."
+                END
+            END
+        END
+    PRETTY_PRINT_2DA
+    BUT_ONLY
+END
+
+//The main function.
+DEFINE_ACTION_FUNCTION hide_spells BEGIN
+    OUTER_TEXT_SPRINT engine "*"
+
+    //Determine engine.
+    ACTION_IF GAME_IS "bgee bg2ee eet" BEGIN
+        OUTER_TEXT_SPRINT engine "ee"
+    END ELSE BEGIN
+        ACTION_IF GAME_IS "iwdee" BEGIN
+            OUTER_TEXT_SPRINT engine "iwd"
+        END ELSE BEGIN
+            //Not an ee. Check for tobex by a simple file check.
+            ACTION_IF (FILE_EXISTS "tobex_ini/tobexcore.ini") AND (FILE_EXISTS_IN_GAME "hidespl.2da") BEGIN
+                OUTER_TEXT_SPRINT engine "tobex"
+            END ELSE BEGIN
+                WARN "hide_spells: unhandled case; no patching will be done."
+            END
+        END
+    END
+
+    ACTION_IF NOT ("%engine%" STRING_EQUAL_CASE "*") BEGIN
+        //EVAL needed because weidu.
+        LAF hide_spells_from_array STR_VAR engine = EVAL "%engine%" END
+    END
+END
+END
+// SR_CONFIG_GUARD_END infrastructure:global.hidespl

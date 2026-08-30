@@ -41,7 +41,7 @@ DEFINE_ACTION_MACRO sr_config_load_validate BEGIN
     END
     // Required statement: sr_catalog_fingerprint
     COUNT_REGEXP_INSTANCES CASE_INSENSITIVE "^[ %TAB%]*SPRINT[ %TAB%]+sr_catalog_fingerprint[ %TAB%]+" sr_config_broad_000003
-    COUNT_REGEXP_INSTANCES CASE_SENSITIVE "^[ %TAB%]*SPRINT[ %TAB%]+sr_catalog_fingerprint[ %TAB%]+~1a88310a595f405659f8fd4af0cf25b6a0f44a2113372a3b4dc425660e527d29~[ %TAB%]*\(//[^%WNL%%MNL%%LNL%]*\)?\(%WNL%\|%MNL%\|%LNL%\|$\)" sr_config_exact_000003
+    COUNT_REGEXP_INSTANCES CASE_SENSITIVE "^[ %TAB%]*SPRINT[ %TAB%]+sr_catalog_fingerprint[ %TAB%]+~cedd261ebcaba138b36372f05fa6f339cd4483376cba500846e4ddf7de376c2d~[ %TAB%]*\(//[^%WNL%%MNL%%LNL%]*\)?\(%WNL%\|%MNL%\|%LNL%\|$\)" sr_config_exact_000003
     SET sr_config_recognized_lines += sr_config_exact_000003
     PATCH_IF (sr_config_broad_000003 = 0) BEGIN
       SPRINT sr_config_errors ~%sr_config_errors%- missing setting sr_catalog_fingerprint%LNL%~
@@ -8960,5 +8960,5 @@ DEFINE_ACTION_MACRO sr_config_load_validate BEGIN
   // WeiDU 249 cannot execute the public `key = -1` syntax. The exact
   // validated line counts above publish equivalent numeric variables
   // without ever executing or rewriting the editable file.
-  OUTER_SPRINT sr_catalog_fingerprint ~1a88310a595f405659f8fd4af0cf25b6a0f44a2113372a3b4dc425660e527d29~
+  OUTER_SPRINT sr_catalog_fingerprint ~cedd261ebcaba138b36372f05fa6f339cd4483376cba500846e4ddf7de376c2d~
 END

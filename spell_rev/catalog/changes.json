@@ -25593,7 +25593,7 @@
       "category": "derived",
       "source_spans": [
         {
-          "path": "spell_rev/setup-spell_rev.tp2",
+          "path": "spell_rev/components/main_component_entry.tpa",
           "start": "INCLUDE ~spell_rev/lib/ds.tph~",
           "end": "// Remove Disabled Spells from Spell Selection Screens (Chargen, Sorcerer Level-Up)",
           "sha256": "398e17992c666fe311797f06529d9408bbd8b5d255dec25210b133644ef0ca67"
@@ -25667,7 +25667,7 @@
       "category": "derived",
       "source_spans": [
         {
-          "path": "spell_rev/setup-spell_rev.tp2",
+          "path": "spell_rev/components/main_component_entry.tpa",
           "start": "// Remove Disabled Spells from Spell Selection Screens (Chargen, Sorcerer Level-Up)",
           "end": "//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\\\\\r\n////\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\r\n//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\\\\\r\n////\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\r\n\r\n/*------Deva and Planetar Animations------*/",
           "sha256": "7114214f4f3922e378f12f1629fe536d65a8b72d69e490de58ad532589edc19d"
@@ -26376,7 +26376,7 @@
     {
       "owner": "global.detectable_spells",
       "source_span": {
-        "path": "spell_rev/setup-spell_rev.tp2",
+        "path": "spell_rev/components/main_component_entry.tpa",
         "start": "INCLUDE ~spell_rev/lib/ds.tph~",
         "end": "// Remove Disabled Spells from Spell Selection Screens (Chargen, Sorcerer Level-Up)",
         "sha256": "398e17992c666fe311797f06529d9408bbd8b5d255dec25210b133644ef0ca67"
@@ -26385,7 +26385,7 @@
     {
       "owner": "global.hidespl",
       "source_span": {
-        "path": "spell_rev/setup-spell_rev.tp2",
+        "path": "spell_rev/components/main_component_entry.tpa",
         "start": "// Remove Disabled Spells from Spell Selection Screens (Chargen, Sorcerer Level-Up)",
         "end": "//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\\\\\r\n////\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\r\n//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\\\\\r\n////\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\//\\\\\r\n\r\n/*------Deva and Planetar Animations------*/",
         "sha256": "7114214f4f3922e378f12f1629fe536d65a8b72d69e490de58ad532589edc19d"

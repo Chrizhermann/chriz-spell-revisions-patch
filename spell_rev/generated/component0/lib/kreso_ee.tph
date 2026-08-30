@@ -1,0 +1,20 @@
+// SR_CONFIG_GUARD_BEGIN infrastructure:global.ee_compatibility_processors
+ACTION_IF (sr_infra_000045 = 1) BEGIN
+//Open new scope to not pollute namespace.
+WITH_SCOPE BEGIN
+    INCLUDE ~spell_rev/generated/component0/lib/refresh_non_stacking.tpa~
+END
+
+ACTION_IF (GAME_IS "bgee bg2ee eet iwdee") BEGIN
+    //Minor Spell Deflection, Spell Deflection, Spell Deflection: Old, Greater Spell Deflection.
+    ACTION_FOR_EACH res IN "spwi318" "spwi522" "spwi618" "spwi701" BEGIN
+        ACTION_IF (FILE_EXISTS_IN_GAME "%res%.spl") BEGIN
+            COPY_EXISTING ~%res%.spl~ ~override~
+                //Add effect removal when deflection exhausted.
+                LPF ALTER_EFFECT INT_VAR multi_match = 1 match_opcode = 201 STR_VAR resource = EVAL "%res%b" END 
+            BUT_ONLY
+        END
+    END
+END 
+END
+// SR_CONFIG_GUARD_END infrastructure:global.ee_compatibility_processors
