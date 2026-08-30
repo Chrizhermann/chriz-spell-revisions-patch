@@ -202,6 +202,18 @@ def audit_catalog_coverage(
         catalog.component_zero_closure_roots
     ):
         declaration = f"component_zero_closure_roots[{root_index}].source_span"
+        if not _repository_file_exists_exact(
+            root_path, closure_root.source_span.path
+        ):
+            issues.append(
+                CoverageIssue(
+                    "invalid_closure_root",
+                    declaration,
+                    f"{closure_root.source_span.path!r} does not exactly match "
+                    "an existing file",
+                )
+            )
+            continue
         try:
             resolved = resolve_span_offsets(root_path, closure_root.source_span)
         except SourceError as error:
