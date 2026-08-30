@@ -7,7 +7,8 @@ import hashlib
 import sys
 from pathlib import Path
 
-from .catalog import CatalogError
+from .catalog import CatalogError, load_catalog
+from .coverage import audit_catalog_coverage, format_coverage_diagnostics
 from .generate import GenerationError, generate
 from .inventory import write_inventory_report
 from .resources import ResourceError
@@ -15,13 +16,21 @@ from .source import SourceError
 from .text import TraError
 
 
+_CATALOG_PATH = Path("spell_rev/catalog/changes.json")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.sr_config")
     subparsers = parser.add_subparsers(dest="command", required=True)
     inventory_parser = subparsers.add_parser(
-        "inventory", help="write the deterministic source/resource inventory"
+        "inventory", help="inventory source/resources or check catalog coverage"
     )
-    inventory_parser.add_argument("--json", required=True, type=Path, dest="output")
+    inventory_parser.add_argument("--json", type=Path, dest="output")
+    inventory_parser.add_argument(
+        "--check-catalog",
+        action="store_true",
+        help="validate exhaustive catalog ownership without writing files",
+    )
     generate_parser = subparsers.add_parser(
         "generate", help="generate the synchronized config and change catalogs"
     )
@@ -33,6 +42,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "inventory":
+        if args.output is None and not args.check_catalog:
+            inventory_parser.error("at least one of --json or --check-catalog is required")
+        if args.check_catalog:
+            try:
+                catalog = load_catalog(Path.cwd() / _CATALOG_PATH)
+                coverage = audit_catalog_coverage(Path.cwd(), catalog)
+            except (CatalogError, ResourceError, SourceError, TraError) as error:
+                print(f"catalog coverage failed: {error}", file=sys.stderr)
+                return 1
+            if not coverage.ok:
+                sys.stderr.write(format_coverage_diagnostics(coverage))
+                return 1
+            sys.stdout.write(format_coverage_diagnostics(coverage))
+        if args.output is None:
+            return 0
         try:
             report, payload = write_inventory_report(Path.cwd(), args.output)
         except (SourceError, ResourceError) as error:

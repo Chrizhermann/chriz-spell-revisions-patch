@@ -29,6 +29,9 @@ SUPPORTED_GAMES = frozenset(
     }
 )
 _TRI_STATE_VALUES = frozenset({-1, 0, 1})
+INFRASTRUCTURE_CATEGORIES = frozenset(
+    {"derived", "compatibility", "mandatory_metadata"}
+)
 _HEX_DIGITS = frozenset(string.hexdigits)
 _SETTING_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 _TRA_REFERENCE_PATTERN = re.compile(r"@[0-9]+\Z")
@@ -110,6 +113,7 @@ class Infrastructure:
     source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
     resources: tuple[ResourceOwnership, ...] = field(default_factory=tuple)
     consumers: tuple[str, ...] = field(default_factory=tuple)
+    category: str = "derived"
 
 
 @dataclass(frozen=True)
@@ -374,7 +378,7 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
     _check_keys(
         raw,
         path=path,
-        allowed={"id", "source_spans", "resources", "consumers"},
+        allowed={"id", "source_spans", "resources", "consumers", "category"},
         required={"id"},
     )
     source_spans_raw = _list(raw.get("source_spans", []), f"{path}.source_spans")
@@ -392,7 +396,18 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
         consumers=_identifier_tuple(
             raw.get("consumers", []), f"{path}.consumers"
         ),
+        category=_infrastructure_category(
+            raw.get("category", "derived"), f"{path}.category"
+        ),
     )
+
+
+def _infrastructure_category(value: Any, path: str) -> str:
+    category = _identifier(value, path)
+    if category not in INFRASTRUCTURE_CATEGORIES:
+        expected = ", ".join(sorted(INFRASTRUCTURE_CATEGORIES))
+        raise CatalogError(f"{path}: expected one of {expected}")
+    return category
 
 
 def _validate_catalog(catalog: Catalog) -> None:

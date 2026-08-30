@@ -1053,3 +1053,40 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
     for record, attribute, replacement in frozen_records:
         with pytest.raises(FrozenInstanceError):
             setattr(record, attribute, replacement)
+
+
+@pytest.mark.parametrize(
+    "category", ["derived", "compatibility", "mandatory_metadata"]
+)
+def test_infrastructure_category_represents_non_public_component_zero_work(
+    category: str,
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[infrastructure("internal", category=category)]
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    assert catalog.infrastructure[0].category == category
+
+
+def test_infrastructure_category_defaults_to_derived_for_existing_records() -> None:
+    catalog = Catalog.from_dict(
+        minimal_catalog(infrastructure_records=[infrastructure("internal")])
+    )
+
+    assert catalog.infrastructure[0].category == "derived"
+
+
+@pytest.mark.parametrize("category", ["shared", "metadata", "", 1, None])
+def test_infrastructure_category_uses_a_closed_explicit_vocabulary(
+    category: object,
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[infrastructure("internal", category=category)]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].category:")

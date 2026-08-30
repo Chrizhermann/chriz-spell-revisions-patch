@@ -11,6 +11,8 @@ from tests.ie_formats import (
     SPL_EFFECT_SIZE,
     SPL_HEADER_SIZE,
 )
+from tools.sr_config.catalog import Catalog
+from tools.sr_config.coverage import audit_catalog_coverage
 from tools.sr_config.resources import (
     ResourceError,
     build_resource_index,
@@ -778,3 +780,151 @@ def test_representative_shipped_edges_have_exact_provenance(
     )
 
     assert (edge.target, edge.offset, edge.opcode) == (target, offset, opcode)
+
+
+def _coverage_change_record(
+    change_id: str,
+    resources: list[str],
+    *,
+    atomic_group: str | None = None,
+    requires: list[str] | None = None,
+    soft_requires: list[str] | None = None,
+    processors: list[str] | None = None,
+) -> dict[str, object]:
+    return {
+        "id": change_id,
+        "setting": f"sr_{change_id}",
+        "display_name": change_id,
+        "default": -1,
+        "group": "global",
+        "component": 0,
+        "games": ["all"],
+        "name_ref": "@1",
+        "description_ref": "@2",
+        "source_spans": [],
+        "resources": [{"path": path, "kind": "asset"} for path in resources],
+        "atomic_group": atomic_group,
+        "requires": requires or [],
+        "conflicts": [],
+        "soft_requires": soft_requires or [],
+        "processors": processors or [],
+        "documentation_only_reason": "binary-only coverage fixture",
+    }
+
+
+def _write_binary_coverage_fixture(
+    root: Path,
+    effects: tuple[tuple[int, str], ...],
+) -> Catalog:
+    component = root / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    language = root / "spell_rev/languages/english"
+    language.mkdir(parents=True)
+    (language / "arcane.tra").write_text(
+        "@1=~Fixture name~\n@2=~Fixture description~\n", encoding="utf-8"
+    )
+    (language / "divine.tra").write_text("", encoding="utf-8")
+    (language / "setup.tra").write_text("", encoding="utf-8")
+    assets = root / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(_make_spl(effects))
+    for target in ("same", "atomic", "hard", "soft", "shared", "mystery"):
+        (assets / f"{target}.spl").write_bytes(_make_spl(()))
+
+    return Catalog.from_dict(
+        {
+            "schema_version": 1,
+            "upstream": {
+                "tag": "v4.21",
+                "commit": "af1dedb6d211f86ad7a321d4080e46c748e8abac",
+            },
+            "migration": {
+                "complete": False,
+                "installer_source": "spell_rev/components/main_component.tpa",
+            },
+            "groups": [
+                {
+                    "id": "global",
+                    "setting": "sr_default",
+                    "name": "All changes",
+                    "default": 1,
+                    "parent": None,
+                }
+            ],
+            "changes": [
+                _coverage_change_record(
+                    "source",
+                    ["spell_rev/assets/source.spl", "spell_rev/assets/same.spl"],
+                    atomic_group="family",
+                    requires=["hard"],
+                    soft_requires=["soft"],
+                    processors=["shared_processor"],
+                ),
+                _coverage_change_record(
+                    "atomic",
+                    ["spell_rev/assets/atomic.spl"],
+                    atomic_group="family",
+                ),
+                _coverage_change_record("hard", ["spell_rev/assets/hard.spl"]),
+                _coverage_change_record("soft", ["spell_rev/assets/soft.spl"]),
+            ],
+            "infrastructure": [
+                {
+                    "id": "shared_processor",
+                    "category": "derived",
+                    "source_spans": [],
+                    "resources": [
+                        {"path": "spell_rev/assets/shared.spl", "kind": "asset"}
+                    ],
+                    "consumers": ["source"],
+                }
+            ],
+        }
+    )
+
+
+def test_catalog_coverage_derives_every_binary_reference_classification(
+    tmp_path: Path,
+) -> None:
+    catalog = _write_binary_coverage_fixture(
+        tmp_path,
+        (
+            (146, "SAME"),
+            (146, "ATOMIC"),
+            (146, "HARD"),
+            (146, "SOFT"),
+            (146, "SHARED"),
+            (146, "EXTERN"),
+        ),
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+    classifications = {
+        edge.target.casefold(): edge.classification
+        for edge in result.binary_edges
+        if edge.target.casefold()
+        in {"same", "atomic", "hard", "soft", "shared", "extern"}
+    }
+
+    assert classifications == {
+        "same": "owned",
+        "atomic": "atomic",
+        "hard": "hard",
+        "soft": "soft",
+        "shared": "shared",
+        "extern": "external",
+    }
+    assert result.ok
+
+
+def test_catalog_coverage_never_hides_unknown_binary_payloads(
+    tmp_path: Path,
+) -> None:
+    catalog = _write_binary_coverage_fixture(tmp_path, ((999, "MYSTERY"),))
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == ["unknown_binary_edge"]
+    mystery = next(edge for edge in result.binary_edges if edge.target == "MYSTERY")
+    assert mystery.classification is None

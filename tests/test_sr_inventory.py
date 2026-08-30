@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 from pathlib import Path
 
 import pytest
 
-from tools.sr_config.catalog import SourceSpan
+from tools.sr_config.__main__ import main
+from tools.sr_config.catalog import Catalog, SourceSpan
+from tools.sr_config.coverage import audit_catalog_coverage
 from tools.sr_config.inventory import (
     build_inventory_report,
     inventory,
@@ -774,3 +777,362 @@ def test_inventory_report_counts_payload_semantics_separately(
         "local_binary_edge_count": 1,
         "external_binary_edge_count": 0,
     }
+
+
+def _write_coverage_language_files(root: Path, source: str = "") -> None:
+    language = root / "spell_rev/languages/english"
+    language.mkdir(parents=True, exist_ok=True)
+    (language / "arcane.tra").write_text(source, encoding="utf-8")
+    (language / "divine.tra").write_text("", encoding="utf-8")
+    (language / "setup.tra").write_text("", encoding="utf-8")
+
+
+def _coverage_catalog(
+    *, changes: list[dict[str, object]] | None = None,
+    infrastructure: list[dict[str, object]] | None = None,
+) -> Catalog:
+    return Catalog.from_dict(
+        {
+            "schema_version": 1,
+            "upstream": {
+                "tag": "v4.21",
+                "commit": "af1dedb6d211f86ad7a321d4080e46c748e8abac",
+            },
+            "migration": {
+                "complete": False,
+                "installer_source": "spell_rev/components/main_component.tpa",
+            },
+            "groups": [
+                {
+                    "id": "global",
+                    "setting": "sr_default",
+                    "name": "All changes",
+                    "default": 1,
+                    "parent": None,
+                }
+            ],
+            "changes": changes or [],
+            "infrastructure": infrastructure or [],
+        }
+    )
+
+
+def _coverage_change(
+    change_id: str,
+    *,
+    source_spans: list[dict[str, object]] | None = None,
+    resources: list[dict[str, object]] | None = None,
+    name_ref: str | None = "@1",
+    description_ref: str | None = "@2",
+    documentation_only_reason: str | None = None,
+) -> dict[str, object]:
+    return {
+        "id": change_id,
+        "setting": f"sr_{change_id}",
+        "display_name": change_id,
+        "default": -1,
+        "group": "global",
+        "component": 0,
+        "games": ["all"],
+        "name_ref": name_ref,
+        "description_ref": description_ref,
+        "source_spans": source_spans or [],
+        "resources": resources or [],
+        "atomic_group": None,
+        "requires": [],
+        "conflicts": [],
+        "soft_requires": [],
+        "processors": [],
+        "documentation_only_reason": documentation_only_reason,
+    }
+
+
+def _coverage_span(path: str, source: bytes, start: bytes, end: bytes) -> dict[str, object]:
+    start_offset = source.index(start)
+    end_offset = source.index(end)
+    payload = source[start_offset:end_offset]
+    normalized = payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return {
+        "path": path,
+        "start": start.decode("utf-8"),
+        "end": end.decode("utf-8"),
+        "sha256": hashlib.sha256(normalized).hexdigest(),
+    }
+
+
+def test_catalog_coverage_reports_every_unowned_and_multiply_owned_source_node(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// first\n"
+        b"COPY ~spell_rev/assets/a.txt~ ~override~\n"
+        b"// second\n"
+        b"MYSTERY ~spell_rev/assets/b.txt~\n"
+        b"// end\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "a.txt").write_text("a", encoding="utf-8")
+    (assets / "b.txt").write_text("b", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~First~\n@2=~Description~\n")
+    first_span = _coverage_span(
+        "spell_rev/components/main_component.tpa", source, b"// first", b"// second"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "first",
+                source_spans=[first_span],
+                resources=[{"path": "spell_rev/assets/a.txt", "kind": "asset"}],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "compatibility_pass",
+                "category": "compatibility",
+                "source_spans": [first_span],
+                "resources": [],
+                "consumers": [],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    source_issues = [
+        issue for issue in result.issues if issue.code.endswith("source_node")
+    ]
+    assert [(issue.code, issue.location) for issue in source_issues] == [
+        (
+            "multiply_owned_source_node",
+            "spell_rev/components/main_component.tpa:2",
+        ),
+        ("unowned_source_node", "spell_rev/components/main_component.tpa:4"),
+    ]
+    assert result.source_node_count == 2
+
+
+def test_catalog_coverage_requires_current_english_change_text_and_code_evidence(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    _write_coverage_language_files(tmp_path)
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "undocumented", name_ref=None, description_ref=None
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing_change_name_ref",
+        "missing_change_description_ref",
+        "missing_change_evidence",
+    ]
+    assert all(issue.location == "changes[0]" for issue in result.issues)
+
+
+def test_catalog_coverage_reports_each_missing_english_reference(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    _write_coverage_language_files(tmp_path)
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "stale_text",
+                name_ref="@9001",
+                description_ref="@9002",
+                documentation_only_reason="fixture has no executable source",
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing_english_reference",
+        "missing_english_reference",
+    ]
+    assert [issue.location for issue in result.issues] == [
+        "changes[0].name_ref",
+        "changes[0].description_ref",
+    ]
+
+
+def test_catalog_coverage_classifies_source_game_resources_as_external(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\nCOPY_EXISTING ~GAME.SPL~ ~override~\n// end\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "external",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        b"// end",
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("GAME.SPL", "external")
+    ]
+
+
+def test_catalog_coverage_never_hides_unknown_source_operands(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nMYSTERY ~odd.res~\n// end\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "unknown",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        b"// end",
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == ["unknown_source_edge"]
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("odd.res", None)
+    ]
+
+
+def test_catalog_coverage_tracks_resource_arguments_passed_to_action_functions(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\n"
+        b"LAF ds_altered_spell STR_VAR file=~a.spl~ END\n"
+        b"// end\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    spell = bytearray(0x72)
+    spell[:8] = b"SPL V1  "
+    struct.pack_into("<I", spell, 0x64, len(spell))
+    struct.pack_into("<I", spell, 0x6A, len(spell))
+    (assets / "a.spl").write_bytes(spell)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "action_argument",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        b"// end",
+                    )
+                ],
+                resources=[
+                    {"path": "spell_rev/assets/a.spl", "kind": "asset"}
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    action_edge = next(edge for edge in result.source_edges if edge.target == "a.spl")
+    assert action_edge.classification == "owned"
+
+
+def test_inventory_check_catalog_is_read_only_and_diagnostics_are_deterministic(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("MYSTERY_ONE\nMYSTERY_TWO\n", encoding="utf-8")
+    _write_coverage_language_files(tmp_path)
+    catalog_path = tmp_path / "spell_rev/catalog/changes.json"
+    catalog_path.parent.mkdir(parents=True)
+    raw_catalog = {
+        "schema_version": 1,
+        "upstream": {
+            "tag": "v4.21",
+            "commit": "af1dedb6d211f86ad7a321d4080e46c748e8abac",
+        },
+        "migration": {
+            "complete": False,
+            "installer_source": "spell_rev/components/main_component.tpa",
+        },
+        "groups": [
+            {
+                "id": "global",
+                "setting": "sr_default",
+                "name": "All changes",
+                "default": 1,
+                "parent": None,
+            }
+        ],
+        "changes": [],
+        "infrastructure": [],
+    }
+    catalog_path.write_text(json.dumps(raw_catalog), encoding="utf-8")
+    before = {
+        path.relative_to(tmp_path).as_posix(): path.read_bytes()
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    }
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["inventory", "--check-catalog"]) == 1
+    first = capsys.readouterr()
+    assert main(["inventory", "--check-catalog"]) == 1
+    second = capsys.readouterr()
+
+    assert first == second
+    assert "catalog coverage failed: 2 issue(s)" in first.err
+    assert "unowned_source_node: 2" in first.err
+    assert "spell_rev/components/main_component.tpa:1" in first.err
+    assert "spell_rev/components/main_component.tpa:2" in first.err
+    after = {
+        path.relative_to(tmp_path).as_posix(): path.read_bytes()
+        for path in tmp_path.rglob("*")
+        if path.is_file()
+    }
+    assert after == before
