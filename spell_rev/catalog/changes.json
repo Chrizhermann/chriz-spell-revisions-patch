@@ -4131,7 +4131,8 @@
         "global.detectable_spells",
         "global.ee_spell_flags",
         "global.spell_school_assignment",
-        "compat.tutu_scroll_backups"
+        "compat.tutu_scroll_backups",
+        "shared.true_seeing_detection_spell"
       ]
     },
     {
@@ -4930,7 +4931,8 @@
         "global.ee_spell_flags",
         "global.removed_spell_string_cleanup",
         "global.spell_deflection_visual",
-        "global.spell_school_assignment"
+        "global.spell_school_assignment",
+        "shared.true_seeing_detection_spell"
       ]
     },
     {
@@ -5796,12 +5798,11 @@
       "atomic_group": null,
       "requires": [],
       "conflicts": [],
-      "soft_requires": [
-        "divine.contagion"
-      ],
+      "soft_requires": [],
       "processors": [
         "global.ee_spell_flags",
-        "global.spell_school_assignment"
+        "global.spell_school_assignment",
+        "shared.contagion_delivery_spell"
       ]
     },
     {
@@ -6159,14 +6160,13 @@
       "atomic_group": null,
       "requires": [],
       "conflicts": [],
-      "soft_requires": [
-        "divine.polymorph_other"
-      ],
+      "soft_requires": [],
       "processors": [
         "compat.item_revisions",
         "global.ee_spell_flags",
         "global.spell_school_assignment",
-        "shared.creature_type_items"
+        "shared.creature_type_items",
+        "shared.polymorph_squirrel_item"
       ]
     },
     {
@@ -8258,8 +8258,8 @@
         {
           "path": "spell_rev/components/main_component.tpa",
           "start": "COPY ~spell_rev\\spwi6##\\spwi609.spl~     ~override~  // True Seeing (previously named True Sight)",
-          "end": "COPY ~spell_rev\\spwi6##\\spwi611.spl~     ~override~  // Protection from Magical Weapons",
-          "sha256": "c4cfa202a839dffe3c7f248389f7e910f207652f8c8662b27f5eb8265db12b77"
+          "end": "COPY ~spell_rev\\spwi6##\\spwi609d.spl~     ~override~",
+          "sha256": "e4af0863e3039e54f52e6c1b823d146aa72f431ce196d9941cab5abe6ddcef25"
         }
       ],
       "resources": [
@@ -8269,10 +8269,6 @@
         },
         {
           "path": "spell_rev/spwi6##/spwi609.spl",
-          "kind": "asset"
-        },
-        {
-          "path": "spell_rev/spwi6##/spwi609d.spl",
           "kind": "asset"
         }
       ],
@@ -8292,7 +8288,8 @@
         "global.true_sight_compatibility",
         "shared.true_sight_highlight",
         "global.add_spell_reference_rewrite",
-        "projectile.bignarea_radius"
+        "projectile.bignarea_radius",
+        "shared.true_seeing_detection_spell"
       ]
     },
     {
@@ -10393,14 +10390,13 @@
       "atomic_group": null,
       "requires": [],
       "conflicts": [],
-      "soft_requires": [
-        "arcane.level6.true_seeing"
-      ],
+      "soft_requires": [],
       "processors": [
         "global.ee_spell_flags",
         "shared.fear_aura",
         "global.spell_school_assignment",
-        "global.teleport_without_error"
+        "global.teleport_without_error",
+        "shared.true_seeing_detection_spell"
       ]
     },
     {
@@ -15762,15 +15758,11 @@
         {
           "path": "spell_rev/components/main_component.tpa",
           "start": "//ADD_SPELL: Contagion",
-          "end": "//ADD_SPELL: Animal Summoning III",
-          "sha256": "4410bfc406b246ab971400e61a038bd99b769b510b94a8cdb05326fec68ff8ef"
+          "end": "COPY ~spell_rev\\sppr3##\\dvpr311d.spl~     ~override~",
+          "sha256": "722d46152585424490f24deed4b242058983da2f61aef2465c066fc4f1d70dcc"
         }
       ],
       "resources": [
-        {
-          "path": "spell_rev/sppr3##/dvpr311d.spl",
-          "kind": "asset"
-        },
         {
           "path": "spell_rev/sppr3##/sppr311.spl",
           "kind": "asset"
@@ -15785,7 +15777,8 @@
       "conflicts": [],
       "soft_requires": [],
       "processors": [
-        "global.ee_spell_flags"
+        "global.ee_spell_flags",
+        "shared.contagion_delivery_spell"
       ]
     },
     {
@@ -18067,15 +18060,11 @@
         {
           "path": "spell_rev/components/main_component.tpa",
           "start": "//ADD_SPELL: Polymorph Other",
-          "end": "//ADD_SPELL: Protection from Acid",
-          "sha256": "a461644b5ecc8c8e337b252adefc969b52c143df51e5bfb7c1e606b7c16f8d6c"
+          "end": "COPY ~spell_rev\\sppr5##\\dvsquir.itm~     ~override~",
+          "sha256": "eec0022769c777643844904bcb52430c6d4c3f1fd1acda8b0871424400749e01"
         }
       ],
       "resources": [
-        {
-          "path": "spell_rev/sppr5##/dvsquir.itm",
-          "kind": "asset"
-        },
         {
           "path": "spell_rev/sppr5##/sppr519.spl",
           "kind": "asset"
@@ -18093,7 +18082,8 @@
         "global.ee_spell_flags",
         "compat.item_revisions",
         "shared.creature_type_items",
-        "compat.bgee_displayed_strings"
+        "compat.bgee_displayed_strings",
+        "shared.polymorph_squirrel_item"
       ]
     },
     {
@@ -20020,7 +20010,8 @@
       ],
       "processors": [
         "global.ee_spell_flags",
-        "shared.fatigue_effect"
+        "shared.fatigue_effect",
+        "shared.polymorph_squirrel_item"
       ]
     },
     {
@@ -26296,6 +26287,89 @@
       ],
       "include_resolutions": [],
       "source_resolutions": []
+    },
+    {
+      "id": "shared.contagion_delivery_spell",
+      "category": "derived",
+      "source_spans": [
+        {
+          "path": "spell_rev/components/main_component.tpa",
+          "start": "COPY ~spell_rev\\sppr3##\\dvpr311d.spl~     ~override~",
+          "end": "//ADD_SPELL: Animal Summoning III",
+          "sha256": "26d4d8d0129833cec8c200a7bf5d5742c69ccead6eb4a249f8ea488815561965"
+        }
+      ],
+      "resources": [
+        {
+          "path": "spell_rev/sppr3##/dvpr311d.spl",
+          "kind": "asset"
+        }
+      ],
+      "consumers": [
+        "arcane.level4.contagion",
+        "divine.contagion"
+      ],
+      "include_resolutions": [],
+      "source_resolutions": [],
+      "activation": "consumer_selected",
+      "infrastructure_requires": []
+    },
+    {
+      "id": "shared.polymorph_squirrel_item",
+      "category": "derived",
+      "source_spans": [
+        {
+          "path": "spell_rev/components/main_component.tpa",
+          "start": "COPY ~spell_rev\\sppr5##\\dvsquir.itm~     ~override~",
+          "end": "//ADD_SPELL: Protection from Acid",
+          "sha256": "fc69a51b8d8ea1df37bcbd7644f4ac3d09581e3d9eae57e81b40b4203abedcc3"
+        }
+      ],
+      "resources": [
+        {
+          "path": "spell_rev/sppr5##/dvsquir.itm",
+          "kind": "asset"
+        }
+      ],
+      "consumers": [
+        "arcane.level4.polymorph_other",
+        "divine.polymorph_other",
+        "divine.greater_restoration"
+      ],
+      "include_resolutions": [],
+      "source_resolutions": [],
+      "activation": "consumer_selected",
+      "infrastructure_requires": []
+    },
+    {
+      "id": "shared.true_seeing_detection_spell",
+      "category": "derived",
+      "source_spans": [
+        {
+          "path": "spell_rev/components/main_component.tpa",
+          "start": "COPY ~spell_rev\\spwi6##\\spwi609d.spl~     ~override~",
+          "end": "COPY ~spell_rev\\spwi6##\\spwi611.spl~     ~override~  // Protection from Magical Weapons",
+          "sha256": "acf0f44ea230ad77913572f0b51a8d1b06a5d002d5ad273b23c44c410b0f61fa"
+        }
+      ],
+      "resources": [
+        {
+          "path": "spell_rev/spwi6##/spwi609d.spl",
+          "kind": "asset"
+        }
+      ],
+      "consumers": [
+        "arcane.level3.non_detection",
+        "arcane.spell_shield_anti_magic",
+        "arcane.level6.true_seeing",
+        "arcane.level8.summon_fiend"
+      ],
+      "include_resolutions": [],
+      "source_resolutions": [],
+      "activation": "consumer_selected",
+      "infrastructure_requires": [
+        "shared.true_sight_highlight"
+      ]
     }
   ],
   "component_zero_closure_roots": [

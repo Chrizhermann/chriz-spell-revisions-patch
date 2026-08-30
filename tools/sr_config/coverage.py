@@ -54,6 +54,10 @@ _GENERATED_RESOURCE_KINDS = frozenset({"generated_resource"})
 _NON_OWNING_RESOURCE_KINDS = frozenset(
     {"2da_write", "ids_write", "table_write", "tlk_write"}
 )
+# These opcodes execute or create the referenced runtime payload. A soft
+# relation cannot justify them because selecting the source does not install
+# the target choice's exclusive resource.
+_OMISSION_UNSAFE_SOFT_OPCODES = frozenset({111, 146, 232})
 
 
 @dataclass(frozen=True)
@@ -1890,27 +1894,46 @@ def _audit_binary_edges(
                         resource_owners.get(full_candidate.casefold(), ())
                         for _, full_candidate in runtime_candidates
                     )
-                    classification = _classify_candidate_hits(
+                    owner_classification = _classify_candidate_hits(
                         source_hits, target_hits
                     )
+                    classification = owner_classification
+                    if (
+                        classification == "soft"
+                        and edge.opcode in _OMISSION_UNSAFE_SOFT_OPCODES
+                    ):
+                        classification = None
+                        issues.append(
+                            CoverageIssue(
+                                "unsafe_soft_runtime_resource",
+                                location,
+                                f"opcode {edge.opcode} requires installed runtime "
+                                "payload ownership; a soft relation does not "
+                                "activate its target choice",
+                            )
+                        )
                     if classification is None:
                         flattened = tuple(
                             hit for group in target_hits for hit in group
                         )
-                        issues.append(
-                            CoverageIssue(
-                                "unclassified_local_binary_edge",
-                                location,
-                                _unclassified_message(
-                                    ", ".join(
-                                        candidate
-                                        for candidate, _ in runtime_candidates
+                        if not (
+                            edge.opcode in _OMISSION_UNSAFE_SOFT_OPCODES
+                            and owner_classification == "soft"
+                        ):
+                            issues.append(
+                                CoverageIssue(
+                                    "unclassified_local_binary_edge",
+                                    location,
+                                    _unclassified_message(
+                                        ", ".join(
+                                            candidate
+                                            for candidate, _ in runtime_candidates
+                                        ),
+                                        source_hits,
+                                        flattened,
                                     ),
-                                    source_hits,
-                                    flattened,
-                                ),
+                                )
                             )
-                        )
             else:
                 classification = None
                 issues.append(

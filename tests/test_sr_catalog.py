@@ -546,25 +546,25 @@ def test_real_catalog_loads_with_pinned_provenance_and_closed_migration() -> Non
     assert len(catalog.groups) == 21
     assert len(catalog.changes) == 321
     assert sum(len(record.member_refs) > 1 for record in catalog.changes) == 16
-    assert len(catalog.infrastructure) == 76
+    assert len(catalog.infrastructure) == 79
     assert sum(
         record.activation == "consumer_selected"
         for record in catalog.infrastructure
-    ) == 75
+    ) == 78
     assert sum(
         record.activation == "always" for record in catalog.infrastructure
     ) == 1
     assert sum(len(record.requires) for record in catalog.changes) == 0
     assert sum(len(record.conflicts) for record in catalog.changes) == 0
-    assert sum(len(record.soft_requires) for record in catalog.changes) == 624
-    assert sum(len(record.processors) for record in catalog.changes) == 1014
+    assert sum(len(record.soft_requires) for record in catalog.changes) == 621
+    assert sum(len(record.processors) for record in catalog.changes) == 1023
     assert sum(
         len(record.infrastructure_requires)
         for record in catalog.infrastructure
-    ) == 24
+    ) == 25
     assert sum(len(record.source_spans) for record in catalog.changes) + sum(
         len(record.source_spans) for record in catalog.infrastructure
-    ) == 498
+    ) == 501
     assert sum(len(record.resources) for record in catalog.changes) + sum(
         len(record.resources) for record in catalog.infrastructure
     ) == 1625

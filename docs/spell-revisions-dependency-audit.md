@@ -18,8 +18,8 @@ hash-gated artifacts:
 - `task4-divine-audit.json`:
   `f761ee7215173a2da8ffbfa9bb1c580a50c66937e7c0328940198ef2592b7561`
 
-The imported catalog contains 321 public choices and 76 internal
-infrastructure records. Its 498 active source spans, 1,625 active resources,
+The imported catalog contains 321 public choices and 79 internal
+infrastructure records. Its 501 active source spans, 1,625 active resources,
 and component-zero resource graph pass strict catalog loading and close with
 zero coverage issues. Migration remains deliberately closed until generated
 installer parity is proven.
@@ -34,16 +34,26 @@ silently turns on another one.
 There is no hard-relation appendix because the final catalog contains
 exactly zero directed hard dependency edges.
 
-The catalog does retain 624 directed `soft_requires` edges. A soft edge means
+The catalog does retain 621 directed `soft_requires` edges. A soft edge means
 that a cross-effect is emitted only when both choices are enabled. If the
 counterpart is disabled, the optional cross-effect is omitted; the edge does
 not force that counterpart on. Examples include protections against optional
 offensive spells and interactions between independently useful spell changes.
 
+Three relationships from the imported evidence are deliberately not soft
+relations in the final catalog. Arcane Contagion casts the custom
+`DVPR311D.SPL`, arcane Polymorph Other creates the custom `DVSQUIR.ITM`, and
+the Summon Fiend glabrezu item conditionally casts the custom `SPWI609D.SPL`.
+Opcodes 146, 111, and 232 dereference those payloads at runtime, so selecting
+the source while omitting the target-owned copy would be unsafe. Each helper
+resource and its exact source-copy span is instead consumer-selected shared
+infrastructure; it is installed whenever any public choice that uses it is
+enabled.
+
 Shared implementation is not exposed as extra user choices. The resolver
-derives 75 consumer-selected infrastructure records from enabled public
-changes, plus one always-on metadata record. The infrastructure graph has 24
-explicit internal dependency edges, and 1,014 reciprocal public-change /
+derives 78 consumer-selected infrastructure records from enabled public
+changes, plus one always-on metadata record. The infrastructure graph has 25
+explicit internal dependency edges, and 1,023 reciprocal public-change /
 processor links. Those relations ensure that tables, compatibility passes,
 dynamic spell-reference rewriting, auxiliary resources, projectiles, and
 post-processing follow the public selections that consume them.
@@ -221,7 +231,6 @@ exception applies to no other row.
 | `arcane.level4.minor_globe_of_invulnerability` | `divine.strength_of_stone` | 1 | `direct` | `spell_rev/spwi4##/spwi406.spl:0x1ce:ability[0].effect[6].resource` |
 | `arcane.level4.minor_globe_of_invulnerability` | `divine.unholy_blight` | 1 | `direct` | `spell_rev/spwi4##/spwi406.spl:0x16e:ability[0].effect[4].resource` |
 | `arcane.level4.monster_summoning_iv_relocation` | `arcane.level2.web` | 4 | `direct` | `spell_rev/spwi4##/spidswsu.cre:0x2d4:known_spell[0]` |
-| `arcane.level4.contagion` | `divine.contagion` | 4 | `direct` | `spell_rev/spwi4##/spwi409.spl:0xde:ability[0].effect[1].resource` |
 | `arcane.level4.otilukes_resilient_sphere` | `arcane.level2.stinking_cloud` | 2 | `direct` | `spell_rev/spwi4##/spwi413c.spl:0x55e:ability[0].effect[25].resource` |
 | `arcane.level4.otilukes_resilient_sphere` | `arcane.level2.web` | 2 | `direct` | `spell_rev/spwi4##/spwi413c.spl:0x52e:ability[0].effect[24].resource` |
 | `arcane.level4.otilukes_resilient_sphere` | `arcane.level3.skull_trap` | 2 | `direct` | `spell_rev/spwi4##/spwi413c.spl:0x5be:ability[0].effect[27].resource` |
@@ -246,7 +255,6 @@ exception applies to no other row.
 | `arcane.level4.otilukes_resilient_sphere` | `divine.unholy_blight` | 2 | `direct` | `spell_rev/spwi4##/spwi413c.spl:0x5ee:ability[0].effect[28].resource` |
 | `arcane.level4.spirit_armor` | `arcane.level1.armor` | 1 | `direct` | `spell_rev/spwi4##/spwi414.spl:0x22e:ability[0].effect[8].resource` |
 | `arcane.level4.spirit_armor` | `arcane.level3.ghost_armor` | 1 | `direct` | `spell_rev/spwi4##/spwi414.spl:0x25e:ability[0].effect[9].resource` |
-| `arcane.level4.polymorph_other` | `divine.polymorph_other` | 3 | `direct` | `spell_rev/spwi4##/spwi415.spl:0x10e:ability[0].effect[2].resource` |
 | `arcane.level4.polymorph_self` | `arcane.level1.magic_missile` | 1 | `direct` | `spell_rev/spwi4##/spwi463.itm:0x6ee:equipped_effect[33].resource` |
 | `arcane.level4.polymorph_self` | `arcane.level8.ghostform` | 1 | `direct` | `spell_rev/spwi4##/spwi416.spl:0x3de:ability[0].effect[17].resource` |
 | `arcane.level4.polymorph_self` | `arcane.level9.shapechange` | 1 | `direct` | `spell_rev/spwi4##/spwi416.spl:0x40e:ability[0].effect[18].resource` |
@@ -366,7 +374,6 @@ exception applies to no other row.
 | `arcane.level8.mind_blank` | `divine.mental_domination` | 1 | `direct` | `spell_rev/spwi8##/spwi802.spl:0xc1e:ability[0].effect[61].resource` |
 | `arcane.level8.simulacrum` | `divine.greater_restoration` | 1 | `direct` | `spell_rev/spwi8##/simulacr.spl:0x19e:ability[0].effect[5].resource` |
 | `arcane.level8.simulacrum` | `divine.lesser_restoration` | 1 | `direct` | `spell_rev/spwi8##/simulacr.spl:0x16e:ability[0].effect[4].resource` |
-| `arcane.level8.summon_fiend` | `arcane.level6.true_seeing` | 1 | `direct` | `spell_rev/spwi8##/demglasu.itm:0xbe:equipped_effect[0].resource` |
 | `arcane.level8.power_word_blind` | `arcane.level1.obscuring_mist` | 2 | `direct` | `spell_rev/spwi8##/spwi815.spl:0x28e:ability[0].effect[10].resource` |
 | `arcane.level8.power_word_blind` | `divine.obscuring_mist` | 2 | `direct` | `spell_rev/spwi8##/spwi815.spl:0x2be:ability[0].effect[11].resource` |
 | `arcane.level8.symbol_of_death` | `divine.symbol_of_death` | 2 | `direct` | `spell_rev/shared/spwi897.spl:0x3a:header.spellbook_icon` |

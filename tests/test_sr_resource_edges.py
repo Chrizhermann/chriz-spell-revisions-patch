@@ -86,6 +86,9 @@ def test_dependency_audit_cites_every_atomic_composite_source_span() -> None:
     assert Counter(identifiers) == Counter({identifier: 1 for identifier in composites})
     for row in rows:
         identifier = _code_cell(row[0])
+        assert tuple(re.findall(r"`([^`]+)`", row[1])) == tuple(
+            member.source_spell for member in composites[identifier].member_refs
+        )
         expected = "<br>".join(
             _source_span_evidence(span)
             for span in composites[identifier].source_spans
@@ -145,17 +148,48 @@ def test_dependency_audit_cites_every_soft_relation_exactly_once() -> None:
     )
 
     resource_index = build_resource_index(ROOT)
-    change_resource_owners = {
-        resource.path.casefold(): change.id
+    change_resources = {
+        resource.path.casefold(): (resource.path, change.id)
         for change in catalog.changes
         for resource in change.resources
     }
+    reclassified_runtime_helpers = {
+        "shared.contagion_delivery_spell",
+        "shared.polymorph_squirrel_item",
+        "shared.true_seeing_detection_spell",
+    }
+    infrastructure_resources = {
+        resource.path.casefold(): (resource.path, infrastructure.consumers)
+        for infrastructure in catalog.infrastructure
+        if infrastructure.id in reclassified_runtime_helpers
+        for resource in infrastructure.resources
+    }
+    assert {
+        infrastructure.id
+        for infrastructure in catalog.infrastructure
+        if infrastructure.id in reclassified_runtime_helpers
+        and infrastructure.activation == "consumer_selected"
+    } == reclassified_runtime_helpers
+
+    def target_choices(candidate: str) -> set[str]:
+        key = candidate.casefold()
+        if key in change_resources:
+            return {change_resources[key][1]}
+        if key in infrastructure_resources:
+            return set(infrastructure_resources[key][1])
+        return set()
+
     scanned: dict[str, tuple] = {}
     physical_counts: Counter[tuple[str, str]] = Counter()
-    for path_key, source_owner in change_resource_owners.items():
-        if Path(path_key).suffix not in {".cre", ".eff", ".itm", ".spl"}:
+    for path_key, (source_relative, source_owner) in change_resources.items():
+        if Path(source_relative).suffix.casefold() not in {
+            ".cre",
+            ".eff",
+            ".itm",
+            ".spl",
+        }:
             continue
-        source_path = ROOT / path_key
+        source_path = ROOT / source_relative
         if not source_path.is_file():
             continue
         edges = scan_resource_edges(
@@ -165,12 +199,12 @@ def test_dependency_audit_cites_every_soft_relation_exactly_once() -> None:
         )
         scanned[path_key] = edges
         for edge in edges:
-            target_owners = {
-                change_resource_owners[candidate.casefold()]
-                for candidate in edge.local_candidates
-                if candidate.casefold() in change_resource_owners
-            }
+            target_owners = set().union(
+                *(target_choices(candidate) for candidate in edge.local_candidates)
+            )
             for target_owner in target_owners:
+                if target_owner == source_owner:
+                    continue
                 physical_counts[(source_owner, target_owner)] += 1
 
     for pair, edge_count, direction, path, offset, field in parsed:
@@ -186,13 +220,18 @@ def test_dependency_audit_cites_every_soft_relation_exactly_once() -> None:
             f"{path}:0x{offset:x}:{field}"
         )
         physical_pair = pair if direction == "direct" else (pair[1], pair[0])
-        assert change_resource_owners[path.casefold()] == physical_pair[0]
-        assert physical_pair[1] in {
-            change_resource_owners[candidate.casefold()]
-            for candidate in matching_edges[0].local_candidates
-            if candidate.casefold() in change_resource_owners
-        }
-        assert edge_count == physical_counts[physical_pair]
+        assert change_resources[path.casefold()][1] == physical_pair[0]
+        assert physical_pair[1] in set().union(
+            *(
+                target_choices(candidate)
+                for candidate in matching_edges[0].local_candidates
+            )
+        )
+        assert edge_count == physical_counts[physical_pair], (
+            physical_pair,
+            edge_count,
+            physical_counts[physical_pair],
+        )
 
 
 def _put_u16(data: bytearray, offset: int, value: int) -> None:
@@ -1072,7 +1111,7 @@ def test_catalog_coverage_derives_every_binary_reference_classification(
             (146, "SAME"),
             (146, "ATOMIC"),
             (146, "HARD"),
-            (146, "SOFT"),
+            (206, "SOFT"),
             (146, "SHARED"),
             (146, "EXTERN"),
         ),
@@ -1095,6 +1134,35 @@ def test_catalog_coverage_derives_every_binary_reference_classification(
         "extern": "external",
     }
     assert result.ok
+
+
+def test_soft_relation_cannot_supply_required_runtime_payload_but_shared_infrastructure_can(
+    tmp_path: Path,
+) -> None:
+    unsafe = audit_catalog_coverage(
+        tmp_path / "unsafe",
+        _write_binary_coverage_fixture(
+            tmp_path / "unsafe", ((146, "SOFT"),)
+        ),
+    )
+
+    assert [issue.code for issue in unsafe.issues] == [
+        "unsafe_soft_runtime_resource"
+    ]
+    assert next(
+        edge for edge in unsafe.binary_edges if edge.target == "SOFT"
+    ).classification is None
+
+    shared_root = tmp_path / "shared"
+    shared = audit_catalog_coverage(
+        shared_root,
+        _write_binary_coverage_fixture(shared_root, ((146, "SHARED"),)),
+    )
+
+    assert shared.ok
+    assert next(
+        edge for edge in shared.binary_edges if edge.target == "SHARED"
+    ).classification == "shared"
 
 
 def test_catalog_coverage_never_hides_unknown_binary_payloads(
