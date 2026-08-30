@@ -151,6 +151,12 @@ def resolve(
             continue
         values[normalized_name] = value
 
+    root_group = next(record for record in catalog.groups if record.parent is None)
+    if values.get(root_group.setting.casefold(), root_group.default) == -1:
+        errors.append(
+            f"{root_group.setting}: root group cannot inherit; expected 0 or 1"
+        )
+
     if errors:
         raise ConfigError(errors)
 

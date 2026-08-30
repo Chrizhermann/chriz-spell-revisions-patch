@@ -7,9 +7,9 @@ ASK_EVERY_COMPONENT
 VERSION ~v4.21-chriz.1~
 
 ALWAYS
-  OUTER_PATCH ~~ BEGIN
-    PATCH_INCLUDE ~spell_rev/settings.ini~
-  END
+  // Definitions only: editable settings are validated and loaded by component 0.
+  INCLUDE ~spell_rev/generated/config_schema.tpa~
+  INCLUDE ~spell_rev/generated/selection.tpa~
   
   // On EE games, convert tra files to utf-8 so that games don't crash for non-English
   ACTION_IF NOT VARIABLE_IS_SET cd_always THEN BEGIN
@@ -81,6 +81,29 @@ BEGIN @9996
 DESIGNATED 0
 LABEL "dv-spell_rev-main"
 REQUIRE_PREDICATE (ENGINE_IS ~soa tob bgee bg2ee eet iwdee~) @8996 // ~This mod is designed for the Baldur's Gate II engine and will not function on other games.~
+
+OUTER_SPRINT sr_config_input_path ~spell_rev/settings.ini~
+OUTER_SPRINT sr_config_input_game ~~
+ACTION_IF GAME_IS ~eet~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~eet~
+END ELSE ACTION_IF GAME_IS ~bgt~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~bgt~
+END ELSE ACTION_IF GAME_IS ~tutu_totsc~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~tutu_totsc~
+END ELSE ACTION_IF GAME_IS ~tutu~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~tutu~
+END ELSE ACTION_IF GAME_IS ~bg2ee~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~bg2ee~
+END ELSE ACTION_IF GAME_IS ~bgee~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~bgee~
+END ELSE ACTION_IF GAME_IS ~iwdee~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~iwdee~
+END ELSE ACTION_IF GAME_IS ~tob~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~tob~
+END ELSE ACTION_IF GAME_IS ~soa~ BEGIN
+  OUTER_SPRINT sr_config_input_game ~soa~
+END
+LAM sr_config_preflight_component_zero
 
 // ToBEx
 ACTION_IF install_tobex && (ENGINE_IS ~tob~) BEGIN

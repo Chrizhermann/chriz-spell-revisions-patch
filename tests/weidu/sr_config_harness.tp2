@@ -1,0 +1,48 @@
+// Isolated --nogame harness for generated Spell Revisions config preflight.
+// argv[0] = generated config_schema.tpa
+// argv[1] = generated selection.tpa
+// argv[2] = editable settings.ini
+// argv[3] = canonical game name
+// argv[4] = report / mutation-sentinel template
+// argv[5] = report / mutation-sentinel output
+
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+ALWAYS
+  INCLUDE ~%argv[0]%~
+  INCLUDE ~%argv[1]%~
+
+  DEFINE_ACTION_MACRO sr_config_harness_independent BEGIN
+    COPY ~%argv[4]%~ ~%argv[5]%~
+  END
+END
+
+BEGIN ~Spell Revisions config preflight harness~ DESIGNATED 0
+OUTER_SPRINT sr_config_input_path EVALUATE_BUFFER ~%argv[2]%~
+OUTER_SPRINT sr_config_input_game EVALUATE_BUFFER ~%argv[3]%~
+LAM sr_config_preflight_component_zero
+COPY ~%argv[4]%~ ~%argv[5]%~ EVALUATE_BUFFER
+
+BEGIN ~Independent component 10~ DESIGNATED 10
+LAM sr_config_harness_independent
+
+BEGIN ~Independent component 20~ DESIGNATED 20
+LAM sr_config_harness_independent
+
+BEGIN ~Independent component 30~ DESIGNATED 30
+LAM sr_config_harness_independent
+
+BEGIN ~Independent component 55~ DESIGNATED 55
+LAM sr_config_harness_independent
+
+BEGIN ~Dependent component 60~ DESIGNATED 60
+REQUIRE_COMPONENT ~sr_config_harness.tp2~ 0 ~Requires component zero~
+LAM sr_config_harness_independent
+
+BEGIN ~Independent component 65~ DESIGNATED 65
+LAM sr_config_harness_independent
+
+BEGIN ~Independent component 70~ DESIGNATED 70
+LAM sr_config_harness_independent

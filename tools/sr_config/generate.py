@@ -33,6 +33,8 @@ _CATALOG_PATH = Path("spell_rev/catalog/changes.json")
 _CONFIG_PATH = Path("spell_rev/settings.ini")
 _MARKDOWN_PATH = Path("docs/spell-revisions-change-catalog.md")
 _HTML_PATH = Path("spell_rev/readme-spell_rev.html")
+_WEIDU_SCHEMA_PATH = Path("spell_rev/generated/config_schema.tpa")
+_WEIDU_SELECTION_PATH = Path("spell_rev/generated/selection.tpa")
 _LEGACY_START = re.compile(
     rb'(?m)^  <p>\r?\n    <a id="spell_changes"></a>'
     rb"<strong>Overview of Divine Spell Changes</strong>"
@@ -109,6 +111,466 @@ def render_config(catalog: Catalog, existing: str, *, newline: str) -> str:
             ]
         )
     return prefix + newline.join(lines).rstrip() + newline
+
+
+def render_weidu_config_schema(catalog: Catalog) -> str:
+    """Render the inert-text validator and literal tri-state value loader."""
+
+    fingerprint = catalog_fingerprint(catalog)
+    numeric_settings: list[tuple[str, tuple[int, ...]]] = [
+        ("install_tobex", (1,)),
+        ("sr_config_schema", (catalog.schema_version,)),
+    ]
+    statements: list[tuple[str, str, str, str, bool]] = [
+        (
+            "install_tobex",
+            r"^[ %TAB%]*install_tobex[ %TAB%]*=",
+            _weidu_assignment_pattern("install_tobex", r"1"),
+            "install_tobex: expected exactly 1",
+            False,
+        ),
+        (
+            "sr_config_schema",
+            r"^[ %TAB%]*sr_config_schema[ %TAB%]*=",
+            _weidu_assignment_pattern(
+                "sr_config_schema", str(catalog.schema_version)
+            ),
+            "stale or malformed sr_config_schema",
+            False,
+        ),
+        (
+            "sr_catalog_fingerprint",
+            (
+                r"^[ %TAB%]*SPRINT[ %TAB%]+sr_catalog_fingerprint"
+                r"[ %TAB%]+"
+            ),
+            _weidu_fingerprint_pattern(fingerprint),
+            "stale or malformed sr_catalog_fingerprint",
+            True,
+        ),
+    ]
+    root = next(record for record in catalog.groups if record.parent is None)
+    for record in catalog.groups:
+        numeric_settings.append(
+            (record.setting, (0, 1) if record.id == root.id else (-1, 0, 1))
+        )
+        allowed = r"\(0\|1\)" if record.id == root.id else r"\(-1\|0\|1\)"
+        expected = (
+            f"{record.setting}: expected 0 or 1"
+            if record.id == root.id
+            else f"{record.setting}: expected -1, 0, or 1"
+        )
+        statements.append(
+            (
+                record.setting,
+                rf"^[ %TAB%]*{record.setting}[ %TAB%]*=",
+                _weidu_assignment_pattern(record.setting, allowed),
+                expected,
+                False,
+            )
+        )
+    for record in catalog.changes:
+        numeric_settings.append((record.setting, (-1, 0, 1)))
+        statements.append(
+            (
+                record.setting,
+                rf"^[ %TAB%]*{record.setting}[ %TAB%]*=",
+                _weidu_assignment_pattern(record.setting, r"\(-1\|0\|1\)"),
+                f"{record.setting}: expected -1, 0, or 1",
+                False,
+            )
+        )
+
+    lines = [
+        "// Generated from spell_rev/catalog/changes.json. Do not edit.",
+        "// The config remains inert text until every significant line is recognized.",
+        "DEFINE_ACTION_MACRO sr_config_load_validate BEGIN",
+        "  ACTION_IF NOT FILE_EXISTS ~%sr_config_path%~ BEGIN",
+        "    FAIL ~Spell Revisions configuration file is missing: %sr_config_path%~",
+        "  END",
+        "  OUTER_SET sr_config_error_count = 0",
+        "  OUTER_SPRINT sr_config_errors ~~",
+        "  COPY ~%sr_config_path%~ ~~",
+        (
+            "    COUNT_REGEXP_INSTANCES CASE_SENSITIVE "
+            '"^[ %TAB%]*[^ %TAB%%WNL%%MNL%%LNL%]" sr_config_nonblank_lines'
+        ),
+        (
+            "    COUNT_REGEXP_INSTANCES CASE_SENSITIVE "
+            '"^[ %TAB%]*//" sr_config_comment_lines'
+        ),
+        "    SET sr_config_significant_lines = "
+        "sr_config_nonblank_lines - sr_config_comment_lines",
+        "    SET sr_config_recognized_lines = 0",
+    ]
+    for index, (name, broad, exact, message, exact_case_sensitive) in enumerate(
+        statements, start=1
+    ):
+        broad_var = f"sr_config_broad_{index:06d}"
+        exact_var = f"sr_config_exact_{index:06d}"
+        lines.extend(
+            (
+                f"    // Required statement: {name}",
+                "    COUNT_REGEXP_INSTANCES CASE_INSENSITIVE "
+                f'"{broad}" {broad_var}',
+                "    COUNT_REGEXP_INSTANCES "
+                f"{'CASE_SENSITIVE' if exact_case_sensitive else 'CASE_INSENSITIVE'} "
+                f'"{exact}" {exact_var}',
+                f"    SET sr_config_recognized_lines += {exact_var}",
+                f"    PATCH_IF ({broad_var} = 0) BEGIN",
+                "      SPRINT sr_config_errors "
+                f"~%sr_config_errors%- missing setting {name}%LNL%~",
+                "      SET sr_config_error_count += 1",
+                f"    END ELSE PATCH_IF ({broad_var} > 1) BEGIN",
+                "      SPRINT sr_config_errors "
+                f"~%sr_config_errors%- duplicate setting {name}%LNL%~",
+                "      SET sr_config_error_count += 1",
+                f"    END ELSE PATCH_IF ({exact_var} != 1) BEGIN",
+                "      SPRINT sr_config_errors "
+                f"~%sr_config_errors%- {message}%LNL%~",
+                "      SET sr_config_error_count += 1",
+                "    END",
+            )
+        )
+    lines.extend(
+        (
+            "    PATCH_IF (sr_config_recognized_lines != "
+            "sr_config_significant_lines) BEGIN",
+            "      SPRINT sr_config_errors ~%sr_config_errors%- unrecognized or "
+            "malformed non-comment line%LNL%~",
+            "      SET sr_config_error_count += 1",
+            "    END",
+        )
+    )
+    for setting_index, (setting, values) in enumerate(numeric_settings, start=1):
+        for value_index, value in enumerate(values, start=1):
+            count_var = (
+                f"sr_config_value_{setting_index:06d}_{value_index:02d}"
+            )
+            literal = r"-1" if value == -1 else str(value)
+            lines.extend(
+                (
+                    "    COUNT_REGEXP_INSTANCES CASE_INSENSITIVE "
+                    f'"{_weidu_assignment_pattern(setting, literal)}" {count_var}',
+                    f"    PATCH_IF ({count_var} = 1) BEGIN",
+                    f"      SET {setting} = {'0 - 1' if value == -1 else value}",
+                    "    END",
+                )
+            )
+    lines.extend(
+        (
+            "  BUT_ONLY",
+            "  ACTION_IF (sr_config_error_count > 0) BEGIN",
+            "    FAIL ~Spell Revisions configuration preflight failed:%LNL%"
+            "%sr_config_errors%~",
+            "  END",
+            "  // WeiDU 249 cannot execute the public `key = -1` syntax. The exact",
+            "  // validated line counts above publish equivalent numeric variables",
+            "  // without ever executing or rewriting the editable file.",
+            f"  OUTER_SPRINT sr_catalog_fingerprint ~{fingerprint}~",
+            "END",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def render_weidu_selection(catalog: Catalog) -> str:
+    """Render deterministic WeiDU tri-state/dependency resolution."""
+
+    symbols = feature_symbols(catalog)
+    change_by_id = {record.id.casefold(): record for record in catalog.changes}
+    groups = {record.id.casefold(): record for record in catalog.groups}
+    supported_games = tuple(sorted({game for game in _catalog_games(catalog)}))
+    return_values = (
+        "install_tobex",
+        "sr_selection_signature",
+        *(symbols[record.id] for record in catalog.changes),
+    )
+    lines = [
+        "// Generated from spell_rev/catalog/changes.json. Do not edit.",
+        "DEFINE_ACTION_FUNCTION sr_config_preflight",
+        "  STR_VAR",
+        "    config_path = ~spell_rev/settings.ini~",
+        "    game = ~~",
+        "  RET",
+        *(f"    {value}" for value in return_values),
+        "BEGIN",
+        "  OUTER_SPRINT sr_config_path EVALUATE_BUFFER ~%config_path%~",
+        "  OUTER_SPRINT sr_config_game EVALUATE_BUFFER ~%game%~",
+        "  LAM sr_config_load_validate",
+        "  OUTER_SET sr_config_error_count = 0",
+        "  OUTER_SPRINT sr_config_errors ~~",
+        "  OUTER_SET sr_config_game_known = 0",
+    ]
+    for game in supported_games:
+        lines.extend(
+            (
+                f"  ACTION_IF (~%sr_config_game%~ STRING_EQUAL_CASE ~{game}~) BEGIN",
+                "    OUTER_SET sr_config_game_known = 1",
+                "  END",
+            )
+        )
+    _append_action_error(
+        lines,
+        "sr_config_game_known = 0",
+        "unknown game '%sr_config_game%'",
+        indent="  ",
+    )
+
+    for record in catalog.changes:
+        symbol = symbols[record.id]
+        lines.extend(
+            (
+                f"  // {record.id}",
+                f"  OUTER_SET {symbol} = {record.setting}",
+            )
+        )
+        current = groups[record.group.casefold()]
+        while True:
+            lines.extend(
+                (
+                    f"  ACTION_IF ({symbol} = (0 - 1)) BEGIN",
+                    f"    OUTER_SET {symbol} = {current.setting}",
+                    "  END",
+                )
+            )
+            if current.parent is None:
+                break
+            current = groups[current.parent.casefold()]
+        availability = _weidu_availability(record.games)
+        lines.extend(
+            (
+                f"  ACTION_IF NOT ({availability}) BEGIN",
+                f"    ACTION_IF ({record.setting} = 1) BEGIN",
+                "      OUTER_SPRINT sr_config_errors "
+                f"~%sr_config_errors%- {record.setting} is explicitly enabled but "
+                "unavailable on game '%sr_config_game%'%LNL%~",
+                "      OUTER_SET sr_config_error_count += 1",
+                "    END",
+                f"    OUTER_SET {symbol} = 0",
+                "  END",
+            )
+        )
+
+    hard_edges = [
+        (record, change_by_id[target.casefold()])
+        for record in catalog.changes
+        for target in record.requires
+    ]
+    atomic_families: dict[str, list[Change]] = {}
+    atomic_names: dict[str, str] = {}
+    for record in catalog.changes:
+        if record.atomic_group is None:
+            continue
+        normalized = record.atomic_group.casefold()
+        atomic_families.setdefault(normalized, []).append(record)
+        atomic_names.setdefault(normalized, record.atomic_group)
+    atomic_edges = [
+        (source, target, atomic_names[family])
+        for family, members in atomic_families.items()
+        for source in members
+        for target in members
+        if source.id.casefold() != target.id.casefold()
+    ]
+    error_guards: dict[tuple[str, ...], str] = {}
+    for index, (source, target) in enumerate(hard_edges, start=1):
+        error_guards[("hard", source.id.casefold(), target.id.casefold())] = (
+            f"sr_config_hard_error_{index:06d}"
+        )
+    atomic_guard_keys: list[tuple[str, str]] = []
+    for source, target, family_name in atomic_edges:
+        key = (family_name.casefold(), target.id.casefold())
+        if key not in atomic_guard_keys:
+            atomic_guard_keys.append(key)
+    for index, (family, target) in enumerate(atomic_guard_keys, start=1):
+        error_guards[("atomic", family, target)] = (
+            f"sr_config_atomic_error_{index:06d}"
+        )
+    for guard in error_guards.values():
+        lines.append(f"  OUTER_SET {guard} = 0")
+
+    if hard_edges or atomic_edges:
+        lines.extend(
+            (
+                "  OUTER_SET sr_config_resolution_changed = 1",
+                "  OUTER_WHILE (sr_config_resolution_changed = 1) BEGIN",
+                "    OUTER_SET sr_config_resolution_changed = 0",
+            )
+        )
+        for source, target in hard_edges:
+            guard = error_guards[
+                ("hard", source.id.casefold(), target.id.casefold())
+            ]
+            _append_closure_edge(
+                lines,
+                symbols[source.id],
+                symbols[target.id],
+                target.setting,
+                _weidu_availability(target.games),
+                guard,
+                (
+                    f"{source.setting} requires {target.setting}, but "
+                    f"{target.setting} is explicitly disabled"
+                ),
+                (
+                    f"{source.setting} requires {target.setting}, which is "
+                    "unavailable on game '%sr_config_game%'"
+                ),
+            )
+        for source, target, family_name in atomic_edges:
+            guard = error_guards[
+                ("atomic", family_name.casefold(), target.id.casefold())
+            ]
+            _append_closure_edge(
+                lines,
+                symbols[source.id],
+                symbols[target.id],
+                target.setting,
+                _weidu_availability(target.games),
+                guard,
+                (
+                    f"atomic family '{family_name}' requires {target.setting}, but "
+                    f"{target.setting} is explicitly disabled"
+                ),
+                (
+                    f"atomic family '{family_name}' requires {target.setting}, which "
+                    "is unavailable on game '%sr_config_game%'"
+                ),
+            )
+        lines.append("  END")
+
+    seen_conflicts: set[tuple[str, str]] = set()
+    for record in catalog.changes:
+        for target_id in record.conflicts:
+            target = change_by_id[target_id.casefold()]
+            pair = tuple(sorted((record.id.casefold(), target.id.casefold())))
+            if pair in seen_conflicts:
+                continue
+            seen_conflicts.add(pair)
+            _append_action_error(
+                lines,
+                f"({symbols[record.id]} = 1) AND ({symbols[target.id]} = 1)",
+                f"{record.setting} conflicts with {target.setting}",
+                indent="  ",
+            )
+
+    lines.extend(
+        (
+            "  ACTION_IF (sr_config_error_count > 0) BEGIN",
+            "    FAIL ~Spell Revisions configuration resolution failed:%LNL%"
+            "%sr_config_errors%~",
+            "  END",
+            "  OUTER_SPRINT sr_selection_signature ~~",
+        )
+    )
+    for record in catalog.changes:
+        symbol = symbols[record.id]
+        lines.append(
+            "  OUTER_SPRINT sr_selection_signature "
+            f"~%sr_selection_signature%%{symbol}%~"
+        )
+    lines.extend(("END", "", "DEFINE_ACTION_MACRO sr_config_preflight_component_zero BEGIN"))
+    lines.extend(
+        (
+            "  LAF sr_config_preflight",
+            "    STR_VAR",
+            "      config_path = ~%sr_config_input_path%~",
+            "      game = ~%sr_config_input_game%~",
+            "    RET",
+            *(f"      {value}" for value in return_values),
+            "  END",
+            "END",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _weidu_assignment_pattern(setting: str, allowed: str) -> str:
+    return (
+        rf"^[ %TAB%]*{setting}[ %TAB%]*=[ %TAB%]*{allowed}[ %TAB%]*"
+        r"\(//[^%WNL%%MNL%%LNL%]*\)?"
+        r"\(%WNL%\|%MNL%\|%LNL%\|$\)"
+    )
+
+
+def _weidu_fingerprint_pattern(fingerprint: str) -> str:
+    return (
+        r"^[ %TAB%]*SPRINT[ %TAB%]+sr_catalog_fingerprint[ %TAB%]+~"
+        + fingerprint
+        + r"~[ %TAB%]*\(//[^%WNL%%MNL%%LNL%]*\)?"
+        r"\(%WNL%\|%MNL%\|%LNL%\|$\)"
+    )
+
+
+def _catalog_games(catalog: Catalog) -> set[str]:
+    games = set()
+    for record in catalog.changes:
+        games.update(game.casefold() for game in record.games if game.casefold() != "all")
+    from .catalog import SUPPORTED_GAMES
+
+    games.update(SUPPORTED_GAMES)
+    return games
+
+
+def _weidu_availability(games: tuple[str, ...]) -> str:
+    normalized = tuple(value.casefold() for value in games)
+    if "all" in normalized:
+        return "1"
+    return " OR ".join(
+        f"(~%sr_config_game%~ STRING_EQUAL_CASE ~{game}~)" for game in normalized
+    )
+
+
+def _append_action_error(
+    lines: list[str], condition: str, message: str, *, indent: str
+) -> None:
+    lines.extend(
+        (
+            f"{indent}ACTION_IF ({condition}) BEGIN",
+            f"{indent}  OUTER_SPRINT sr_config_errors "
+            f"~%sr_config_errors%- {message}%LNL%~",
+            f"{indent}  OUTER_SET sr_config_error_count += 1",
+            f"{indent}END",
+        )
+    )
+
+
+def _append_closure_edge(
+    lines: list[str],
+    source_symbol: str,
+    target_symbol: str,
+    target_setting: str,
+    availability: str,
+    error_guard: str,
+    disabled_message: str,
+    unavailable_message: str,
+) -> None:
+    lines.extend(
+        (
+            f"    ACTION_IF ({source_symbol} = 1) AND ({target_symbol} = 0) BEGIN",
+            f"      ACTION_IF ({target_setting} = 0) BEGIN",
+            f"        ACTION_IF ({error_guard} = 0) BEGIN",
+            "          OUTER_SPRINT sr_config_errors "
+            f"~%sr_config_errors%- {disabled_message}%LNL%~",
+            "          OUTER_SET sr_config_error_count += 1",
+            f"          OUTER_SET {error_guard} = 1",
+            "        END",
+            f"      END ELSE ACTION_IF NOT ({availability}) BEGIN",
+            f"        ACTION_IF ({error_guard} = 0) BEGIN",
+            "          OUTER_SPRINT sr_config_errors "
+            f"~%sr_config_errors%- {unavailable_message}%LNL%~",
+            "          OUTER_SET sr_config_error_count += 1",
+            f"          OUTER_SET {error_guard} = 1",
+            "        END",
+            "      END ELSE BEGIN",
+            f"        OUTER_SET {target_symbol} = 1",
+            "        OUTER_SET sr_config_resolution_changed = 1",
+            "      END",
+            "    END",
+        )
+    )
 
 
 def render_markdown_catalog(catalog: Catalog, texts: Mapping[str, str]) -> str:
@@ -427,6 +889,12 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
     ).encode("utf-8")
     html_region = render_html_catalog(catalog, texts, newline=html_newline)
     rendered_html = render_html_document(html_bytes, html_region)
+    schema_path = root_path / _WEIDU_SCHEMA_PATH
+    selection_path = root_path / _WEIDU_SELECTION_PATH
+    schema_existed, schema_current = _read_optional_generated(schema_path)
+    selection_existed, selection_current = _read_optional_generated(selection_path)
+    rendered_schema = render_weidu_config_schema(catalog).encode("utf-8")
+    rendered_selection = render_weidu_selection(catalog).encode("utf-8")
     outputs = (
         (config_path, _CONFIG_PATH, True, config_bytes, rendered_config, "utf-8"),
         (
@@ -438,6 +906,22 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
             "utf-8",
         ),
         (html_path, _HTML_PATH, True, html_bytes, rendered_html, "iso-8859-1"),
+        (
+            schema_path,
+            _WEIDU_SCHEMA_PATH,
+            schema_existed,
+            schema_current,
+            rendered_schema,
+            "utf-8",
+        ),
+        (
+            selection_path,
+            _WEIDU_SELECTION_PATH,
+            selection_existed,
+            selection_current,
+            rendered_selection,
+            "utf-8",
+        ),
     )
 
     changed = tuple(
@@ -537,6 +1021,17 @@ def generate(root: str | Path, *, check: bool = False) -> GenerationResult:
         changed,
         diff,
     )
+
+
+def _read_optional_generated(path: Path) -> tuple[bool, bytes]:
+    try:
+        return True, path.read_bytes()
+    except FileNotFoundError:
+        return False, b""
+    except OSError as error:
+        raise GenerationError(
+            f"{path}: unable to read generated artifact: {error}"
+        ) from error
 
 
 def _stage_bytes(

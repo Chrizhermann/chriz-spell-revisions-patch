@@ -137,6 +137,16 @@ def test_only_integer_tri_state_values_are_accepted(bad_value: object) -> None:
         resolve(catalog, {"sr_spell": bad_value})
 
 
+def test_root_default_cannot_inherit() -> None:
+    catalog = sample_catalog(_change("spell", "sr_spell"))
+
+    with pytest.raises(
+        ConfigError,
+        match="sr_default: root group cannot inherit; expected 0 or 1",
+    ):
+        resolve(catalog, {"sr_default": -1})
+
+
 def test_assignment_parser_preserves_order_and_ignores_comments() -> None:
     source = """// generated settings\n\nSR_DEFAULT = 1 // enabled\nsr_spell=-1\n"""
 
