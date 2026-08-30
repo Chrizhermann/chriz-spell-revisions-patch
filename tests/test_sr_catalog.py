@@ -8,7 +8,18 @@ from typing import Any
 
 import pytest
 
-from tools.sr_config.catalog import Catalog, CatalogError, load_catalog
+from tools.sr_config.catalog import (
+    Catalog,
+    CatalogError,
+    Change,
+    Group,
+    Infrastructure,
+    Migration,
+    ResourceOwnership,
+    SourceSpan,
+    Upstream,
+    load_catalog,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,13 +66,15 @@ def change(change_id: str, **overrides: Any) -> dict[str, Any]:
     return raw
 
 
-def infrastructure(infrastructure_id: str) -> dict[str, Any]:
-    return {
+def infrastructure(infrastructure_id: str, **overrides: Any) -> dict[str, Any]:
+    raw: dict[str, Any] = {
         "id": infrastructure_id,
         "source_spans": [],
         "resources": [],
         "consumers": [],
     }
+    raw.update(overrides)
+    return raw
 
 
 def minimal_catalog(
@@ -87,6 +100,26 @@ def minimal_catalog(
     }
 
 
+def nested_catalog() -> dict[str, Any]:
+    return minimal_catalog(
+        changes=[
+            change(
+                "a",
+                source_spans=[
+                    {
+                        "path": "spell_rev/components/main_component.tpa",
+                        "start": "// start",
+                        "end": "// end",
+                        "sha256": "0" * 64,
+                    }
+                ],
+                resources=[{"path": "spell_rev/a.spl", "kind": "resource"}],
+            )
+        ],
+        infrastructure_records=[infrastructure("shared")],
+    )
+
+
 def test_seed_catalog_loads_with_pinned_provenance_and_closed_migration() -> None:
     catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
 
@@ -104,10 +137,31 @@ def test_seed_catalog_loads_with_pinned_provenance_and_closed_migration() -> Non
 def test_catalog_preserves_group_source_order() -> None:
     catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
 
-    assert [record.id for record in catalog.groups[:3]] == [
-        "global",
-        "arcane",
-        "arcane.level1",
+    assert [
+        (record.id, record.setting, record.parent, record.default)
+        for record in catalog.groups
+    ] == [
+        ("global", "sr_default", None, 1),
+        ("arcane", "sr_arcane_default", "global", -1),
+        *[
+            (
+                f"arcane.level{level}",
+                f"sr_arcane_level_{level}_default",
+                "arcane",
+                -1,
+            )
+            for level in range(1, 10)
+        ],
+        ("divine", "sr_divine_default", "global", -1),
+        *[
+            (
+                f"divine.level{level}",
+                f"sr_divine_level_{level}_default",
+                "divine",
+                -1,
+            )
+            for level in range(1, 8)
+        ],
     ]
 
 
@@ -143,6 +197,123 @@ def test_duplicate_json_members_are_rejected_with_their_path(
 
     assert str(error.value).startswith("upstream.tag:")
     assert "duplicate field" in str(error.value)
+
+
+def test_unsupported_schema_version_is_rejected() -> None:
+    raw = minimal_catalog()
+    raw["schema_version"] = 2
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("schema_version:")
+    assert "unsupported schema version 2" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_path"),
+    [
+        (lambda raw: raw["upstream"].update(commit="z" * 40), "upstream.commit"),
+        (
+            lambda raw: raw["changes"][0]["source_spans"][0].update(
+                sha256="g" * 64
+            ),
+            "changes[0].source_spans[0].sha256",
+        ),
+    ],
+)
+def test_malformed_provenance_hashes_are_rejected(
+    mutate: Callable[[dict[str, Any]], None], expected_path: str
+) -> None:
+    raw = nested_catalog()
+    mutate(raw)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "hexadecimal" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_path"),
+    [
+        (lambda raw: raw.pop("upstream"), "catalog.upstream"),
+        (lambda raw: raw["upstream"].pop("tag"), "upstream.tag"),
+        (lambda raw: raw["migration"].pop("complete"), "migration.complete"),
+        (lambda raw: raw["groups"][0].pop("name"), "groups[0].name"),
+        (lambda raw: raw["changes"][0].pop("id"), "changes[0].id"),
+        (
+            lambda raw: raw["changes"][0]["source_spans"][0].pop("end"),
+            "changes[0].source_spans[0].end",
+        ),
+        (
+            lambda raw: raw["changes"][0]["resources"][0].pop("kind"),
+            "changes[0].resources[0].kind",
+        ),
+        (
+            lambda raw: raw["infrastructure"][0].pop("id"),
+            "infrastructure[0].id",
+        ),
+    ],
+)
+def test_missing_required_fields_are_rejected_with_their_path(
+    mutate: Callable[[dict[str, Any]], object], expected_path: str
+) -> None:
+    raw = nested_catalog()
+    mutate(raw)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "missing required field" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_path"),
+    [
+        (lambda raw: raw.update(schema_version=True), "schema_version"),
+        (lambda raw: raw["upstream"].update(tag=421), "upstream.tag"),
+        (lambda raw: raw["migration"].update(complete=0), "migration.complete"),
+        (lambda raw: raw["groups"][0].update(name=1), "groups[0].name"),
+        (lambda raw: raw["groups"][0].update(default=True), "groups[0].default"),
+        (lambda raw: raw["changes"][0].update(component=False), "changes[0].component"),
+        (lambda raw: raw["changes"][0].update(games="bg2ee"), "changes[0].games"),
+        (
+            lambda raw: raw["changes"][0]["source_spans"][0].update(start=1),
+            "changes[0].source_spans[0].start",
+        ),
+        (
+            lambda raw: raw["changes"][0]["resources"][0].update(kind=1),
+            "changes[0].resources[0].kind",
+        ),
+        (
+            lambda raw: raw["infrastructure"][0].update(consumers="a"),
+            "infrastructure[0].consumers",
+        ),
+    ],
+)
+def test_wrong_scalar_types_are_rejected_with_their_path(
+    mutate: Callable[[dict[str, Any]], None], expected_path: str
+) -> None:
+    raw = nested_catalog()
+    mutate(raw)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+
+
+def test_negative_component_is_rejected() -> None:
+    raw = minimal_catalog(changes=[change("a", component=-1)])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].component:")
+    assert "non-negative integer" in str(error.value)
 
 
 UnknownFieldMutation = Callable[[dict[str, Any]], str]
@@ -371,6 +542,41 @@ def test_invalid_tri_state_defaults_are_rejected(
     assert str(error.value).startswith(f"{expected_path}:")
 
 
+def test_catalog_requires_one_root_group() -> None:
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(minimal_catalog(groups=[]))
+
+    assert str(error.value).startswith("groups:")
+    assert "exactly one parentless root group" in str(error.value)
+
+
+def test_catalog_rejects_a_second_root_group() -> None:
+    raw = minimal_catalog(
+        groups=[
+            group("global", setting="sr_default", parent=None, default=1),
+            group("arcane", parent=None),
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("groups[1].parent:")
+    assert "exactly one parentless root group" in str(error.value)
+
+
+def test_root_group_default_cannot_inherit() -> None:
+    raw = minimal_catalog(
+        groups=[group("global", setting="sr_default", parent=None, default=-1)]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("groups[0].default:")
+    assert "root group default must be 0 or 1" in str(error.value)
+
+
 @pytest.mark.parametrize(
     ("raw", "expected_path"),
     [
@@ -398,6 +604,22 @@ def test_missing_parent_groups_are_rejected(
     assert str(error.value).startswith(f"{expected_path}:")
 
 
+def test_group_cycle_is_rejected_deterministically() -> None:
+    raw = minimal_catalog(
+        groups=[
+            group("global", setting="sr_default", parent=None, default=1),
+            group("a", parent="b"),
+            group("b", parent="a"),
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("groups[2].parent:")
+    assert "group cycle: a -> b -> a" in str(error.value)
+
+
 def test_dependency_cycle_is_rejected_deterministically() -> None:
     raw = minimal_catalog(
         changes=[change("a", requires=["b"]), change("b", requires=["a"])]
@@ -421,6 +643,114 @@ def test_dependencies_on_unknown_change_ids_are_rejected(field: str) -> None:
     assert "unknown change ID 'missing'" in str(error.value)
 
 
+@pytest.mark.parametrize("field", ["conflicts", "soft_requires"])
+def test_change_relations_cannot_reference_the_change_itself(field: str) -> None:
+    raw = minimal_catalog(changes=[change("Mixed.Case", **{field: ["MIXED.CASE"]})])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"changes[0].{field}[0]:")
+    assert "cannot reference itself" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("first_field", "later_field"),
+    [
+        ("requires", "conflicts"),
+        ("requires", "soft_requires"),
+        ("conflicts", "soft_requires"),
+    ],
+)
+def test_change_relation_sets_must_be_pairwise_disjoint(
+    first_field: str, later_field: str
+) -> None:
+    subject = change("subject")
+    subject[first_field] = ["Dependency"]
+    subject[later_field] = ["DEPENDENCY"]
+    raw = minimal_catalog(changes=[subject, change("dependency")])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"changes[0].{later_field}[0]:")
+    assert first_field in str(error.value)
+
+
+def test_change_processor_edge_requires_reciprocal_infrastructure_consumer() -> None:
+    raw = minimal_catalog(
+        changes=[change("Mixed.Change", processors=["SHARED"])],
+        infrastructure_records=[infrastructure("shared")],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].processors[0]:")
+    assert "infrastructure[0].consumers" in str(error.value)
+
+
+def test_infrastructure_consumer_requires_reciprocal_change_processor() -> None:
+    raw = minimal_catalog(
+        changes=[change("mixed.change")],
+        infrastructure_records=[infrastructure("Shared", consumers=["MIXED.CHANGE"])],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].consumers[0]:")
+    assert "changes[0].processors" in str(error.value)
+
+
+def test_change_processor_rejects_unknown_infrastructure() -> None:
+    raw = minimal_catalog(changes=[change("a", processors=["missing"])])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].processors[0]:")
+    assert "unknown infrastructure ID" in str(error.value)
+
+
+def test_infrastructure_consumer_rejects_unknown_change() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[infrastructure("shared", consumers=["missing"])]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].consumers[0]:")
+    assert "unknown change ID" in str(error.value)
+
+
+def test_change_processors_reject_normalized_duplicates() -> None:
+    raw = minimal_catalog(
+        changes=[change("a", processors=["shared", "SHARED"])],
+        infrastructure_records=[infrastructure("shared", consumers=["a"])],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].processors[1]:")
+    assert "duplicate infrastructure ID" in str(error.value)
+
+
+def test_infrastructure_consumers_reject_normalized_duplicates() -> None:
+    raw = minimal_catalog(
+        changes=[change("a", processors=["shared"])],
+        infrastructure_records=[infrastructure("shared", consumers=["a", "A"])],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].consumers[1]:")
+    assert "duplicate change ID" in str(error.value)
+
+
 def test_id_normalization_does_not_rewrite_catalog_values() -> None:
     catalog = Catalog.from_dict(
         minimal_catalog(
@@ -430,3 +760,159 @@ def test_id_normalization_does_not_rewrite_catalog_values() -> None:
 
     assert catalog.changes[0].id == "Mixed.Case"
     assert catalog.changes[1].requires == ("MIXED.CASE",)
+
+
+def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None:
+    spans = [
+        {
+            "path": "spell_rev/components/main_component.tpa",
+            "start": "// first start",
+            "end": "// first end",
+            "sha256": "a" * 64,
+        },
+        {
+            "path": "spell_rev/lib/processor.tpa",
+            "start": "// second start",
+            "end": "// second end",
+            "sha256": "b" * 64,
+        },
+    ]
+    resources = [
+        {"path": "spell_rev/spwi1##/spell.spl", "kind": "resource"},
+        {"path": "SPELL.IDS", "kind": "ids_write"},
+    ]
+    raw = minimal_catalog(
+        groups=[
+            group("Global", setting="sr_default", parent=None, default=1),
+            group("Arcane", setting="sr_arcane_default", parent="GLOBAL"),
+        ],
+        changes=[
+            change(
+                "Mixed.Change",
+                setting="sr_mixed_change",
+                display_name="Mixed change",
+                default=0,
+                group="ARCANE",
+                component=65,
+                games=["bg2ee", "iwdee"],
+                name_ref="@100",
+                description_ref="@101",
+                source_spans=spans,
+                resources=resources,
+                atomic_group="Atomic.Family",
+                requires=["Required"],
+                conflicts=["Conflict"],
+                soft_requires=["Soft"],
+                processors=["Shared.Processor"],
+                documentation_only_reason="Documented test fixture",
+            ),
+            change("Required"),
+            change("Conflict"),
+            change("Soft"),
+        ],
+        infrastructure_records=[
+            infrastructure(
+                "shared.processor",
+                source_spans=[spans[1]],
+                resources=[resources[1]],
+                consumers=["MIXED.CHANGE"],
+            ),
+            infrastructure("other.processor"),
+        ],
+    )
+
+    catalog = Catalog.from_dict(json.loads(json.dumps(raw)))
+
+    assert catalog.schema_version == 1
+    assert catalog.upstream == Upstream(tag="v4.21", commit=UPSTREAM_COMMIT)
+    assert catalog.migration == Migration(
+        complete=False,
+        installer_source="spell_rev/components/main_component.tpa",
+    )
+    assert catalog.groups == (
+        Group("Global", "sr_default", "Global", 1, None),
+        Group("Arcane", "sr_arcane_default", "Arcane", -1, "GLOBAL"),
+    )
+    assert tuple(record.id for record in catalog.changes) == (
+        "Mixed.Change",
+        "Required",
+        "Conflict",
+        "Soft",
+    )
+
+    parsed_change = catalog.changes[0]
+    assert isinstance(parsed_change, Change)
+    assert (
+        parsed_change.id,
+        parsed_change.setting,
+        parsed_change.display_name,
+        parsed_change.default,
+        parsed_change.group,
+        parsed_change.component,
+        parsed_change.games,
+        parsed_change.name_ref,
+        parsed_change.description_ref,
+        parsed_change.atomic_group,
+        parsed_change.requires,
+        parsed_change.conflicts,
+        parsed_change.soft_requires,
+        parsed_change.processors,
+        parsed_change.documentation_only_reason,
+    ) == (
+        "Mixed.Change",
+        "sr_mixed_change",
+        "Mixed change",
+        0,
+        "ARCANE",
+        65,
+        ("bg2ee", "iwdee"),
+        "@100",
+        "@101",
+        "Atomic.Family",
+        ("Required",),
+        ("Conflict",),
+        ("Soft",),
+        ("Shared.Processor",),
+        "Documented test fixture",
+    )
+    assert parsed_change.source_spans == (
+        SourceSpan(
+            "spell_rev/components/main_component.tpa",
+            "// first start",
+            "// first end",
+            "a" * 64,
+        ),
+        SourceSpan(
+            "spell_rev/lib/processor.tpa",
+            "// second start",
+            "// second end",
+            "b" * 64,
+        ),
+    )
+    assert parsed_change.resources == (
+        ResourceOwnership("spell_rev/spwi1##/spell.spl", "resource"),
+        ResourceOwnership("SPELL.IDS", "ids_write"),
+    )
+    assert catalog.infrastructure == (
+        Infrastructure(
+            id="shared.processor",
+            source_spans=(parsed_change.source_spans[1],),
+            resources=(parsed_change.resources[1],),
+            consumers=("MIXED.CHANGE",),
+        ),
+        Infrastructure(id="other.processor"),
+    )
+
+    frozen_records: list[tuple[object, str, object]] = [
+        (catalog, "schema_version", 2),
+        (catalog.upstream, "tag", "v-next"),
+        (catalog.migration, "complete", True),
+        (catalog.groups[0], "name", "changed"),
+        (parsed_change.source_spans[0], "path", "changed"),
+        (parsed_change.resources[0], "kind", "changed"),
+        (parsed_change, "display_name", "changed"),
+        (catalog.infrastructure[0], "id", "changed"),
+    ]
+    for record, attribute, replacement in frozen_records:
+        with pytest.raises(FrozenInstanceError):
+            setattr(record, attribute, replacement)

@@ -420,6 +420,8 @@ def _validate_catalog(catalog: Catalog) -> None:
         )
         infrastructure_ids[normalized_id] = (record.id, index)
 
+    _validate_root_group(catalog.groups)
+
     for index, record in enumerate(catalog.groups):
         if record.parent is not None and _normalize(record.parent) not in group_ids:
             raise CatalogError(
@@ -440,6 +442,7 @@ def _validate_catalog(catalog: Catalog) -> None:
                 path=f"changes[{index}].{field_name}",
                 change_ids=change_ids,
             )
+        _validate_change_relation_sets(record, index)
         _validate_known_references(
             record.processors,
             path=f"changes[{index}].processors",
@@ -455,7 +458,27 @@ def _validate_catalog(catalog: Catalog) -> None:
             description="change ID",
         )
 
+    _validate_processor_consumer_reciprocity(
+        catalog, change_ids, infrastructure_ids
+    )
     _validate_dependency_cycles(catalog.changes, change_ids)
+
+
+def _validate_root_group(groups: tuple[Group, ...]) -> None:
+    root_indices = [index for index, record in enumerate(groups) if record.parent is None]
+    if not root_indices:
+        raise CatalogError("groups: expected exactly one parentless root group, found 0")
+    if len(root_indices) > 1:
+        second_root = root_indices[1]
+        raise CatalogError(
+            f"groups[{second_root}].parent: expected exactly one parentless root "
+            f"group, found {len(root_indices)}"
+        )
+    root_index = root_indices[0]
+    if groups[root_index].default == -1:
+        raise CatalogError(
+            f"groups[{root_index}].default: root group default must be 0 or 1"
+        )
 
 
 def _record_unique_id(
@@ -541,6 +564,25 @@ def _validate_change_references(
     )
 
 
+def _validate_change_relation_sets(record: Change, change_index: int) -> None:
+    normalized_id = _normalize(record.id)
+    seen: dict[str, tuple[str, int]] = {}
+    for field_name in ("requires", "conflicts", "soft_requires"):
+        for relation_index, value in enumerate(getattr(record, field_name)):
+            path = f"changes[{change_index}].{field_name}[{relation_index}]"
+            normalized_value = _normalize(value)
+            if normalized_value == normalized_id:
+                raise CatalogError(f"{path}: change relation cannot reference itself")
+            previous = seen.get(normalized_value)
+            if previous is not None:
+                previous_field, previous_index = previous
+                raise CatalogError(
+                    f"{path}: relation is already declared in "
+                    f"changes[{change_index}].{previous_field}[{previous_index}]"
+                )
+            seen[normalized_value] = (field_name, relation_index)
+
+
 def _validate_known_references(
     values: tuple[str, ...],
     *,
@@ -560,6 +602,38 @@ def _validate_known_references(
                 f"at {path}[{previous_index}]"
             )
         seen[normalized] = index
+
+
+def _validate_processor_consumer_reciprocity(
+    catalog: Catalog,
+    change_ids: Mapping[str, tuple[str, int]],
+    infrastructure_ids: Mapping[str, tuple[str, int]],
+) -> None:
+    for change_index, record in enumerate(catalog.changes):
+        normalized_change = _normalize(record.id)
+        for processor_index, processor in enumerate(record.processors):
+            _, infrastructure_index = infrastructure_ids[_normalize(processor)]
+            consumers = catalog.infrastructure[infrastructure_index].consumers
+            if not any(_normalize(value) == normalized_change for value in consumers):
+                raise CatalogError(
+                    f"changes[{change_index}].processors[{processor_index}]: "
+                    f"processor edge is not reciprocated by "
+                    f"infrastructure[{infrastructure_index}].consumers"
+                )
+
+    for infrastructure_index, record in enumerate(catalog.infrastructure):
+        normalized_infrastructure = _normalize(record.id)
+        for consumer_index, consumer in enumerate(record.consumers):
+            _, change_index = change_ids[_normalize(consumer)]
+            processors = catalog.changes[change_index].processors
+            if not any(
+                _normalize(value) == normalized_infrastructure for value in processors
+            ):
+                raise CatalogError(
+                    f"infrastructure[{infrastructure_index}].consumers[{consumer_index}]: "
+                    f"consumer edge is not reciprocated by "
+                    f"changes[{change_index}].processors"
+                )
 
 
 def _validate_dependency_cycles(
