@@ -1197,15 +1197,21 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
                 source_resolutions=[
                     {
                         "source": "spell_rev/components/main_component.tpa",
+                        "line": 10,
                         "command": "COPY",
+                        "operand_index": 0,
                         "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop expands the exact shipped spell set",
                         "targets": ["spell_rev/assets/a.spl"],
                     },
                     {
                         "source": "spell_rev/components/main_component.tpa",
+                        "line": 11,
                         "command": "COPY_EXISTING",
+                        "operand_index": 0,
                         "operand": "%GAME_SPELL%.spl",
-                        "external_reason": "Resolved from the base game at install time",
+                        "reason": "Resolved from the base game at install time",
+                        "external": True,
                     },
                 ],
             )
@@ -1217,19 +1223,29 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
     local, external = catalog.infrastructure[0].source_resolutions
     assert (
         local.source,
+        local.line,
         local.command,
+        local.operand_index,
         local.operand,
+        local.reason,
         local.targets,
-        local.external_reason,
+        local.generated_owners,
+        local.external,
     ) == (
         "spell_rev/components/main_component.tpa",
+        10,
         "COPY",
+        0,
         "spell_rev/assets/%SPELL%.spl",
+        "Loop expands the exact shipped spell set",
         ("spell_rev/assets/a.spl",),
-        None,
+        (),
+        False,
     )
     assert external.targets == ()
-    assert external.external_reason == "Resolved from the base game at install time"
+    assert external.generated_owners == ()
+    assert external.external is True
+    assert external.reason == "Resolved from the base game at install time"
 
 
 @pytest.mark.parametrize(
@@ -1238,16 +1254,22 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY",
+                "operand_index": 0,
                 "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
             },
             "infrastructure[0].source_resolutions[0]",
         ),
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY",
+                "operand_index": 0,
                 "operand": "spell_rev/assets/a.spl",
+                "reason": "Reviewed occurrence",
                 "targets": ["spell_rev/assets/a.spl"],
             },
             "infrastructure[0].source_resolutions[0].operand",
@@ -1255,8 +1277,11 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY",
+                "operand_index": 0,
                 "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
                 "targets": ["spell_rev/assets/%SPELL%.spl"],
             },
             "infrastructure[0].source_resolutions[0].targets[0]",
@@ -1264,18 +1289,24 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY",
+                "operand_index": 0,
                 "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
                 "targets": ["spell_rev/assets/a.spl"],
-                "external_reason": "Conflicting modes",
+                "external": True,
             },
             "infrastructure[0].source_resolutions[0]",
         ),
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY INVALID",
+                "operand_index": 0,
                 "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
                 "targets": ["spell_rev/assets/a.spl"],
             },
             "infrastructure[0].source_resolutions[0].command",
@@ -1283,11 +1314,38 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         (
             {
                 "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
                 "command": "COPY_EXISTING",
+                "operand_index": 0,
                 "operand": "%GAME_SPELL%.spl",
-                "external_reason": "  ",
+                "reason": "  ",
+                "external": True,
             },
-            "infrastructure[0].source_resolutions[0].external_reason",
+            "infrastructure[0].source_resolutions[0].reason",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "line": 0,
+                "command": "COPY",
+                "operand_index": 0,
+                "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
+                "targets": ["spell_rev/assets/a.spl"],
+            },
+            "infrastructure[0].source_resolutions[0].line",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "line": 10,
+                "command": "COPY",
+                "operand_index": -1,
+                "operand": "spell_rev/assets/%SPELL%.spl",
+                "reason": "Reviewed occurrence",
+                "targets": ["spell_rev/assets/a.spl"],
+            },
+            "infrastructure[0].source_resolutions[0].operand_index",
         ),
     ],
 )
@@ -1309,8 +1367,11 @@ def test_source_resolution_requires_one_strict_resolution_mode(
 def test_dynamic_source_resolution_key_is_unique_across_infrastructure() -> None:
     resolution = {
         "source": "spell_rev/components/main_component.tpa",
+        "line": 10,
         "command": "COPY",
+        "operand_index": 0,
         "operand": "spell_rev/assets/%SPELL%.spl",
+        "reason": "Reviewed occurrence",
         "targets": ["spell_rev/assets/a.spl"],
     }
     duplicate = {
@@ -1326,4 +1387,28 @@ def test_dynamic_source_resolution_key_is_unique_across_infrastructure() -> None
     )
 
     with pytest.raises(CatalogError, match="duplicate dynamic source resolution"):
+        Catalog.from_dict(raw)
+
+
+def test_generated_source_owner_must_name_change_or_infrastructure() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "generated",
+                source_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 10,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Generated spell lookup",
+                        "generated_owners": ["global"],
+                    }
+                ],
+            )
+        ]
+    )
+
+    with pytest.raises(CatalogError, match="unknown catalog owner ID 'global'"):
         Catalog.from_dict(raw)

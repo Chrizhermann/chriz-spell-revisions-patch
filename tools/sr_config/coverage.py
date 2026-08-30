@@ -99,6 +99,7 @@ class _Owner:
 class _OwnershipHit:
     owner: _Owner
     declaration: str
+    resource_kind: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,7 +119,7 @@ class _PreparedIncludeResolution:
 @dataclass(frozen=True)
 class _PreparedSourceResolution:
     targets: tuple[str, ...]
-    external_reason: str | None
+    external: bool
     owner: _Owner
     declaration: str
 
@@ -168,9 +169,6 @@ def audit_catalog_coverage(
         },
     )
     _audit_include_resolutions(include_resolutions, include_edges, issues)
-    source_resolutions = _prepare_source_resolutions(
-        root_path, infrastructure_owners, issues
-    )
     executable_nodes = tuple(node for node in source_nodes if node.kind != "trivia")
     nested_nodes = tuple(
         (node, child)
@@ -191,6 +189,13 @@ def audit_catalog_coverage(
 
     resource_owners = _resource_ownership(
         root_path, component_zero_owners, issues
+    )
+    source_resolutions = _prepare_source_resolutions(
+        root_path,
+        infrastructure_owners,
+        component_zero_owners,
+        resource_owners,
+        issues,
     )
     source_file_owners = _source_file_ownership(positioned, node_hits)
     source_edges = _audit_source_edges(
@@ -321,9 +326,16 @@ def _include_key(source: str, operand: str) -> tuple[str, str]:
 def _prepare_source_resolutions(
     root: Path,
     owners: tuple[_Owner, ...],
+    component_zero_owners: tuple[_Owner, ...],
+    resource_owners: dict[str, tuple[_OwnershipHit, ...]],
     issues: list[CoverageIssue],
-) -> dict[tuple[str, str, str], _PreparedSourceResolution]:
-    prepared: dict[tuple[str, str, str], _PreparedSourceResolution] = {}
+) -> dict[tuple[str, int, str, int, str], _PreparedSourceResolution]:
+    prepared: dict[
+        tuple[str, int, str, int, str], _PreparedSourceResolution
+    ] = {}
+    owners_by_id = {
+        owner.id.casefold(): owner for owner in component_zero_owners
+    }
     for owner in owners:
         record = owner.record
         assert isinstance(record, Infrastructure)
@@ -351,13 +363,55 @@ def _prepare_source_resolutions(
                     )
                     continue
                 targets.append(target)
+            for generated_index, generated_owner_id in enumerate(
+                resolution.generated_owners
+            ):
+                generated_owner = owners_by_id.get(generated_owner_id.casefold())
+                generated_path = (
+                    f"{declaration}.generated_owners[{generated_index}]"
+                )
+                if generated_owner is None:
+                    issues.append(
+                        CoverageIssue(
+                            "undeclared_generated_source_target",
+                            generated_path,
+                            f"owner {generated_owner_id!r} is unavailable to component zero",
+                        )
+                    )
+                    continue
+                generated_targets = tuple(
+                    resource.path
+                    for resource in generated_owner.record.resources
+                    if resource.kind in _GENERATED_RESOURCE_KINDS
+                    and any(
+                        hit.owner == generated_owner
+                        and hit.resource_kind in _GENERATED_RESOURCE_KINDS
+                        for hit in resource_owners.get(
+                            resource.path.casefold(), ()
+                        )
+                    )
+                )
+                if not generated_targets:
+                    issues.append(
+                        CoverageIssue(
+                            "undeclared_generated_source_target",
+                            generated_path,
+                            f"owner {generated_owner_id!r} declares no generated_resource",
+                        )
+                    )
+                    continue
+                targets.extend(generated_targets)
             prepared[
                 _source_resolution_key(
-                    resolution.source, resolution.command, resolution.operand
+                    resolution.source,
+                    resolution.line,
+                    resolution.command,
+                    resolution.operand_index,
+                    resolution.operand,
                 )
             ] = _PreparedSourceResolution(
                 tuple(targets),
-                resolution.external_reason,
+                resolution.external,
                 owner,
                 declaration,
             )
@@ -365,13 +419,13 @@ def _prepare_source_resolutions(
 
 
 def _source_resolution_key(
-    source: str, command: str, operand: str
-) -> tuple[str, str, str]:
-    return (
-        source.casefold(),
-        command.casefold(),
-        operand.replace("\\", "/").casefold(),
-    )
+    source: str,
+    line: int,
+    command: str,
+    operand_index: int,
+    operand: str,
+) -> tuple[str, int, str, int, str]:
+    return source, line, command, operand_index, operand
 
 
 def _audit_change_documentation(
@@ -594,7 +648,7 @@ def _resource_ownership(
                 )
                 continue
             by_path.setdefault(normalized, []).append(
-                _OwnershipHit(owner, declaration)
+                _OwnershipHit(owner, declaration, resource.kind)
             )
     for path, hits in by_path.items():
         if len(hits) > 1:
@@ -648,7 +702,7 @@ def _audit_source_edges(
     source_file_owners: dict[str, tuple[_OwnershipHit, ...]],
     include_edges: tuple[IncludeEdge, ...],
     source_resolutions: dict[
-        tuple[str, str, str], _PreparedSourceResolution
+        tuple[str, int, str, int, str], _PreparedSourceResolution
     ],
     package_resources: tuple[str, ...],
     issues: list[CoverageIssue],
@@ -671,7 +725,9 @@ def _audit_source_edges(
         children_by_parent.setdefault(id(parent), []).append(child)
 
     result: list[CoveredEdge] = []
-    consumed_source_resolutions: set[tuple[str, str, str]] = set()
+    consumed_source_resolutions: Counter[
+        tuple[str, int, str, int, str]
+    ] = Counter()
 
     def audit_node(
         node: SourceNode,
@@ -741,7 +797,7 @@ def _audit_source_edges(
                                 )
                             )
                     continue
-            literal_operand = operand.value.replace("\\", "/")
+            literal_operand = operand.value
             normalized_operand = _normalize_source_operand(operand.value)
             if (
                 node.kind != "unknown"
@@ -757,9 +813,13 @@ def _audit_source_edges(
                 )
                 assert node.command is not None
                 key = _source_resolution_key(
-                    node.path, node.command, literal_operand
+                    node.path,
+                    node.line,
+                    node.command,
+                    operand_index,
+                    literal_operand,
                 )
-                consumed_source_resolutions.add(key)
+                consumed_source_resolutions[key] += 1
                 resolution = source_resolutions.get(key)
                 if resolution is None:
                     result.append(
@@ -780,14 +840,26 @@ def _audit_source_edges(
                         )
                     )
                     continue
-                if resolution.external_reason is not None:
+                related = _source_resolution_owner_is_reciprocal(
+                    resolution.owner, source_hits
+                )
+                if not related:
+                    issues.append(
+                        CoverageIssue(
+                            "unrelated_source_resolution",
+                            resolution.declaration,
+                            "resolution infrastructure is not reciprocally related "
+                            "to this occurrence's exact source owner",
+                        )
+                    )
+                if resolution.external:
                     result.append(
                         CoveredEdge(
                             "source",
                             node.path,
                             location,
                             literal_operand,
-                            "external",
+                            "external" if related else None,
                         )
                     )
                     continue
@@ -811,6 +883,8 @@ def _audit_source_edges(
                     classification = _classify_candidate_hits(
                         tuple(source_hits), candidate_hits
                     )
+                    if not related:
+                        classification = None
                     target_hits = tuple(
                         hit for hits in candidate_hits for hit in hits
                     )
@@ -823,7 +897,7 @@ def _audit_source_edges(
                             classification,
                         )
                     )
-                    if classification is None:
+                    if classification is None and related:
                         issues.append(
                             CoverageIssue(
                                 "unclassified_local_source_edge",
@@ -837,7 +911,6 @@ def _audit_source_edges(
             reference = _source_reference(
                 root,
                 node,
-                operand_index,
                 operand.role,
                 operand.value,
                 resource_owners,
@@ -899,7 +972,8 @@ def _audit_source_edges(
         for child in children_by_parent.get(id(node), ()):
             audit_node(child, source_hits, nested=True)
     for key, resolution in source_resolutions.items():
-        if key not in consumed_source_resolutions:
+        consumed = consumed_source_resolutions[key]
+        if consumed == 0:
             issues.append(
                 CoverageIssue(
                     "stale_source_resolution",
@@ -907,7 +981,38 @@ def _audit_source_edges(
                     "declared dynamic source does not occur in the component-zero closure",
                 )
             )
+        elif consumed > 1:
+            issues.append(
+                CoverageIssue(
+                    "multiply_consumed_source_resolution",
+                    resolution.declaration,
+                    f"declared dynamic source matched {consumed} occurrences; expected exactly 1",
+                )
+            )
     return result
+
+
+def _source_resolution_owner_is_reciprocal(
+    resolution_owner: _Owner,
+    source_hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
+) -> bool:
+    if len(source_hits) != 1:
+        return False
+    source_owner = source_hits[0].owner
+    if (
+        source_owner.collection == resolution_owner.collection
+        and source_owner.index == resolution_owner.index
+    ):
+        return True
+    if not isinstance(source_owner.record, Change) or not isinstance(
+        resolution_owner.record, Infrastructure
+    ):
+        return False
+    return _contains_id(
+        source_owner.record.processors, resolution_owner.record.id
+    ) and _contains_id(
+        resolution_owner.record.consumers, source_owner.record.id
+    )
 
 
 def _audit_contextual_node_ownership(
@@ -964,18 +1069,11 @@ def _is_create_spell_resource(node: SourceNode, role: str) -> bool:
     )
 
 
-def _is_resource_operand(
-    node: SourceNode, operand_index: int, role: str, value: str
-) -> bool:
+def _is_resource_operand(node: SourceNode, role: str, value: str) -> bool:
     laf_resource = _is_laf_resource(node, role, value)
     return (
-        role in {"include", "source"}
+        role in {"include", "source", "target"}
         or (role == "argument" and node.command == "ADD_PROJECTILE")
-        or (
-            role == "argument"
-            and node.command in {"APPEND", "APPEND_OUTER"}
-            and operand_index == 0
-        )
         or (role == "argument" and node.kind == "unknown")
         or laf_resource
         or _is_create_spell_resource(node, role)
@@ -986,7 +1084,7 @@ def _is_dynamic_source_operand(
     node: SourceNode, role: str, value: str
 ) -> bool:
     return (
-        role == "source"
+        role in {"source", "target"}
         or (role == "argument" and node.command == "ADD_PROJECTILE")
         or _is_laf_resource(node, role, value)
         or _is_create_spell_resource(node, role)
@@ -1010,13 +1108,12 @@ def _normalize_source_operand(value: str) -> str:
 def _source_reference(
     root: Path,
     node: SourceNode,
-    operand_index: int,
     role: str,
     value: str,
     resource_owners: dict[str, tuple[_OwnershipHit, ...]],
     package_resources: tuple[str, ...],
 ) -> tuple[str, bool | None, tuple[str, ...]] | None:
-    if not _is_resource_operand(node, operand_index, role, value):
+    if not _is_resource_operand(node, role, value):
         return None
     create_spell_resource = _is_create_spell_resource(node, role)
     laf_resource = _is_laf_resource(node, role, value)
@@ -1062,7 +1159,7 @@ def _source_reference(
         if "%" in canonical:
             return canonical, None, ()
         return canonical, True, (canonical,)
-    if node.command == "APPEND":
+    if node.command in {"APPEND", "APPEND_OUTER"}:
         return canonical, False, ()
     local = (
         canonical.casefold().startswith("spell_rev/")

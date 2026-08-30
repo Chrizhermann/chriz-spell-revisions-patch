@@ -989,6 +989,20 @@ def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
         operands = [ResourceOperand("source", values[0])]
         operands.extend(ResourceOperand("symbol", value) for value in values[1:])
         return tuple(operands)
+    if command in {"APPEND", "APPEND_OUTER"}:
+        prefix = _copy_prefix(raw) if command == "APPEND" else raw
+        atoms = _source_atoms(prefix)
+        command_index = next(
+            (
+                index
+                for index, (value, quoted) in enumerate(atoms)
+                if not quoted and value.upper() == command
+            ),
+            None,
+        )
+        if command_index is None or command_index + 1 >= len(atoms):
+            return ()
+        return (ResourceOperand("target", atoms[command_index + 1][0]),)
     if command in _CALL_COMMANDS:
         return tuple(ResourceOperand("argument", value) for value in quoted)
     if command in _BLOCK_COMMANDS:

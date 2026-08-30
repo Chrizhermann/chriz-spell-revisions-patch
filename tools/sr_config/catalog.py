@@ -96,10 +96,14 @@ class IncludeResolution:
 @dataclass(frozen=True)
 class SourceResolution:
     source: str
+    line: int
     command: str
+    operand_index: int
     operand: str
+    reason: str
     targets: tuple[str, ...] = field(default_factory=tuple)
-    external_reason: str | None = None
+    generated_owners: tuple[str, ...] = field(default_factory=tuple)
+    external: bool = False
 
 
 @dataclass(frozen=True)
@@ -358,12 +362,40 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
     _check_keys(
         raw,
         path=path,
-        allowed={"source", "command", "operand", "targets", "external_reason"},
-        required={"source", "command", "operand"},
+        allowed={
+            "source",
+            "line",
+            "command",
+            "operand_index",
+            "operand",
+            "reason",
+            "targets",
+            "generated_owners",
+            "external",
+        },
+        required={
+            "source",
+            "line",
+            "command",
+            "operand_index",
+            "operand",
+            "reason",
+        },
     )
+    line = _integer(raw["line"], f"{path}.line")
+    if line < 1:
+        raise CatalogError(f"{path}.line: expected a positive line number")
+    operand_index = _integer(raw["operand_index"], f"{path}.operand_index")
+    if operand_index < 0:
+        raise CatalogError(
+            f"{path}.operand_index: expected a non-negative integer"
+        )
     operand = _string(raw["operand"], f"{path}.operand")
     if "%" not in operand:
         raise CatalogError(f"{path}.operand: expected a dynamic source operand")
+    reason = _string(raw["reason"], f"{path}.reason")
+    if not reason.strip():
+        raise CatalogError(f"{path}.reason: must not be blank")
     targets_raw = _list(raw.get("targets", []), f"{path}.targets")
     targets: list[str] = []
     seen: dict[str, int] = {}
@@ -380,14 +412,27 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
             )
         seen[normalized] = index
         targets.append(target)
-    external_reason = _optional_string(
-        raw.get("external_reason"), f"{path}.external_reason"
+    generated_owners = _identifier_tuple(
+        raw.get("generated_owners", []), f"{path}.generated_owners"
     )
-    if external_reason is not None and not external_reason.strip():
-        raise CatalogError(f"{path}.external_reason: must not be blank")
-    if bool(targets) == bool(external_reason):
+    generated_seen: dict[str, int] = {}
+    for index, owner in enumerate(generated_owners):
+        normalized = _normalize(owner)
+        if normalized in generated_seen:
+            raise CatalogError(
+                f"{path}.generated_owners[{index}]: duplicate owner {owner!r}; "
+                f"first declared at {path}.generated_owners"
+                f"[{generated_seen[normalized]}]"
+            )
+        generated_seen[normalized] = index
+    external = raw.get("external", False)
+    if type(external) is not bool:
+        raise CatalogError(f"{path}.external: expected a boolean")
+    if "external" in raw and not external:
+        raise CatalogError(f"{path}.external: external resolution must be true")
+    if sum((bool(targets), bool(generated_owners), external)) != 1:
         raise CatalogError(
-            f"{path}: expected exactly one of concrete targets or external_reason"
+            f"{path}: expected exactly one of targets, generated_owners, or external"
         )
     command = _identifier(raw["command"], f"{path}.command")
     if _SETTING_PATTERN.fullmatch(command) is None:
@@ -396,10 +441,14 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
         )
     return SourceResolution(
         source=_repository_path(raw["source"], f"{path}.source"),
+        line=line,
         command=command.upper(),
+        operand_index=operand_index,
         operand=operand,
+        reason=reason,
         targets=tuple(targets),
-        external_reason=external_reason,
+        generated_owners=generated_owners,
+        external=external,
     )
 
 
@@ -550,7 +599,9 @@ def _validate_catalog(catalog: Catalog) -> None:
         value.casefold(): value for value in CONFIG_METADATA_SETTINGS
     }
     include_resolutions: dict[tuple[str, str], tuple[int, int]] = {}
-    source_resolutions: dict[tuple[str, str, str], tuple[int, int]] = {}
+    source_resolutions: dict[
+        tuple[str, int, str, int, str], tuple[int, int]
+    ] = {}
 
     for index, record in enumerate(catalog.groups):
         normalized_id = _normalize(record.id)
@@ -614,7 +665,9 @@ def _validate_catalog(catalog: Catalog) -> None:
         for resolution_index, resolution in enumerate(record.source_resolutions):
             key = (
                 _normalize(resolution.source),
+                resolution.line,
                 _normalize(resolution.command),
+                resolution.operand_index,
                 _normalize(resolution.operand.replace("\\", "/")),
             )
             previous = source_resolutions.get(key)
@@ -662,6 +715,7 @@ def _validate_catalog(catalog: Catalog) -> None:
             description="infrastructure ID",
         )
 
+    catalog_owner_ids = {**change_ids, **infrastructure_ids}
     for index, record in enumerate(catalog.infrastructure):
         _validate_known_references(
             record.consumers,
@@ -669,6 +723,16 @@ def _validate_catalog(catalog: Catalog) -> None:
             known=change_ids,
             description="change ID",
         )
+        for resolution_index, resolution in enumerate(record.source_resolutions):
+            _validate_known_references(
+                resolution.generated_owners,
+                path=(
+                    f"infrastructure[{index}].source_resolutions"
+                    f"[{resolution_index}].generated_owners"
+                ),
+                known=catalog_owner_ids,
+                description="catalog owner ID",
+            )
 
     _validate_processor_consumers(catalog, infrastructure_ids)
     _validate_dependency_cycles(catalog.changes, change_ids)

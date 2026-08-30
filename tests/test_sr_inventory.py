@@ -1699,6 +1699,444 @@ def test_dynamic_append_payload_is_not_mistaken_for_a_source_operand(
     assert "unresolved_dynamic_source" not in {
         issue.code for issue in result.issues
     }
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("stats.ids", "external")
+    ]
+
+
+@pytest.mark.parametrize("command", ["APPEND", "APPEND_OUTER"])
+def test_dynamic_append_target_requires_occurrence_resolution(
+    tmp_path: Path,
+    command: str,
+) -> None:
+    source = (
+        b"// start\n"
+        + f"{command} ~spell_rev/data/%TABLE%.2da~ ~ROW~\n".encode()
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "unresolved_dynamic_source"
+    ]
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/data/%TABLE%.2da", None)
+    ]
+
+
+def test_generated_dynamic_target_links_to_declared_runtime_resource(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["generated_spells"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "generated_spells",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [
+                    {"path": "SPPR116.SPL", "kind": "generated_resource"}
+                ],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Generated spell lookup",
+                        "generated_owners": ["generated_spells"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("SPPR116.SPL", "shared")
+    ]
+
+
+def test_generated_dynamic_target_requires_generated_resource_ownership(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["generated_spells"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "generated_spells",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Generated spell lookup",
+                        "generated_owners": ["generated_spells"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "undeclared_generated_source_target" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_generated_dynamic_target_rejects_shipped_resource_ownership(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    (tmp_path / "SPPR116.SPL").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["generated_spells"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "generated_spells",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [{"path": "SPPR116.SPL", "kind": "asset"}],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Generated spell lookup",
+                        "generated_owners": ["generated_spells"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "undeclared_generated_source_target" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_generated_dynamic_target_rejects_non_component_zero_owner(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["generated_spells"],
+            ),
+            _coverage_change(
+                "optional_generator",
+                component=65,
+                resources=[
+                    {"path": "SPPR116.SPL", "kind": "generated_resource"}
+                ],
+                documentation_only_reason="optional component fixture",
+            ),
+        ],
+        infrastructure=[
+            {
+                "id": "generated_spells",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Generated spell lookup",
+                        "generated_owners": ["optional_generator"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "undeclared_generated_source_target" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_dynamic_resolution_is_scoped_to_one_exact_occurrence(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\n"
+        b"COPY_EXISTING ~%spell%.spl~ ~override~\n"
+        b"COPY_EXISTING ~%spell%.spl~ ~override~\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["game_lookup"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Base-game lookup",
+                        "external": True,
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "unresolved_dynamic_source"
+    ]
+    assert [(edge.location, edge.classification) for edge in result.source_edges] == [
+        (
+            "spell_rev/components/main_component.tpa:2:COPY_EXISTING.operand[0]",
+            "external",
+        ),
+        (
+            "spell_rev/components/main_component.tpa:3:COPY_EXISTING.operand[0]",
+            None,
+        ),
+    ]
+
+
+@pytest.mark.parametrize("consumers", [[], ["main"]])
+def test_dynamic_resolution_requires_reciprocal_exact_source_owner(
+    tmp_path: Path,
+    consumers: list[str],
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "unrelated_lookup",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [],
+                "consumers": consumers,
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Base-game lookup",
+                        "external": True,
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "unrelated_source_resolution" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_shifted_dynamic_occurrence_makes_resolution_stale(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// shifted\n"
+        b"PRINT ~new line~\n"
+        b"COPY_EXISTING ~%spell%.spl~ ~override~\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// shifted",
+                        None,
+                    )
+                ],
+                processors=["game_lookup"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Base-game lookup",
+                        "external": True,
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "unresolved_dynamic_source",
+        "stale_source_resolution",
+    ]
 
 
 def test_dynamic_source_resolution_follows_concrete_owned_targets(
@@ -1733,8 +2171,11 @@ def test_dynamic_source_resolution_follows_concrete_owned_targets(
                 "source_resolutions": [
                     {
                         "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
                         "command": "COPY",
+                        "operand_index": 0,
                         "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop expands the reviewed asset set",
                         "targets": ["spell_rev/assets/a.spl"],
                     }
                 ],
@@ -1770,6 +2211,7 @@ def test_dynamic_source_resolution_can_explicitly_document_external_lookup(
                         None,
                     )
                 ],
+                processors=["game_lookup"],
             )
         ],
         infrastructure=[
@@ -1778,13 +2220,16 @@ def test_dynamic_source_resolution_can_explicitly_document_external_lookup(
                 "category": "compatibility",
                 "source_spans": [],
                 "resources": [],
-                "consumers": [],
+                "consumers": ["main"],
                 "source_resolutions": [
                     {
                         "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
                         "command": "COPY_EXISTING",
+                        "operand_index": 0,
                         "operand": "%spell%.spl",
-                        "external_reason": "Resolved from the base game at install time",
+                        "reason": "Resolved from the base game at install time",
+                        "external": True,
                     }
                 ],
             }
@@ -1831,8 +2276,11 @@ def test_dynamic_source_resolution_rejects_missing_targets_and_stale_rules(
                 "source_resolutions": [
                     {
                         "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
                         "command": "COPY",
+                        "operand_index": 0,
                         "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Reviewed occurrence",
                         "targets": ["spell_rev/assets/missing.spl"],
                     }
                 ],
@@ -1868,6 +2316,7 @@ def test_dynamic_source_resolution_source_must_exactly_exist(
                         None,
                     )
                 ],
+                processors=["wrong_case"],
             )
         ],
         infrastructure=[
@@ -1876,13 +2325,16 @@ def test_dynamic_source_resolution_source_must_exactly_exist(
                 "category": "compatibility",
                 "source_spans": [],
                 "resources": [],
-                "consumers": [],
+                "consumers": ["main"],
                 "source_resolutions": [
                     {
                         "source": "spell_rev/components/Main_component.tpa",
+                        "line": 2,
                         "command": "COPY_EXISTING",
+                        "operand_index": 0,
                         "operand": "%spell%.spl",
-                        "external_reason": "Resolved from the base game",
+                        "reason": "Resolved from the base game",
+                        "external": True,
                     }
                 ],
             }
@@ -1892,7 +2344,9 @@ def test_dynamic_source_resolution_source_must_exactly_exist(
     result = audit_catalog_coverage(tmp_path, catalog)
 
     assert [issue.code for issue in result.issues] == [
-        "stale_source_resolution"
+        "stale_source_resolution",
+        "unresolved_dynamic_source",
+        "stale_source_resolution",
     ]
 
 
