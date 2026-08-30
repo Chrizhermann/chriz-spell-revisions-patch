@@ -174,6 +174,138 @@ def test_inventory_keeps_unless_modifier_with_append(tmp_path: Path) -> None:
     assert b"UNLESS" in nodes[0].raw
 
 
+@pytest.mark.parametrize(
+    "else_header",
+    [
+        "END ELSE\nBEGIN\n",
+        "END ELSE ACTION_IF (2)\nBEGIN\n",
+    ],
+)
+def test_inventory_keeps_split_else_headers_in_one_action_node(
+    tmp_path: Path, else_header: str
+) -> None:
+    path = tmp_path / "split-else.tpa"
+    path.write_text(
+        "ACTION_IF (1) BEGIN\n"
+        "  PRINT ~first branch~\n"
+        f"{else_header}"
+        "  PRINT ~else branch~\n"
+        "END\n"
+        "MYSTERY_STATEMENT ~after~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "ACTION_IF"),
+        ("unknown", "MYSTERY_STATEMENT"),
+    ]
+    normalized = nodes[0].raw.replace(b"\r\n", b"\n")
+    assert else_header.encode() in normalized
+    assert normalized.endswith(b"  PRINT ~else branch~\nEND\n")
+
+
+def test_inventory_closes_fully_inline_else_branch(tmp_path: Path) -> None:
+    path = tmp_path / "inline-else.tpa"
+    path.write_text(
+        "ACTION_IF (1) BEGIN PRINT ~first~ END "
+        "ELSE BEGIN PRINT ~second~ END\n"
+        "MYSTERY_STATEMENT ~after~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "ACTION_IF"),
+        ("unknown", "MYSTERY_STATEMENT"),
+    ]
+
+
+def test_unknown_action_forms_end_copy_pipeline_without_losing_text(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "unknown-actions.tpa"
+    path.write_text(
+        "COPY ~a.spl~ ~override~\n"
+        "  INNER_ACTION BEGIN\n"
+        "    PRINT ~nested action~\n"
+        "  END\n"
+        "AT_UNINSTALL ~cleanup command~\n"
+        "ACTION_READLN answer\n"
+        "PRINT ~next known action~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "COPY"),
+        ("unknown", "AT_UNINSTALL"),
+        ("unknown", "ACTION_READLN"),
+        ("executable", "PRINT"),
+    ]
+    assert b"INNER_ACTION BEGIN" in nodes[0].raw
+    assert [(operand.role, operand.value) for operand in nodes[0].resource_operands] == [
+        ("source", "a.spl"),
+        ("destination", "override"),
+    ]
+    assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
+
+
+def test_inventory_and_closure_support_multi_file_and_multiline_include(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "spell_rev/components").mkdir(parents=True)
+    (tmp_path / "spell_rev/lib").mkdir()
+    main = tmp_path / "spell_rev/components/main_component.tpa"
+    main.write_text(
+        "INCLUDE ~spell_rev/lib/a.tph~ ~spell_rev/lib/b.tph~\n"
+        "INCLUDE\n"
+        "  ~spell_rev/lib/c.tph~\n"
+        "PRINT ~done~\n",
+        encoding="utf-8",
+    )
+    for name in ("a", "b", "c"):
+        (tmp_path / f"spell_rev/lib/{name}.tph").write_text(
+            f"PRINT ~{name}~\n", encoding="utf-8"
+        )
+
+    main_nodes = tuple(
+        node for node in inventory(main, root=tmp_path) if node.kind != "trivia"
+    )
+    tree = inventory_tree(tmp_path)
+
+    assert [(node.command, node.line) for node in main_nodes] == [
+        ("INCLUDE", 1),
+        ("INCLUDE", 2),
+        ("PRINT", 4),
+    ]
+    assert [
+        operand.value for operand in main_nodes[0].resource_operands
+    ] == ["spell_rev/lib/a.tph", "spell_rev/lib/b.tph"]
+    assert [
+        operand.value for operand in main_nodes[1].resource_operands
+    ] == ["spell_rev/lib/c.tph"]
+    assert tuple(dict.fromkeys(node.path for node in tree)) == (
+        "spell_rev/components/main_component.tpa",
+        "spell_rev/lib/a.tph",
+        "spell_rev/lib/b.tph",
+        "spell_rev/lib/c.tph",
+    )
+
+    report = build_inventory_report(tmp_path)
+    assert [
+        (edge["line"], edge["operand"], edge["resolved"])
+        for edge in report["include_edges"]
+    ] == [
+        (1, "spell_rev/lib/a.tph", "spell_rev/lib/a.tph"),
+        (1, "spell_rev/lib/b.tph", "spell_rev/lib/b.tph"),
+        (2, "spell_rev/lib/c.tph", "spell_rev/lib/c.tph"),
+    ]
+
+
 def test_shipped_copy_operands_include_bare_destination_and_exclude_patch_body() -> None:
     path = ROOT / "spell_rev/lib/dispelling_screen.tph"
     nodes = {

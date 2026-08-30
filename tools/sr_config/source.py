@@ -309,6 +309,11 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
                 finish(open_node)
                 open_node = None
 
+        if open_node is not None and open_node.mode == "include" and depth_before == 0:
+            if candidate is not None:
+                finish(open_node)
+                open_node = None
+
         if open_node is None and candidate is not None and depth_before == 0:
             command, kind = candidate
             mode = _statement_mode(command, kind, tokens)
@@ -323,7 +328,11 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
                 root_opened="BEGIN" in tokens,
             )
         elif open_node is not None:
-            if open_node.mode != "copy" or lexed.has_code or depth_before > 0:
+            if (
+                open_node.mode not in {"copy", "include"}
+                or lexed.has_code
+                or depth_before > 0
+            ):
                 open_node.end = end
 
         for token in tokens:
@@ -365,7 +374,10 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
             )
         if complete:
             if open_node.mode == "block":
-                open_node.pending_close = True
+                if _else_awaits_begin(tokens):
+                    open_node.root_opened = False
+                else:
+                    open_node.pending_close = True
             else:
                 finish(open_node)
                 open_node = None
@@ -542,12 +554,23 @@ def _statement_candidate(first: str | None) -> tuple[str, str] | None:
 
 
 def _starts_after_copy(first: str | None) -> bool:
-    return first in _ACTION_COMMANDS if first is not None else False
+    if first is None or first in _PATCH_OR_COPY_CONTINUATIONS:
+        return False
+    return first in _ACTION_COMMANDS or first.startswith(("ACTION_", "AT_"))
+
+
+def _else_awaits_begin(tokens: tuple[str, ...]) -> bool:
+    if "ELSE" not in tokens:
+        return False
+    last_else = len(tokens) - 1 - tokens[::-1].index("ELSE")
+    return "BEGIN" not in tokens[last_else + 1 :]
 
 
 def _statement_mode(command: str, kind: str, tokens: tuple[str, ...]) -> str:
     if command in _PIPELINE_COMMANDS:
         return "copy"
+    if command == "INCLUDE":
+        return "include"
     if command in _BLOCK_COMMANDS:
         return "block"
     if command in _CALL_COMMANDS:

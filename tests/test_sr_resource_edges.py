@@ -84,10 +84,11 @@ def _make_itm() -> bytes:
     return bytes(data)
 
 
-def _make_eff() -> bytes:
+def _make_eff(secondary_preamble: bytes = b"EFF V2.0") -> bytes:
+    assert len(secondary_preamble) == 8
     data = bytearray(EFF_V2_SIZE)
     data[:8] = b"EFF V2.0"
-    data[8:16] = b"EFF V2.0"
+    data[8:16] = secondary_preamble
     _put_u32(data, 0x10, 326)
     _put_resref(data, 0x30, "Primary")
     _put_resref(data, 0x70, "Visual")
@@ -225,6 +226,35 @@ def test_eff_v2_edges_cover_all_resource_fields(tmp_path: Path) -> None:
     ]
     assert [edge.offset for edge in edges] == [0x30, 0x70, 0x78, 0x94]
     assert {edge.opcode for edge in edges} == {326}
+
+
+@pytest.mark.parametrize(
+    "secondary_preamble",
+    [b"\0" * 8, b" " * 8, b"EFF V2.0"],
+)
+def test_eff_v2_accepts_known_secondary_preamble_variants(
+    tmp_path: Path, secondary_preamble: bytes
+) -> None:
+    path = tmp_path / "variant.eff"
+    path.write_bytes(_make_eff(secondary_preamble))
+
+    assert scan_resource_edges(path)
+
+
+def test_eff_v2_rejects_unknown_secondary_preamble_with_context(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "bad-secondary.eff"
+    path.write_bytes(_make_eff(b"BADBODY!"))
+
+    with pytest.raises(ResourceError) as error:
+        scan_resource_edges(path)
+
+    message = str(error.value)
+    assert path.as_posix() in message
+    assert "secondary preamble" in message
+    assert "0x8" in message
+    assert "BADBODY!" in message
 
 
 def test_cre_v1_edges_cover_spells_items_scripts_portraits_and_effects(

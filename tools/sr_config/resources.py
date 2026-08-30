@@ -339,6 +339,13 @@ def _scan_eff(builder: _EdgeBuilder) -> None:
         raise builder.error(
             f"EFF V2 signature/version at 0x0 is {data[:8]!r}; expected b'EFF V2.0'"
         )
+    secondary_preamble = data[8:16]
+    if secondary_preamble not in (b"\0" * 8, b" " * 8, b"EFF V2.0"):
+        raise builder.error(
+            "EFF V2 secondary preamble at 0x8 is "
+            f"{secondary_preamble!r}; expected 8 NUL bytes, 8 space bytes, "
+            "or b'EFF V2.0'"
+        )
     opcode = _u32(builder, 0x10, "effect opcode at 0x10")
     builder.add("effect.resource", 0x30, opcode)
     builder.add("effect.resource2", 0x70, opcode)

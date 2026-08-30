@@ -217,11 +217,17 @@ def _include_occurrences(source: bytes) -> tuple[tuple[str, int], ...]:
     line_starts = [0]
     line_starts.extend(index + 1 for index, byte in enumerate(source) if byte == 0x0A)
     includes: list[tuple[str, int]] = []
-    for index, (kind, value, offset) in enumerate(tokens):
+    index = 0
+    while index < len(tokens):
+        kind, value, offset = tokens[index]
         if kind != "identifier" or value.casefold() != "include":
+            index += 1
             continue
-        if index + 1 < len(tokens) and tokens[index + 1][0] == "string":
-            includes.append((tokens[index + 1][1], bisect_right(line_starts, offset)))
+        line = bisect_right(line_starts, offset)
+        index += 1
+        while index < len(tokens) and tokens[index][0] == "string":
+            includes.append((tokens[index][1], line))
+            index += 1
     return tuple(includes)
 
 
