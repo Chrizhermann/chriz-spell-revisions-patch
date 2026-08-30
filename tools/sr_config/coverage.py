@@ -7,7 +7,13 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from .catalog import Catalog, Change, Infrastructure
+from .catalog import (
+    BinaryEdgeResolution,
+    Catalog,
+    Change,
+    DeferredSourceScope,
+    Infrastructure,
+)
 from .inventory import (
     DEFAULT_ENTRY,
     DEFAULT_RESOURCE_ROOT,
@@ -88,7 +94,7 @@ class _Owner:
     collection: str
     index: int
     id: str
-    record: Change | Infrastructure
+    record: Change | Infrastructure | DeferredSourceScope
 
     @property
     def location(self) -> str:
@@ -124,6 +130,16 @@ class _PreparedSourceResolution:
     declaration: str
 
 
+@dataclass(frozen=True)
+class _PreparedBinaryResolution:
+    record: BinaryEdgeResolution
+    index: int
+
+    @property
+    def declaration(self) -> str:
+        return f"binary_edge_resolutions[{self.index}]"
+
+
 def audit_catalog_coverage(
     root: str | Path,
     catalog: Catalog,
@@ -148,12 +164,16 @@ def audit_catalog_coverage(
         _Owner("infrastructure", index, record.id, record)
         for index, record in enumerate(catalog.infrastructure)
     )
-    owners = change_owners + infrastructure_owners
+    deferred_owners = tuple(
+        _Owner("deferred_source_scopes", index, record.id, record)
+        for index, record in enumerate(catalog.deferred_source_scopes)
+    )
+    owners = change_owners + infrastructure_owners + deferred_owners
     component_zero_owners = tuple(
         owner
         for owner in change_owners
         if isinstance(owner.record, Change) and owner.record.component == 0
-    ) + infrastructure_owners
+    ) + infrastructure_owners + deferred_owners
 
     _audit_change_documentation(change_owners, texts, issues)
 
@@ -176,6 +196,7 @@ def audit_catalog_coverage(
         for child in inventory_nested(node)
     )
     scanned_resources = scan_package_resources(root_path / resource_root)
+    package_resources = _package_files(root_path, resource_root_name)
 
     positioned = _position_nodes(source_nodes)
     node_hits: dict[tuple[str, int], list[_OwnershipHit]] = {
@@ -198,6 +219,7 @@ def audit_catalog_coverage(
         issues,
     )
     source_file_owners = _source_file_ownership(positioned, node_hits)
+    reachable_source_paths: set[str] = set()
     source_edges = _audit_source_edges(
         root_path,
         executable_nodes,
@@ -208,16 +230,24 @@ def audit_catalog_coverage(
         source_file_owners,
         include_edges,
         source_resolutions,
-        tuple(
-            f"{resource_root_name}/{resource.path}"
-            for resource in scanned_resources
-        ),
+        package_resources,
+        reachable_source_paths,
+        issues,
+    )
+    dormant_paths = _audit_dormant_resources(
+        root_path,
+        catalog,
+        resource_root_name,
+        resource_owners,
+        reachable_source_paths,
         issues,
     )
     binary_edges = _audit_binary_edges(
         scanned_resources,
         resource_root=resource_root_name,
         resource_owners=resource_owners,
+        dormant_paths=dormant_paths,
+        resolutions=catalog.binary_edge_resolutions,
         issues=issues,
     )
     return CoverageResult(
@@ -334,7 +364,9 @@ def _prepare_source_resolutions(
         tuple[str, int, str, int, str], _PreparedSourceResolution
     ] = {}
     owners_by_id = {
-        owner.id.casefold(): owner for owner in component_zero_owners
+        owner.id.casefold(): owner
+        for owner in component_zero_owners
+        if isinstance(owner.record, (Change, Infrastructure))
     }
     for owner in owners:
         record = owner.record
@@ -723,6 +755,36 @@ def _repository_file_exists_exact(root: Path, relative: str) -> bool:
     return current.is_file()
 
 
+def _repository_directory_exists_exact(root: Path, relative: str) -> bool:
+    current = root
+    for part in PurePosixPath(relative).parts:
+        try:
+            names = {entry.name for entry in current.iterdir()}
+        except OSError:
+            return False
+        if part not in names:
+            return False
+        current = current / part
+    return current.is_dir()
+
+
+def _package_files(root: Path, resource_root: str) -> tuple[str, ...]:
+    package_root = root.joinpath(*PurePosixPath(resource_root).parts)
+    try:
+        files = tuple(path for path in package_root.rglob("*") if path.is_file())
+    except OSError:
+        return ()
+    return tuple(
+        sorted(
+            (
+                f"{resource_root}/{path.relative_to(package_root).as_posix()}"
+                for path in files
+            ),
+            key=lambda value: (value.casefold(), value),
+        )
+    )
+
+
 def _audit_source_edges(
     root: Path,
     executable_nodes: tuple[SourceNode, ...],
@@ -736,6 +798,7 @@ def _audit_source_edges(
         tuple[str, int, str, int, str], _PreparedSourceResolution
     ],
     package_resources: tuple[str, ...],
+    reachable_paths: set[str],
     issues: list[CoverageIssue],
 ) -> list[CoveredEdge]:
     node_offsets = {
@@ -793,6 +856,7 @@ def _audit_source_edges(
                                 )
                             )
                             continue
+                        reachable_paths.add(include_edge.resolved.casefold())
                         candidate_hits = (
                             _candidate_ownership_hits(
                                 include_edge.resolved,
@@ -906,6 +970,7 @@ def _audit_source_edges(
                     )
                     continue
                 for target in resolution.targets:
+                    reachable_paths.add(target.casefold())
                     candidate_hits = (
                         _candidate_ownership_hits(
                             target, resource_owners, source_file_owners
@@ -967,6 +1032,7 @@ def _audit_source_edges(
                 classification = "external"
                 target_hits = ()
             else:
+                reachable_paths.update(candidate.casefold() for candidate in candidates)
                 candidate_hits = tuple(
                     _candidate_ownership_hits(
                         candidate, resource_owners, source_file_owners
@@ -1164,6 +1230,17 @@ def _source_reference(
     if create_spell_resource and not path.suffix:
         canonical += ".spl"
         path = PurePosixPath(canonical)
+    if "%" not in canonical and _repository_directory_exists_exact(root, canonical):
+        prefix = f"{canonical}/".casefold()
+        return (
+            canonical,
+            True,
+            tuple(
+                candidate
+                for candidate in package_resources
+                if candidate.casefold().startswith(prefix)
+            ),
+        )
     qualified_package_path = (
         len(path.parts) > 1
         and canonical.casefold().startswith("spell_rev/")
@@ -1208,22 +1285,126 @@ def _source_reference(
     return canonical, False, ()
 
 
+def _audit_dormant_resources(
+    root: Path,
+    catalog: Catalog,
+    resource_root: str,
+    resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    reachable_paths: set[str],
+    issues: list[CoverageIssue],
+) -> frozenset[str]:
+    dormant_paths = frozenset(
+        record.path.casefold() for record in catalog.dormant_resources
+    )
+    package_prefix = f"{resource_root}/"
+    declared_owners: dict[str, list[str]] = {}
+    collection_records = (
+        ("changes", catalog.changes),
+        ("infrastructure", catalog.infrastructure),
+        ("deferred_source_scopes", catalog.deferred_source_scopes),
+    )
+    for collection, records in collection_records:
+        for record_index, record in enumerate(records):
+            for resource_index, resource in enumerate(record.resources):
+                if resource.kind in _NON_OWNING_RESOURCE_KINDS:
+                    continue
+                declared_owners.setdefault(resource.path.casefold(), []).append(
+                    f"{collection}[{record_index}].resources[{resource_index}]"
+                )
+    for index, record in enumerate(catalog.dormant_resources):
+        declaration = f"dormant_resources[{index}]"
+        normalized = record.path.casefold()
+        if not _repository_file_exists_exact(root, record.path):
+            issues.append(
+                CoverageIssue(
+                    "missing_dormant_resource",
+                    f"{declaration}.path",
+                    f"{record.path!r} does not exactly match an existing file",
+                )
+            )
+            continue
+        if not record.path.startswith(package_prefix):
+            issues.append(
+                CoverageIssue(
+                    "stale_dormant_resource",
+                    f"{declaration}.path",
+                    f"{record.path!r} is outside package root {resource_root!r}",
+                )
+            )
+        claims = declared_owners.get(normalized, [])
+        if claims or resource_owners.get(normalized):
+            declarations = ", ".join(claims) or "component-zero resource ownership"
+            issues.append(
+                CoverageIssue(
+                    "claimed_dormant_resource",
+                    f"{declaration}.path",
+                    f"{record.path!r} is claimed by {declarations}",
+                )
+            )
+        if normalized in reachable_paths:
+            issues.append(
+                CoverageIssue(
+                    "reachable_dormant_resource",
+                    f"{declaration}.path",
+                    f"{record.path!r} is reachable from component-zero source",
+                )
+            )
+    return dormant_paths
+
+
 def _audit_binary_edges(
     scanned_resources,
     *,
     resource_root: str,
     resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    dormant_paths: frozenset[str],
+    resolutions: tuple[BinaryEdgeResolution, ...],
     issues: list[CoverageIssue],
 ) -> list[CoveredEdge]:
     result: list[CoveredEdge] = []
+    prepared = {
+        (
+            resolution.source.casefold(),
+            resolution.offset,
+            resolution.field.casefold(),
+        ): _PreparedBinaryResolution(resolution, index)
+        for index, resolution in enumerate(resolutions)
+    }
+    consumed: Counter[tuple[str, int, str]] = Counter()
     for resource in scanned_resources:
         source = f"{resource_root}/{resource.path}"
+        if source.casefold() in dormant_paths:
+            continue
         source_hits = resource_owners.get(source.casefold(), ())
         for edge in resource.edges:
             location = f"{source}:0x{edge.offset:x}:{edge.field}"
+            resolution_key = (
+                source.casefold(),
+                edge.offset,
+                edge.field.casefold(),
+            )
+            resolution = prepared.get(resolution_key)
+            if resolution is not None:
+                consumed[resolution_key] += 1
             if edge.semantics == "non_resource":
+                if resolution is not None:
+                    issues.append(
+                        CoverageIssue(
+                            "mismatched_binary_edge_resolution",
+                            resolution.declaration,
+                            "declared override matched a non-resource scanner field",
+                        )
+                    )
                 continue
             if edge.semantics == "unknown":
+                if resolution is not None:
+                    issues.append(
+                        CoverageIssue(
+                            "mismatched_binary_edge_resolution",
+                            resolution.declaration,
+                            "declared override matched a scanner field with unknown semantics",
+                        )
+                    )
                 result.append(
                     CoveredEdge("binary", source, location, edge.target, None)
                 )
@@ -1236,9 +1417,98 @@ def _audit_binary_edges(
                     )
                 )
                 continue
+            full_candidates = tuple(
+                f"{resource_root}/{candidate}" for candidate in edge.local_candidates
+            )
+            override_applied = False
+            if resolution is not None:
+                record = resolution.record
+                mismatches: list[str] = []
+                if source != record.source:
+                    mismatches.append("source")
+                if edge.field != record.field:
+                    mismatches.append("field")
+                if edge.opcode != record.opcode:
+                    mismatches.append("opcode")
+                if edge.target != record.target:
+                    mismatches.append("target")
+                if edge.expected_types != record.expected_types:
+                    mismatches.append("expected_types")
+                if full_candidates != record.shadowed_candidates:
+                    mismatches.append("shadowed_candidates")
+                if edge.classification != "local":
+                    mismatches.append("scanner classification")
+                if mismatches:
+                    issues.append(
+                        CoverageIssue(
+                            "mismatched_binary_edge_resolution",
+                            resolution.declaration,
+                            "scanner edge differs in " + ", ".join(mismatches),
+                        )
+                    )
+                else:
+                    invalid_candidate = False
+                    for candidate_index, candidate in enumerate(full_candidates):
+                        candidate_path = (
+                            f"{resolution.declaration}.shadowed_candidates"
+                            f"[{candidate_index}]"
+                        )
+                        candidate_hits = resource_owners.get(
+                            candidate.casefold(), ()
+                        )
+                        if candidate_hits:
+                            invalid_candidate = True
+                            issues.append(
+                                CoverageIssue(
+                                    "owned_binary_external_candidate",
+                                    candidate_path,
+                                    f"{candidate!r} has component-zero ownership",
+                                )
+                            )
+                        if candidate.casefold() not in dormant_paths:
+                            invalid_candidate = True
+                            issues.append(
+                                CoverageIssue(
+                                    "non_dormant_binary_external_candidate",
+                                    candidate_path,
+                                    f"{candidate!r} is not declared dormant",
+                                )
+                            )
+                    if len(source_hits) != 1:
+                        issues.append(
+                            CoverageIssue(
+                                "unowned_binary_external_source",
+                                resolution.declaration,
+                                "override source must have exactly one component-zero owner",
+                            )
+                        )
+                    elif not invalid_candidate:
+                        override_applied = True
+
+            if override_applied:
+                result.append(
+                    CoveredEdge("binary", source, location, edge.target, "external")
+                )
+                continue
             if edge.classification == "external":
                 classification = "external"
             elif edge.classification == "local":
+                if (
+                    resolution is None
+                    and full_candidates
+                    and all(
+                        candidate.casefold() in dormant_paths
+                        for candidate in full_candidates
+                    )
+                ):
+                    issues.append(
+                        CoverageIssue(
+                            "missing_binary_edge_resolution",
+                            location,
+                            "local scanner edge resolves only to dormant payloads and "
+                            "needs an exact external override",
+                        )
+                    )
                 target_hits = tuple(
                     resource_owners.get(
                         f"{resource_root}/{candidate}".casefold(), ()
@@ -1271,6 +1541,24 @@ def _audit_binary_edges(
                 )
             result.append(
                 CoveredEdge("binary", source, location, edge.target, classification)
+            )
+    for key, resolution in prepared.items():
+        count = consumed[key]
+        if count == 0:
+            issues.append(
+                CoverageIssue(
+                    "stale_binary_edge_resolution",
+                    resolution.declaration,
+                    "declared scanner edge does not occur in the active package payload",
+                )
+            )
+        elif count > 1:
+            issues.append(
+                CoverageIssue(
+                    "multiply_consumed_binary_edge_resolution",
+                    resolution.declaration,
+                    f"declared scanner edge matched {count} occurrences; expected exactly 1",
+                )
             )
     return result
 
@@ -1332,7 +1620,13 @@ def _classify_owners(source: _Owner, target: _Owner) -> str | None:
     if isinstance(source.record, Infrastructure) and isinstance(
         target.record, Infrastructure
     ):
-        return "shared"
+        return (
+            "hard"
+            if _contains_id(
+                source.record.infrastructure_requires, target.record.id
+            )
+            else None
+        )
     return None
 
 

@@ -4,6 +4,7 @@ import hashlib
 import importlib
 import json
 import os
+import re
 import stat
 from dataclasses import asdict
 from pathlib import Path
@@ -96,6 +97,9 @@ def _catalog(
             }
         ],
         "infrastructure": [],
+        "dormant_resources": [],
+        "deferred_source_scopes": [],
+        "binary_edge_resolutions": [],
     }
     return Catalog.from_dict(raw)
 
@@ -105,6 +109,74 @@ def _texts() -> dict[str, str]:
         "@1": "Magic | Missile <name>",
         "@2": "Deals <damage> & escapes | pipes. `code` [link](target) *bold*.",
     }
+
+
+def _catalog_with_support_metadata() -> Catalog:
+    raw = json.loads(json.dumps(asdict(_catalog())))
+    raw["changes"][0]["processors"] = ["support.processor"]
+    raw["infrastructure"] = [
+        {
+            "id": "support.processor",
+            "activation": "consumer_selected",
+            "infrastructure_requires": ["metadata.index"],
+            "category": "derived",
+            "source_spans": [],
+            "resources": [
+                {"path": "spell_rev/lib/support.tpa", "kind": "source"}
+            ],
+            "consumers": ["arcane.level1.magic_missile"],
+            "include_resolutions": [],
+            "source_resolutions": [],
+        },
+        {
+            "id": "metadata.index",
+            "activation": "always",
+            "infrastructure_requires": [],
+            "category": "mandatory_metadata",
+            "source_spans": [],
+            "resources": [],
+            "consumers": [],
+            "include_resolutions": [],
+            "source_resolutions": [],
+        },
+    ]
+    raw["deferred_source_scopes"] = [
+        {
+            "id": "deferred.future",
+            "reason": "Needs an explicit compatibility policy.",
+            "source_spans": [
+                {
+                    "path": "spell_rev/components/main_component.tpa",
+                    "start": "DEFERRED_START",
+                    "end": "DEFERRED_END",
+                    "sha256": "b" * 64,
+                }
+            ],
+            "resources": [
+                {"path": "spell_rev/shared/deferred.spl", "kind": "asset"}
+            ],
+        }
+    ]
+    raw["dormant_resources"] = [
+        {
+            "path": "spell_rev/shared/unused.spl",
+            "reason": "Shipped upstream but unreachable from component zero.",
+        }
+    ]
+    raw["binary_edge_resolutions"] = [
+        {
+            "source": "spell_rev/shared/source.spl",
+            "offset": 0xAE,
+            "field": "ability[0].effect[0].resource",
+            "opcode": 146,
+            "target": "CHILDSPL",
+            "expected_types": ["SPL"],
+            "shadowed_candidates": ["spell_rev/shared/childspl.spl"],
+            "classification": "external",
+            "reason": "The package candidate is dormant and must stay external.",
+        }
+    ]
+    return Catalog.from_dict(raw)
 
 
 def _composite_catalog() -> Catalog:
@@ -292,6 +364,9 @@ def test_fingerprint_is_canonical_semantic_json_not_source_formatting() -> None:
                 ],
                 "changes": [],
                 "infrastructure": [],
+                "dormant_resources": [],
+                "deferred_source_scopes": [],
+                "binary_edge_resolutions": [],
             }
         )
     )
@@ -353,6 +428,120 @@ def test_config_preserves_tobex_prefix_and_emits_exact_metadata_and_defaults() -
     assert "sr_arcane_level_1_default = -1" in assignments
     assert "sr_wizard_magic_missile = -1" in assignments
     assert rendered.count("\r\n") == rendered.count("\n")
+
+
+def test_support_metadata_is_documented_but_never_becomes_a_setting() -> None:
+    catalog = _catalog_with_support_metadata()
+
+    markdown = render_markdown_catalog(catalog, _texts())
+    html_region = render_html_catalog(catalog, _texts(), newline="\n")
+    rendered_config = render_config(
+        catalog, "install_tobex = 1\n", newline="\n"
+    )
+    baseline_config = render_config(
+        _catalog(), "install_tobex = 1\n", newline="\n"
+    )
+
+    for heading in (
+        "Support infrastructure",
+        "Deferred source scopes",
+        "Dormant payloads",
+        "Audited binary-external overrides",
+    ):
+        assert f"## {heading}" in markdown
+        assert f"<h4>{heading}</h4>" in html_region
+    for value in (
+        "support.processor",
+        "consumer_selected",
+        "metadata.index",
+        "deferred.future",
+        "Needs an explicit compatibility policy.",
+        "spell_rev/shared/unused.spl",
+        "Shipped upstream but unreachable from component zero.",
+        "spell_rev/shared/source.spl",
+        "0xae",
+        "ability[0].effect[0].resource",
+        "CHILDSPL",
+        "spell_rev/shared/childspl.spl",
+    ):
+        assert value in markdown
+        assert value in html_region
+
+    assignments = [
+        line
+        for line in rendered_config.splitlines()
+        if line and not line.startswith("//")
+    ]
+    assert [line for line in assignments if " = " in line] == [
+        "install_tobex = 1",
+        "sr_config_schema = 1",
+        "sr_default = 1",
+        "sr_arcane_default = -1",
+        "sr_arcane_level_1_default = -1",
+        "sr_wizard_magic_missile = -1",
+    ]
+    for internal_value in (
+        "support.processor",
+        "metadata.index",
+        "deferred.future",
+        "unused.spl",
+        "childspl.spl",
+    ):
+        assert internal_value not in rendered_config
+
+    fingerprint_pattern = re.compile(
+        r"^SPRINT sr_catalog_fingerprint ~[0-9a-f]{64}~$", re.MULTILINE
+    )
+    assert fingerprint_pattern.sub("<fingerprint>", rendered_config) == (
+        fingerprint_pattern.sub("<fingerprint>", baseline_config)
+    )
+
+
+def test_fingerprint_includes_every_support_metadata_collection() -> None:
+    baseline = _catalog_with_support_metadata()
+    raw = json.loads(json.dumps(asdict(baseline)))
+    variants: list[Catalog] = []
+    for collection in (
+        "dormant_resources",
+        "deferred_source_scopes",
+        "binary_edge_resolutions",
+    ):
+        changed = json.loads(json.dumps(raw))
+        changed[collection][0]["reason"] += " Updated."
+        variants.append(Catalog.from_dict(changed))
+    changed_requirements = json.loads(json.dumps(raw))
+    changed_requirements["infrastructure"][0]["infrastructure_requires"] = []
+    variants.append(Catalog.from_dict(changed_requirements))
+    changed_activation = json.loads(json.dumps(raw))
+    changed_activation["infrastructure"][1]["category"] = "derived"
+    changed_activation["infrastructure"][1]["activation"] = "consumer_selected"
+    variants.append(Catalog.from_dict(changed_activation))
+
+    fingerprints = {catalog_fingerprint(baseline)} | {
+        catalog_fingerprint(variant) for variant in variants
+    }
+
+    assert baseline.schema_version == 1
+    assert len(fingerprints) == 6
+
+
+def test_support_metadata_uses_table_safe_variable_length_code_spans() -> None:
+    raw = json.loads(json.dumps(asdict(_catalog_with_support_metadata())))
+    raw["changes"][0]["processors"] = ["support`|processor"]
+    raw["infrastructure"][0]["id"] = "support`|processor"
+    raw["binary_edge_resolutions"][0]["field"] = (
+        "ability[0].effect[`tick`|0].resource"
+    )
+    catalog = Catalog.from_dict(raw)
+
+    markdown = render_markdown_catalog(catalog, _texts())
+
+    assert "``support`\\|processor``" in markdown
+    assert "``ability[0].effect[`tick`\\|0].resource``" in markdown
+    infrastructure_row = next(
+        line for line in markdown.splitlines() if "support`" in line
+    )
+    assert infrastructure_row.count(" | ") == 6
 
 
 @pytest.mark.parametrize(

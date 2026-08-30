@@ -201,6 +201,7 @@ def render_markdown_catalog(catalog: Catalog, texts: Mapping[str, str]) -> str:
                 "closed until upstream classification is complete.",
             ]
         )
+    _append_markdown_support_sections(lines, catalog)
     return "\n".join(lines) + "\n"
 
 
@@ -295,6 +296,7 @@ def render_html_catalog(
             "<p>No public changes have been cataloged yet. The migration gate remains "
             "closed until upstream classification is complete.</p>"
         )
+    _append_html_support_sections(lines, catalog)
     result = newline.join(lines) + newline
     # All dynamic Unicode is represented by ASCII numeric references because the
     # surrounding upstream document is intentionally ISO-8859-1.
@@ -704,6 +706,256 @@ def _provenance(catalog: Catalog, change: Change) -> str:
         for span in change.source_spans
     )
     return f"{base}; {spans}"
+
+
+def _span_provenance(source_spans) -> str:
+    if not source_spans:
+        return "None"
+    return "; ".join(
+        f"{span.path}: {span.start} .. "
+        f"{span.end if span.end is not None else 'EOF'} [{span.sha256}]"
+        for span in source_spans
+    )
+
+
+def _resource_provenance(resources) -> str:
+    if not resources:
+        return "None"
+    return ", ".join(f"{resource.path} ({resource.kind})" for resource in resources)
+
+
+def _markdown_code(value: str) -> str:
+    content = single_line(value).replace("|", "\\|")
+    longest_run = max(
+        (len(match.group(0)) for match in re.finditer(r"`+", content)),
+        default=0,
+    )
+    delimiter = "`" * (longest_run + 1)
+    padding = " " if content.startswith("`") or content.endswith("`") else ""
+    return f"{delimiter}{padding}{content}{padding}{delimiter}"
+
+
+def _append_markdown_support_sections(lines: list[str], catalog: Catalog) -> None:
+    lines.extend(("", "## Support infrastructure", ""))
+    if catalog.infrastructure:
+        lines.extend(
+            (
+                "| ID | Category | Activation | Infrastructure requires | "
+                "Consumers | Resources | Upstream provenance |",
+                "|---|---|---|---|---|---|---|",
+            )
+        )
+        for record in catalog.infrastructure:
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        _markdown_code(record.id),
+                        _markdown_code(record.category),
+                        _markdown_code(record.activation),
+                        ", ".join(
+                            _markdown_code(value)
+                            for value in record.infrastructure_requires
+                        )
+                        or "None",
+                        ", ".join(
+                            _markdown_code(value) for value in record.consumers
+                        )
+                        or "None",
+                        _markdown(_resource_provenance(record.resources)),
+                        _markdown(_span_provenance(record.source_spans)),
+                    )
+                )
+                + " |"
+            )
+    else:
+        lines.append("No support infrastructure is declared.")
+
+    lines.extend(("", "## Deferred source scopes", ""))
+    if catalog.deferred_source_scopes:
+        lines.extend(
+            (
+                "| ID | Reason | Exact source spans | Resources |",
+                "|---|---|---|---|",
+            )
+        )
+        for record in catalog.deferred_source_scopes:
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        _markdown_code(record.id),
+                        _markdown(record.reason),
+                        _markdown(_span_provenance(record.source_spans)),
+                        _markdown(_resource_provenance(record.resources)),
+                    )
+                )
+                + " |"
+            )
+    else:
+        lines.append("No deferred source scopes are declared.")
+
+    lines.extend(("", "## Dormant payloads", ""))
+    if catalog.dormant_resources:
+        lines.extend(("| Exact repository path | Reason |", "|---|---|"))
+        for record in catalog.dormant_resources:
+            lines.append(
+                f"| {_markdown_code(record.path)} | {_markdown(record.reason)} |"
+            )
+    else:
+        lines.append("No dormant payloads are declared.")
+
+    lines.extend(("", "## Audited binary-external overrides", ""))
+    if catalog.binary_edge_resolutions:
+        lines.extend(
+            (
+                "| Source / offset | Field | Opcode | Target / expected types | "
+                "Complete shadowed candidates | Classification / reason |",
+                "|---|---|---:|---|---|---|",
+            )
+        )
+        for record in catalog.binary_edge_resolutions:
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        f"{_markdown_code(record.source)} / {_markdown_code(hex(record.offset))}",
+                        _markdown_code(record.field),
+                        "null" if record.opcode is None else str(record.opcode),
+                        f"{_markdown_code(record.target)} / "
+                        + ", ".join(
+                            _markdown_code(value) for value in record.expected_types
+                        ),
+                        ", ".join(
+                            _markdown_code(value)
+                            for value in record.shadowed_candidates
+                        ),
+                        f"{_markdown_code(record.classification)} / "
+                        f"{_markdown(record.reason)}",
+                    )
+                )
+                + " |"
+            )
+    else:
+        lines.append("No binary-external overrides are declared.")
+
+
+def _append_html_support_sections(lines: list[str], catalog: Catalog) -> None:
+    lines.append("<h4>Support infrastructure</h4>")
+    if catalog.infrastructure:
+        rows = []
+        for record in catalog.infrastructure:
+            rows.append(
+                (
+                    record.id,
+                    record.category,
+                    record.activation,
+                    ", ".join(record.infrastructure_requires) or "None",
+                    ", ".join(record.consumers) or "None",
+                    _resource_provenance(record.resources),
+                    _span_provenance(record.source_spans),
+                )
+            )
+        _append_html_table(
+            lines,
+            (
+                "ID",
+                "Category",
+                "Activation",
+                "Infrastructure requires",
+                "Consumers",
+                "Resources",
+                "Upstream provenance",
+            ),
+            rows,
+            "sr-config-infrastructure",
+        )
+    else:
+        lines.append("<p>No support infrastructure is declared.</p>")
+
+    lines.append("<h4>Deferred source scopes</h4>")
+    if catalog.deferred_source_scopes:
+        _append_html_table(
+            lines,
+            ("ID", "Reason", "Exact source spans", "Resources"),
+            [
+                (
+                    record.id,
+                    record.reason,
+                    _span_provenance(record.source_spans),
+                    _resource_provenance(record.resources),
+                )
+                for record in catalog.deferred_source_scopes
+            ],
+            "sr-config-deferred",
+        )
+    else:
+        lines.append("<p>No deferred source scopes are declared.</p>")
+
+    lines.append("<h4>Dormant payloads</h4>")
+    if catalog.dormant_resources:
+        _append_html_table(
+            lines,
+            ("Exact repository path", "Reason"),
+            [(record.path, record.reason) for record in catalog.dormant_resources],
+            "sr-config-dormant",
+        )
+    else:
+        lines.append("<p>No dormant payloads are declared.</p>")
+
+    lines.append("<h4>Audited binary-external overrides</h4>")
+    if catalog.binary_edge_resolutions:
+        _append_html_table(
+            lines,
+            (
+                "Source / offset",
+                "Field",
+                "Opcode",
+                "Target / expected types",
+                "Complete shadowed candidates",
+                "Classification / reason",
+            ),
+            [
+                (
+                    f"{record.source} / {hex(record.offset)}",
+                    record.field,
+                    "null" if record.opcode is None else str(record.opcode),
+                    f"{record.target} / {', '.join(record.expected_types)}",
+                    ", ".join(record.shadowed_candidates),
+                    f"{record.classification} / {record.reason}",
+                )
+                for record in catalog.binary_edge_resolutions
+            ],
+            "sr-config-binary-overrides",
+        )
+    else:
+        lines.append("<p>No binary-external overrides are declared.</p>")
+
+
+def _append_html_table(
+    lines: list[str],
+    headings: tuple[str, ...],
+    rows: list[tuple[str, ...]],
+    css_class: str,
+) -> None:
+    lines.extend(
+        (
+            f'<table class="{css_class}">',
+            "  <thead>",
+            "    <tr>"
+            + "".join(f"<th>{_html(heading)}</th>" for heading in headings)
+            + "</tr>",
+            "  </thead>",
+            "  <tbody>",
+        )
+    )
+    for row in rows:
+        lines.append(
+            "    <tr>"
+            + "".join(f"<td>{_html(value)}</td>" for value in row)
+            + "</tr>"
+        )
+    lines.extend(("  </tbody>", "</table>"))
 
 
 def _effective_default_label(catalog: Catalog, change: Change) -> str:

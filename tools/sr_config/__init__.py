@@ -1,9 +1,12 @@
 """Development tooling for the configurable Spell Revisions catalog."""
 
 from .catalog import (
+    BinaryEdgeResolution,
     Catalog,
     CatalogError,
     Change,
+    DeferredSourceScope,
+    DormantResource,
     Group,
     IncludeResolution,
     Infrastructure,
@@ -18,9 +21,12 @@ from .catalog import (
 )
 
 __all__ = [
+    "BinaryEdgeResolution",
     "Catalog",
     "CatalogError",
     "Change",
+    "DeferredSourceScope",
+    "DormantResource",
     "Group",
     "IncludeResolution",
     "Infrastructure",

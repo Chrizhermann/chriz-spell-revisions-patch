@@ -77,6 +77,9 @@ def sample_catalog(*changes: dict[str, Any]) -> Catalog:
         ],
         "changes": list(changes),
         "infrastructure": [],
+        "dormant_resources": [],
+        "deferred_source_scopes": [],
+        "binary_edge_resolutions": [],
     }
     return Catalog.from_dict(raw)
 

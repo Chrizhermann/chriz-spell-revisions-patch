@@ -144,5 +144,8 @@
     }
   ],
   "changes": [],
-  "infrastructure": []
+  "infrastructure": [],
+  "dormant_resources": [],
+  "deferred_source_scopes": [],
+  "binary_edge_resolutions": []
 }

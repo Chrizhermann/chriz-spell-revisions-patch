@@ -875,6 +875,8 @@ def _write_binary_coverage_fixture(
                 {
                     "id": "shared_processor",
                     "category": "derived",
+                    "activation": "consumer_selected",
+                    "infrastructure_requires": [],
                     "source_spans": [],
                     "resources": [
                         {"path": "spell_rev/assets/shared.spl", "kind": "asset"}
@@ -882,6 +884,9 @@ def _write_binary_coverage_fixture(
                     "consumers": ["source"],
                 }
             ],
+            "dormant_resources": [],
+            "deferred_source_scopes": [],
+            "binary_edge_resolutions": [],
         }
     )
 

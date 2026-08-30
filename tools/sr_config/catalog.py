@@ -32,6 +32,7 @@ _TRI_STATE_VALUES = frozenset({-1, 0, 1})
 INFRASTRUCTURE_CATEGORIES = frozenset(
     {"derived", "compatibility", "mandatory_metadata"}
 )
+INFRASTRUCTURE_ACTIVATIONS = frozenset({"consumer_selected", "always"})
 MEMBER_REFERENCE_ROLES = frozenset(
     {
         "active",
@@ -46,6 +47,7 @@ _HEX_DIGITS = frozenset(string.hexdigits)
 _SETTING_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 _TRA_REFERENCE_PATTERN = re.compile(r"@[0-9]+\Z")
 _RESREF_PATTERN = re.compile(r"[A-Z0-9_#]{1,8}\Z")
+_RESOURCE_TYPE_PATTERN = re.compile(r"[A-Z0-9]{1,8}\Z")
 _WINDOWS_FORBIDDEN_PATH_CHARACTERS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_PATH_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -95,6 +97,33 @@ class SourceSpan:
 class ResourceOwnership:
     path: str
     kind: str
+
+
+@dataclass(frozen=True)
+class DormantResource:
+    path: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class DeferredSourceScope:
+    id: str
+    reason: str
+    source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
+    resources: tuple[ResourceOwnership, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class BinaryEdgeResolution:
+    source: str
+    offset: int
+    field: str
+    opcode: int | None
+    target: str
+    expected_types: tuple[str, ...]
+    shadowed_candidates: tuple[str, ...]
+    classification: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -159,6 +188,8 @@ class Change:
 @dataclass(frozen=True)
 class Infrastructure:
     id: str
+    activation: str
+    infrastructure_requires: tuple[str, ...]
     source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
     resources: tuple[ResourceOwnership, ...] = field(default_factory=tuple)
     consumers: tuple[str, ...] = field(default_factory=tuple)
@@ -175,6 +206,9 @@ class Catalog:
     groups: tuple[Group, ...]
     changes: tuple[Change, ...]
     infrastructure: tuple[Infrastructure, ...]
+    dormant_resources: tuple[DormantResource, ...]
+    deferred_source_scopes: tuple[DeferredSourceScope, ...]
+    binary_edge_resolutions: tuple[BinaryEdgeResolution, ...]
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> Catalog:
@@ -189,6 +223,9 @@ class Catalog:
                 "groups",
                 "changes",
                 "infrastructure",
+                "dormant_resources",
+                "deferred_source_scopes",
+                "binary_edge_resolutions",
             },
             required={
                 "schema_version",
@@ -197,6 +234,9 @@ class Catalog:
                 "groups",
                 "changes",
                 "infrastructure",
+                "dormant_resources",
+                "deferred_source_scopes",
+                "binary_edge_resolutions",
             },
         )
 
@@ -230,6 +270,32 @@ class Catalog:
             for index, value in enumerate(infrastructure_raw)
         )
 
+        dormant_raw = _list(catalog_raw["dormant_resources"], "dormant_resources")
+        dormant_resources = tuple(
+            _parse_dormant_resource(value, f"dormant_resources[{index}]")
+            for index, value in enumerate(dormant_raw)
+        )
+
+        deferred_raw = _list(
+            catalog_raw["deferred_source_scopes"], "deferred_source_scopes"
+        )
+        deferred_source_scopes = tuple(
+            _parse_deferred_source_scope(
+                value, f"deferred_source_scopes[{index}]"
+            )
+            for index, value in enumerate(deferred_raw)
+        )
+
+        binary_raw = _list(
+            catalog_raw["binary_edge_resolutions"], "binary_edge_resolutions"
+        )
+        binary_edge_resolutions = tuple(
+            _parse_binary_edge_resolution(
+                value, f"binary_edge_resolutions[{index}]"
+            )
+            for index, value in enumerate(binary_raw)
+        )
+
         catalog = cls(
             schema_version=schema_version,
             upstream=upstream,
@@ -237,6 +303,9 @@ class Catalog:
             groups=groups,
             changes=changes,
             infrastructure=infrastructure,
+            dormant_resources=dormant_resources,
+            deferred_source_scopes=deferred_source_scopes,
+            binary_edge_resolutions=binary_edge_resolutions,
         )
         _validate_catalog(catalog)
         return catalog
@@ -347,6 +416,134 @@ def _parse_resource(value: Any, path: str) -> ResourceOwnership:
     return ResourceOwnership(
         path=_repository_path(raw["path"], f"{path}.path"),
         kind=_identifier(raw["kind"], f"{path}.kind"),
+    )
+
+
+def _parse_dormant_resource(value: Any, path: str) -> DormantResource:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={"path", "reason"},
+        required={"path", "reason"},
+    )
+    return DormantResource(
+        path=_repository_path(raw["path"], f"{path}.path"),
+        reason=_nonblank_string(raw["reason"], f"{path}.reason"),
+    )
+
+
+def _parse_deferred_source_scope(value: Any, path: str) -> DeferredSourceScope:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={"id", "reason", "source_spans", "resources"},
+        required={"id", "reason", "source_spans", "resources"},
+    )
+    source_spans = _list(raw["source_spans"], f"{path}.source_spans")
+    if not source_spans:
+        raise CatalogError(
+            f"{path}.source_spans: must contain at least one exact source span"
+        )
+    resources = _list(raw["resources"], f"{path}.resources")
+    return DeferredSourceScope(
+        id=_identifier(raw["id"], f"{path}.id"),
+        reason=_nonblank_string(raw["reason"], f"{path}.reason"),
+        source_spans=tuple(
+            _parse_source_span(item, f"{path}.source_spans[{index}]")
+            for index, item in enumerate(source_spans)
+        ),
+        resources=tuple(
+            _parse_resource(item, f"{path}.resources[{index}]")
+            for index, item in enumerate(resources)
+        ),
+    )
+
+
+def _parse_binary_edge_resolution(value: Any, path: str) -> BinaryEdgeResolution:
+    raw = _mapping(value, path)
+    fields = {
+        "source",
+        "offset",
+        "field",
+        "opcode",
+        "target",
+        "expected_types",
+        "shadowed_candidates",
+        "classification",
+        "reason",
+    }
+    _check_keys(raw, path=path, allowed=fields, required=fields)
+    offset = _integer(raw["offset"], f"{path}.offset")
+    if offset < 0:
+        raise CatalogError(f"{path}.offset: expected a non-negative integer")
+    opcode_raw = raw["opcode"]
+    if opcode_raw is None:
+        opcode = None
+    else:
+        opcode = _integer(opcode_raw, f"{path}.opcode")
+        if opcode < 0:
+            raise CatalogError(f"{path}.opcode: expected a non-negative integer or null")
+
+    expected_raw = _list(raw["expected_types"], f"{path}.expected_types")
+    if not expected_raw:
+        raise CatalogError(f"{path}.expected_types: must contain at least one type")
+    expected_types: list[str] = []
+    expected_seen: dict[str, int] = {}
+    for index, item in enumerate(expected_raw):
+        item_path = f"{path}.expected_types[{index}]"
+        resource_type = _string(item, item_path)
+        if _RESOURCE_TYPE_PATTERN.fullmatch(resource_type) is None:
+            raise CatalogError(
+                f"{item_path}: expected an uppercase resource type such as SPL"
+            )
+        normalized = _normalize(resource_type)
+        if normalized in expected_seen:
+            raise CatalogError(
+                f"{item_path}: duplicate resource type {resource_type!r}; first "
+                f"declared at {path}.expected_types[{expected_seen[normalized]}]"
+            )
+        expected_seen[normalized] = index
+        expected_types.append(resource_type)
+
+    candidates_raw = _list(
+        raw["shadowed_candidates"], f"{path}.shadowed_candidates"
+    )
+    if not candidates_raw:
+        raise CatalogError(
+            f"{path}.shadowed_candidates: must contain at least one repository path"
+        )
+    shadowed_candidates: list[str] = []
+    candidate_seen: dict[str, int] = {}
+    for index, item in enumerate(candidates_raw):
+        item_path = f"{path}.shadowed_candidates[{index}]"
+        candidate = _repository_path(item, item_path)
+        normalized = _normalize(candidate)
+        if normalized in candidate_seen:
+            raise CatalogError(
+                f"{item_path}: duplicate shadowed candidate {candidate!r}; first "
+                f"declared at {path}.shadowed_candidates[{candidate_seen[normalized]}]"
+            )
+        candidate_seen[normalized] = index
+        shadowed_candidates.append(candidate)
+
+    classification = _identifier(raw["classification"], f"{path}.classification")
+    if classification != "external":
+        raise CatalogError(f"{path}.classification: expected 'external'")
+    target = _nonblank_string(raw["target"], f"{path}.target")
+    if target != target.strip():
+        raise CatalogError(f"{path}.target: must not have leading or trailing whitespace")
+    return BinaryEdgeResolution(
+        source=_repository_path(raw["source"], f"{path}.source"),
+        offset=offset,
+        field=_nonblank_string(raw["field"], f"{path}.field"),
+        opcode=opcode,
+        target=target,
+        expected_types=tuple(expected_types),
+        shadowed_candidates=tuple(shadowed_candidates),
+        classification=classification,
+        reason=_nonblank_string(raw["reason"], f"{path}.reason"),
     )
 
 
@@ -710,6 +907,8 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
         path=path,
         allowed={
             "id",
+            "activation",
+            "infrastructure_requires",
             "source_spans",
             "resources",
             "consumers",
@@ -717,7 +916,7 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
             "include_resolutions",
             "source_resolutions",
         },
-        required={"id"},
+        required={"id", "activation", "infrastructure_requires"},
     )
     source_spans_raw = _list(raw.get("source_spans", []), f"{path}.source_spans")
     resources_raw = _list(raw.get("resources", []), f"{path}.resources")
@@ -729,6 +928,12 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
     )
     return Infrastructure(
         id=_identifier(raw["id"], f"{path}.id"),
+        activation=_infrastructure_activation(
+            raw["activation"], f"{path}.activation"
+        ),
+        infrastructure_requires=_identifier_tuple(
+            raw["infrastructure_requires"], f"{path}.infrastructure_requires"
+        ),
         source_spans=tuple(
             _parse_source_span(item, f"{path}.source_spans[{index}]")
             for index, item in enumerate(source_spans_raw)
@@ -764,6 +969,14 @@ def _infrastructure_category(value: Any, path: str) -> str:
         expected = ", ".join(sorted(INFRASTRUCTURE_CATEGORIES))
         raise CatalogError(f"{path}: expected one of {expected}")
     return category
+
+
+def _infrastructure_activation(value: Any, path: str) -> str:
+    activation = _identifier(value, path)
+    if activation not in INFRASTRUCTURE_ACTIVATIONS:
+        expected = ", ".join(sorted(INFRASTRUCTURE_ACTIVATIONS))
+        raise CatalogError(f"{path}: expected one of {expected}")
+    return activation
 
 
 def _validate_catalog(catalog: Catalog) -> None:
@@ -858,6 +1071,48 @@ def _validate_catalog(catalog: Catalog) -> None:
                 )
             source_resolutions[key] = (index, resolution_index)
 
+    for index, record in enumerate(catalog.deferred_source_scopes):
+        normalized_id = _normalize(record.id)
+        _record_unique_id(
+            normalized_id,
+            record.id,
+            index,
+            "deferred_source_scopes",
+            all_ids,
+        )
+
+    dormant_paths: dict[str, int] = {}
+    for index, record in enumerate(catalog.dormant_resources):
+        normalized_path = _normalize(record.path)
+        previous = dormant_paths.get(normalized_path)
+        if previous is not None:
+            raise CatalogError(
+                f"dormant_resources[{index}].path: duplicate dormant resource "
+                f"{record.path!r}; first declared at dormant_resources[{previous}].path"
+            )
+        dormant_paths[normalized_path] = index
+
+    binary_keys: dict[tuple[str, int, str], int] = {}
+    for index, record in enumerate(catalog.binary_edge_resolutions):
+        key = (
+            _normalize(record.source),
+            record.offset,
+            _normalize(record.field),
+        )
+        previous = binary_keys.get(key)
+        if previous is not None:
+            raise CatalogError(
+                f"binary_edge_resolutions[{index}]: duplicate binary edge "
+                "resolution; first declared at "
+                f"binary_edge_resolutions[{previous}]"
+            )
+        binary_keys[key] = index
+
+    if catalog.migration.complete and catalog.deferred_source_scopes:
+        raise CatalogError(
+            "migration.complete: cannot be true while deferred source scopes remain"
+        )
+
     for index, record in enumerate(catalog.groups):
         if record.parent is not None and _normalize(record.parent) not in group_ids:
             raise CatalogError(
@@ -894,12 +1149,35 @@ def _validate_catalog(catalog: Catalog) -> None:
 
     catalog_owner_ids = {**change_ids, **infrastructure_ids}
     for index, record in enumerate(catalog.infrastructure):
+        if (record.activation == "always") != (
+            record.category == "mandatory_metadata"
+        ):
+            raise CatalogError(
+                f"infrastructure[{index}].activation: 'always' is required exactly "
+                "when category is 'mandatory_metadata'"
+            )
         _validate_known_references(
             record.consumers,
             path=f"infrastructure[{index}].consumers",
             known=change_ids,
             description="change ID",
         )
+        _validate_known_references(
+            record.infrastructure_requires,
+            path=f"infrastructure[{index}].infrastructure_requires",
+            known=infrastructure_ids,
+            description="infrastructure ID",
+        )
+        normalized_id = _normalize(record.id)
+        for requirement_index, requirement in enumerate(
+            record.infrastructure_requires
+        ):
+            if _normalize(requirement) == normalized_id:
+                raise CatalogError(
+                    f"infrastructure[{index}].infrastructure_requires"
+                    f"[{requirement_index}]: infrastructure dependency cannot "
+                    "reference itself"
+                )
         for resolution_index, resolution in enumerate(record.source_resolutions):
             _validate_known_references(
                 resolution.generated_owners,
@@ -913,6 +1191,9 @@ def _validate_catalog(catalog: Catalog) -> None:
 
     _validate_processor_consumers(catalog, infrastructure_ids)
     _validate_dependency_cycles(catalog.changes, change_ids)
+    _validate_infrastructure_dependency_cycles(
+        catalog.infrastructure, infrastructure_ids
+    )
 
 
 def _validate_root_group(groups: tuple[Group, ...]) -> None:
@@ -1087,6 +1368,21 @@ def _validate_processor_consumers(
                     f"processor edge is not reciprocated by "
                     f"infrastructure[{infrastructure_index}].consumers"
                 )
+    change_ids = {
+        _normalize(record.id): index for index, record in enumerate(catalog.changes)
+    }
+    for infrastructure_index, record in enumerate(catalog.infrastructure):
+        for consumer_index, consumer in enumerate(record.consumers):
+            change_index = change_ids[_normalize(consumer)]
+            processors = catalog.changes[change_index].processors
+            if not any(
+                _normalize(value) == _normalize(record.id) for value in processors
+            ):
+                raise CatalogError(
+                    f"infrastructure[{infrastructure_index}].consumers"
+                    f"[{consumer_index}]: consumer edge is not reciprocated by "
+                    f"changes[{change_index}].processors"
+                )
 
 
 def _validate_dependency_cycles(
@@ -1120,6 +1416,48 @@ def _validate_dependency_cycles(
         state[normalized_id] = 2
 
     for record in changes:
+        normalized_id = _normalize(record.id)
+        if state.get(normalized_id, 0) == 0:
+            visit(normalized_id)
+
+
+def _validate_infrastructure_dependency_cycles(
+    infrastructure: tuple[Infrastructure, ...],
+    infrastructure_ids: Mapping[str, tuple[str, int]],
+) -> None:
+    state: dict[str, int] = {}
+    stack: list[str] = []
+
+    def visit(normalized_id: str) -> None:
+        state[normalized_id] = 1
+        stack.append(normalized_id)
+        _, infrastructure_index = infrastructure_ids[normalized_id]
+        for requirement_index, requirement in enumerate(
+            infrastructure[infrastructure_index].infrastructure_requires
+        ):
+            normalized_requirement = _normalize(requirement)
+            requirement_state = state.get(normalized_requirement, 0)
+            if requirement_state == 0:
+                visit(normalized_requirement)
+            elif requirement_state == 1:
+                cycle_start = stack.index(normalized_requirement)
+                cycle_ids = [
+                    infrastructure[infrastructure_ids[item][1]].id
+                    for item in stack[cycle_start:]
+                ]
+                cycle_ids.append(
+                    infrastructure[infrastructure_ids[normalized_requirement][1]].id
+                )
+                raise CatalogError(
+                    f"infrastructure[{infrastructure_index}]."
+                    f"infrastructure_requires[{requirement_index}]: "
+                    "infrastructure dependency cycle: "
+                    f"{' -> '.join(cycle_ids)}"
+                )
+        stack.pop()
+        state[normalized_id] = 2
+
+    for record in infrastructure:
         normalized_id = _normalize(record.id)
         if state.get(normalized_id, 0) == 0:
             visit(normalized_id)
@@ -1178,6 +1516,13 @@ def _string(value: Any, path: str) -> str:
     if not value:
         raise CatalogError(f"{path}: must not be empty")
     return value
+
+
+def _nonblank_string(value: Any, path: str) -> str:
+    result = _string(value, path)
+    if not result.strip():
+        raise CatalogError(f"{path}: must not be blank")
+    return result
 
 
 def _optional_string(value: Any, path: str) -> str | None:

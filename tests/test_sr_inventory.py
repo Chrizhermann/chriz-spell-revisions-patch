@@ -979,6 +979,9 @@ def _write_coverage_language_files(root: Path, source: str = "") -> None:
 def _coverage_catalog(
     *, changes: list[dict[str, object]] | None = None,
     infrastructure: list[dict[str, object]] | None = None,
+    dormant_resources: list[dict[str, object]] | None = None,
+    deferred_source_scopes: list[dict[str, object]] | None = None,
+    binary_edge_resolutions: list[dict[str, object]] | None = None,
 ) -> Catalog:
     return Catalog.from_dict(
         {
@@ -1002,6 +1005,9 @@ def _coverage_catalog(
             ],
             "changes": changes or [],
             "infrastructure": infrastructure or [],
+            "dormant_resources": dormant_resources or [],
+            "deferred_source_scopes": deferred_source_scopes or [],
+            "binary_edge_resolutions": binary_edge_resolutions or [],
         }
     )
 
@@ -1090,6 +1096,8 @@ def test_catalog_coverage_reports_every_unowned_and_multiply_owned_source_node(
             {
                 "id": "compatibility_pass",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [first_span],
                 "resources": [],
                 "consumers": [],
@@ -1366,6 +1374,9 @@ def test_inventory_check_catalog_is_read_only_and_diagnostics_are_deterministic(
         ],
         "changes": [],
         "infrastructure": [],
+        "dormant_resources": [],
+        "deferred_source_scopes": [],
+        "binary_edge_resolutions": [],
     }
     catalog_path.write_text(json.dumps(raw_catalog), encoding="utf-8")
     before = {
@@ -1400,6 +1411,453 @@ def _minimal_coverage_spl() -> bytes:
     struct.pack_into("<I", spell, 0x64, len(spell))
     struct.pack_into("<I", spell, 0x6A, len(spell))
     return bytes(spell)
+
+
+def _coverage_spl_with_effects(*targets: str) -> bytes:
+    ability_offset = 0x72
+    effect_offset = ability_offset + 0x28
+    spell = bytearray(effect_offset + len(targets) * 0x30)
+    spell[:8] = b"SPL V1  "
+    struct.pack_into("<I", spell, 0x64, ability_offset)
+    struct.pack_into("<H", spell, 0x68, 1)
+    struct.pack_into("<I", spell, 0x6A, effect_offset)
+    struct.pack_into("<H", spell, ability_offset + 0x1E, len(targets))
+    for index, target in enumerate(targets):
+        offset = effect_offset + index * 0x30
+        struct.pack_into("<H", spell, offset, 146)
+        encoded = target.encode("ascii")
+        assert len(encoded) <= 8
+        spell[offset + 0x14 : offset + 0x1C] = encoded.ljust(8, b"\0")
+    return bytes(spell)
+
+
+def _binary_resolution(
+    *, offset: int = 0xAE, shadowed_candidates: list[str] | None = None
+) -> dict[str, object]:
+    return {
+        "source": "spell_rev/assets/source.spl",
+        "offset": offset,
+        "field": (
+            f"ability[0].effect[{(offset - 0xAE) // 0x30}].resource"
+        ),
+        "opcode": 146,
+        "target": "CHILD",
+        "expected_types": ["SPL"],
+        "shadowed_candidates": shadowed_candidates
+        or ["spell_rev/assets/child.spl"],
+        "classification": "external",
+        "reason": "The same-resref package payload is dormant and is not installed.",
+    }
+
+
+def test_deferred_scope_owns_component_zero_source_and_resources(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// deferred start\n"
+        b"COPY ~spell_rev/assets/deferred.spl~ ~override~\n"
+        b"// deferred end\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "deferred.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path)
+    catalog = _coverage_catalog(
+        deferred_source_scopes=[
+            {
+                "id": "deferred.future",
+                "reason": "Requires a later design decision.",
+                "source_spans": [
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// deferred start",
+                        b"// deferred end",
+                    )
+                ],
+                "resources": [
+                    {
+                        "path": "spell_rev/assets/deferred.spl",
+                        "kind": "asset",
+                    }
+                ],
+            }
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.source_edges[0].classification == "owned"
+
+
+def test_dormant_payload_must_exist_exactly_and_remain_unowned_and_unreachable(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "unused.spl").write_bytes(
+        _coverage_spl_with_effects("EXTERN")
+    )
+    _write_coverage_language_files(tmp_path)
+    declaration = {
+        "path": "spell_rev/assets/unused.spl",
+        "reason": "Present upstream but unreachable from component zero.",
+    }
+
+    valid_result = audit_catalog_coverage(
+        tmp_path, _coverage_catalog(dormant_resources=[declaration])
+    )
+    assert valid_result.ok
+    assert valid_result.binary_edges == ()
+
+    missing = {**declaration, "path": "spell_rev/assets/Unused.spl"}
+    missing_result = audit_catalog_coverage(
+        tmp_path, _coverage_catalog(dormant_resources=[missing])
+    )
+    assert "missing_dormant_resource" in {
+        issue.code for issue in missing_result.issues
+    }
+
+    claimed_result = audit_catalog_coverage(
+        tmp_path,
+        _coverage_catalog(
+            changes=[
+                _coverage_change(
+                    "owner",
+                    resources=[
+                        {"path": declaration["path"], "kind": "asset"}
+                    ],
+                )
+            ],
+            dormant_resources=[declaration],
+        ),
+    )
+    assert "claimed_dormant_resource" in {
+        issue.code for issue in claimed_result.issues
+    }
+
+    source = b"// start\nCOPY ~spell_rev/assets/unused.spl~ ~override~\n"
+    component.write_bytes(source)
+    reachable_result = audit_catalog_coverage(
+        tmp_path,
+        _coverage_catalog(
+            changes=[
+                _coverage_change(
+                    "source",
+                    source_spans=[
+                        _coverage_span(
+                            "spell_rev/components/main_component.tpa",
+                            source,
+                            b"// start",
+                            None,
+                        )
+                    ],
+                )
+            ],
+            dormant_resources=[declaration],
+        ),
+    )
+    assert "reachable_dormant_resource" in {
+        issue.code for issue in reachable_result.issues
+    }
+
+
+def test_dormant_payload_outside_package_root_is_stale(tmp_path: Path) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    outside = tmp_path / "other/unused.spl"
+    outside.parent.mkdir()
+    outside.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path)
+    catalog = _coverage_catalog(
+        dormant_resources=[
+            {
+                "path": "other/unused.spl",
+                "reason": "No longer belongs to the package payload.",
+            }
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "stale_dormant_resource" in {issue.code for issue in result.issues}
+
+
+def test_directory_copy_makes_every_dormant_descendant_source_reachable(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/dormant~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    dormant_dir = tmp_path / "spell_rev/assets/dormant"
+    dormant_dir.mkdir(parents=True)
+    (dormant_dir / "unused.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/dormant/unused.spl",
+                "reason": "Directory copy reachability fixture.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "reachable_dormant_resource" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_infrastructure_edges_require_an_explicit_infrastructure_dependency(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/target.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "target.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path)
+    source_record = {
+        "id": "source.infrastructure",
+        "category": "derived",
+        "activation": "consumer_selected",
+        "infrastructure_requires": ["target.infrastructure"],
+        "source_spans": [
+            _coverage_span(
+                "spell_rev/components/main_component.tpa",
+                source,
+                b"// start",
+                None,
+            )
+        ],
+        "resources": [],
+        "consumers": [],
+    }
+    target_record = {
+        "id": "target.infrastructure",
+        "category": "derived",
+        "activation": "consumer_selected",
+        "infrastructure_requires": [],
+        "source_spans": [],
+        "resources": [
+            {"path": "spell_rev/assets/target.spl", "kind": "asset"}
+        ],
+        "consumers": [],
+    }
+
+    related = audit_catalog_coverage(
+        tmp_path,
+        _coverage_catalog(infrastructure=[source_record, target_record]),
+    )
+    unrelated_record = dict(source_record)
+    unrelated_record["infrastructure_requires"] = []
+    unrelated = audit_catalog_coverage(
+        tmp_path,
+        _coverage_catalog(
+            infrastructure=[unrelated_record, target_record]
+        ),
+    )
+
+    assert related.ok
+    assert related.source_edges[0].classification == "hard"
+    assert unrelated.source_edges[0].classification is None
+    assert "unclassified_local_source_edge" in {
+        issue.code for issue in unrelated.issues
+    }
+
+
+def test_binary_external_override_is_exact_and_only_changes_one_edge(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(
+        _coverage_spl_with_effects("CHILD", "CHILD")
+    )
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    dormant = {
+        "path": "spell_rev/assets/child.spl",
+        "reason": "Present upstream but not installed.",
+    }
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        dormant_resources=[dormant],
+        binary_edge_resolutions=[_binary_resolution()],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [edge.classification for edge in result.binary_edges] == [
+        "external",
+        None,
+    ]
+    assert sum(
+        issue.code == "unclassified_local_binary_edge" for issue in result.issues
+    ) == 1
+    assert sum(
+        issue.code == "missing_binary_edge_resolution" for issue in result.issues
+    ) == 1
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_code"),
+    [
+        ({"offset": 0xFFFF}, "stale_binary_edge_resolution"),
+        ({"field": "ability[0].effect[9].resource"}, "stale_binary_edge_resolution"),
+        ({"opcode": None}, "mismatched_binary_edge_resolution"),
+        ({"target": "WRONG"}, "mismatched_binary_edge_resolution"),
+        ({"expected_types": ["ITM"]}, "mismatched_binary_edge_resolution"),
+        (
+            {"shadowed_candidates": ["spell_rev/assets/wrong.spl"]},
+            "mismatched_binary_edge_resolution",
+        ),
+    ],
+)
+def test_binary_external_override_rejects_stale_or_mismatched_metadata(
+    tmp_path: Path, mutation: dict[str, object], expected_code: str
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    override = _binary_resolution()
+    override.update(mutation)
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/child.spl",
+                "reason": "Present upstream but not installed.",
+            }
+        ],
+        binary_edge_resolutions=[override],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert expected_code in {issue.code for issue in result.issues}
+    assert result.binary_edges[0].classification is None
+
+
+def test_binary_external_override_requires_complete_unowned_candidate_set(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    shadow = tmp_path / "spell_rev/shadow"
+    assets.mkdir()
+    shadow.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    (shadow / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/child.spl",
+                "reason": "Present upstream but not installed.",
+            },
+            {
+                "path": "spell_rev/shadow/child.spl",
+                "reason": "Present upstream but not installed.",
+            },
+        ],
+        binary_edge_resolutions=[_binary_resolution()],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "mismatched_binary_edge_resolution" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_binary_external_override_rejects_owned_shadow_candidate(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Source~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {"path": "spell_rev/assets/child.spl", "kind": "asset"},
+                ],
+            )
+        ],
+        binary_edge_resolutions=[_binary_resolution()],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "owned_binary_external_candidate" in {
+        issue.code for issue in result.issues
+    }
 
 
 def test_eof_source_span_owns_the_final_executable_node(tmp_path: Path) -> None:
@@ -1627,6 +2085,8 @@ def test_dynamic_include_must_be_explicitly_resolved_and_inventoried(
             {
                 "id": "game_include",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [
                     _coverage_span(
                         "spell_rev/lib/bg2ee.tph",
@@ -1828,6 +2288,8 @@ def test_generated_dynamic_target_links_to_declared_runtime_resource(
             {
                 "id": "generated_spells",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [
                     {"path": "SPPR116.SPL", "kind": "generated_resource"}
@@ -1883,6 +2345,8 @@ def test_generated_dynamic_target_requires_generated_resource_ownership(
             {
                 "id": "generated_spells",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -1936,6 +2400,8 @@ def test_generated_dynamic_target_rejects_shipped_resource_ownership(
             {
                 "id": "generated_spells",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [{"path": "SPPR116.SPL", "kind": "asset"}],
                 "consumers": ["main"],
@@ -1996,6 +2462,8 @@ def test_generated_dynamic_target_rejects_non_component_zero_owner(
             {
                 "id": "generated_spells",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -2052,6 +2520,8 @@ def test_dynamic_resolution_is_scoped_to_one_exact_occurrence(
             {
                 "id": "game_lookup",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -2087,10 +2557,8 @@ def test_dynamic_resolution_is_scoped_to_one_exact_occurrence(
     ]
 
 
-@pytest.mark.parametrize("consumers", [[], ["main"]])
-def test_dynamic_resolution_requires_reciprocal_exact_source_owner(
+def test_dynamic_resolution_requires_declared_exact_source_owner(
     tmp_path: Path,
-    consumers: list[str],
 ) -> None:
     source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
     component = tmp_path / "spell_rev/components/main_component.tpa"
@@ -2115,9 +2583,11 @@ def test_dynamic_resolution_requires_reciprocal_exact_source_owner(
             {
                 "id": "unrelated_lookup",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
-                "consumers": consumers,
+                "consumers": [],
                 "source_resolutions": [
                     {
                         "source": "spell_rev/components/main_component.tpa",
@@ -2171,6 +2641,8 @@ def test_shifted_dynamic_occurrence_makes_resolution_stale(
             {
                 "id": "game_lookup",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -2221,6 +2693,8 @@ def test_dynamic_source_resolution_follows_concrete_owned_targets(
             {
                 "id": "dynamic_sources",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [
                     {"path": "spell_rev/assets/a.spl", "kind": "asset"}
@@ -2276,6 +2750,8 @@ def test_dynamic_source_resolution_can_explicitly_document_external_lookup(
             {
                 "id": "game_lookup",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -2328,6 +2804,8 @@ def test_dynamic_source_resolution_rejects_missing_targets_and_stale_rules(
             {
                 "id": "stale_dynamic_source",
                 "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": [],
@@ -2381,6 +2859,8 @@ def test_dynamic_source_resolution_source_must_exactly_exist(
             {
                 "id": "wrong_case",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [],
                 "consumers": ["main"],
@@ -2449,6 +2929,8 @@ def test_non_component_zero_resource_cannot_satisfy_component_zero_edge(
             {
                 "id": "compatibility_asset",
                 "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
                 "source_spans": [],
                 "resources": [
                     {"path": "spell_rev/assets/optional.txt", "kind": "asset"}

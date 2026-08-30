@@ -8,3 +8,19 @@ Upstream: v4.21 (`af1dedb6d211f86ad7a321d4080e46c748e8abac`)
 |---|---|---|---:|---|---|---|---|---|---|---|
 
 No public changes have been cataloged yet. The migration gate remains closed until upstream classification is complete.
+
+## Support infrastructure
+
+No support infrastructure is declared.
+
+## Deferred source scopes
+
+No deferred source scopes are declared.
+
+## Dormant payloads
+
+No dormant payloads are declared.
+
+## Audited binary-external overrides
+
+No binary-external overrides are declared.

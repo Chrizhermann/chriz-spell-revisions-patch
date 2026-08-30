@@ -97,6 +97,8 @@ def member_reference(
 def infrastructure(infrastructure_id: str, **overrides: Any) -> dict[str, Any]:
     raw: dict[str, Any] = {
         "id": infrastructure_id,
+        "activation": "consumer_selected",
+        "infrastructure_requires": [],
         "source_spans": [],
         "resources": [],
         "consumers": [],
@@ -110,6 +112,9 @@ def minimal_catalog(
     groups: list[dict[str, Any]] | None = None,
     changes: list[dict[str, Any]] | None = None,
     infrastructure_records: list[dict[str, Any]] | None = None,
+    dormant_resources: list[dict[str, Any]] | None = None,
+    deferred_source_scopes: list[dict[str, Any]] | None = None,
+    binary_edge_resolutions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -125,6 +130,9 @@ def minimal_catalog(
         "infrastructure": infrastructure_records
         if infrastructure_records is not None
         else [],
+        "dormant_resources": dormant_resources or [],
+        "deferred_source_scopes": deferred_source_scopes or [],
+        "binary_edge_resolutions": binary_edge_resolutions or [],
     }
 
 
@@ -146,6 +154,321 @@ def nested_catalog() -> dict[str, Any]:
         ],
         infrastructure_records=[infrastructure("shared")],
     )
+
+
+def test_catalog_accepts_explicit_empty_classification_collections() -> None:
+    raw = minimal_catalog()
+
+    catalog = Catalog.from_dict(raw)
+
+    assert catalog.dormant_resources == ()
+    assert catalog.deferred_source_scopes == ()
+    assert catalog.binary_edge_resolutions == ()
+
+
+def dormant_resource(
+    path: str = "spell_rev/shared/unused.spl",
+    *,
+    reason: str = "Present upstream but unreachable from component zero.",
+) -> dict[str, Any]:
+    return {"path": path, "reason": reason}
+
+
+def deferred_scope(
+    scope_id: str = "excluded.future",
+    *,
+    reason: str = "Requires a later design decision.",
+    source_spans: list[dict[str, Any]] | None = None,
+    resources: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": scope_id,
+        "reason": reason,
+        "source_spans": source_spans
+        if source_spans is not None
+        else [
+            {
+                "path": "spell_rev/components/main_component.tpa",
+                "start": "// deferred",
+                "end": None,
+                "sha256": "a" * 64,
+            }
+        ],
+        "resources": resources or [],
+    }
+
+
+def binary_edge_resolution(**overrides: Any) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "source": "spell_rev/shared/source.spl",
+        "offset": 0xAE,
+        "field": "ability[0].effect[0].resource",
+        "opcode": 146,
+        "target": "CHILDSPL",
+        "expected_types": ["SPL"],
+        "shadowed_candidates": ["spell_rev/shared/childspl.spl"],
+        "classification": "external",
+        "reason": "The shipped same-resref payload is dormant and is not installed.",
+    }
+    raw.update(overrides)
+    return raw
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["dormant_resources", "deferred_source_scopes", "binary_edge_resolutions"],
+)
+def test_classification_collections_are_required(field: str) -> None:
+    raw = minimal_catalog()
+    raw.pop(field)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"catalog.{field}:")
+    assert "missing required field" in str(error.value)
+
+
+def test_classification_records_preserve_exact_metadata() -> None:
+    raw = minimal_catalog(
+        dormant_resources=[dormant_resource()],
+        deferred_source_scopes=[
+            deferred_scope(
+                source_spans=[
+                    {
+                        "path": "spell_rev/components/main_component.tpa",
+                        "start": "// deferred",
+                        "end": None,
+                        "sha256": "a" * 64,
+                    }
+                ],
+                resources=[
+                    {"path": "spell_rev/shared/deferred.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        binary_edge_resolutions=[binary_edge_resolution()],
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    dormant = catalog.dormant_resources[0]
+    assert (dormant.path, dormant.reason) == (
+        "spell_rev/shared/unused.spl",
+        "Present upstream but unreachable from component zero.",
+    )
+    deferred = catalog.deferred_source_scopes[0]
+    assert deferred.id == "excluded.future"
+    assert deferred.source_spans[0].end is None
+    assert deferred.resources[0].path == "spell_rev/shared/deferred.spl"
+    override = catalog.binary_edge_resolutions[0]
+    assert override.offset == 0xAE
+    assert override.opcode == 146
+    assert override.expected_types == ("SPL",)
+    assert override.shadowed_candidates == ("spell_rev/shared/childspl.spl",)
+    assert override.classification == "external"
+
+
+@pytest.mark.parametrize(
+    ("collection", "record", "expected_path"),
+    [
+        (
+            "dormant_resources",
+            dormant_resource(reason="  "),
+            "dormant_resources[0].reason",
+        ),
+        (
+            "deferred_source_scopes",
+            deferred_scope(reason="\t"),
+            "deferred_source_scopes[0].reason",
+        ),
+        (
+            "binary_edge_resolutions",
+            binary_edge_resolution(reason="\n"),
+            "binary_edge_resolutions[0].reason",
+        ),
+    ],
+)
+def test_classification_reasons_must_not_be_blank(
+    collection: str, record: dict[str, Any], expected_path: str
+) -> None:
+    raw = minimal_catalog()
+    raw[collection] = [record]
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+
+
+@pytest.mark.parametrize(
+    ("collection", "record", "expected_path"),
+    [
+        (
+            "dormant_resources",
+            {**dormant_resource(), "surprise": True},
+            "dormant_resources[0].surprise",
+        ),
+        (
+            "deferred_source_scopes",
+            {**deferred_scope(), "surprise": True},
+            "deferred_source_scopes[0].surprise",
+        ),
+        (
+            "binary_edge_resolutions",
+            {**binary_edge_resolution(), "surprise": True},
+            "binary_edge_resolutions[0].surprise",
+        ),
+    ],
+)
+def test_classification_records_reject_unknown_fields(
+    collection: str, record: dict[str, Any], expected_path: str
+) -> None:
+    raw = minimal_catalog()
+    raw[collection] = [record]
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "unknown field" in str(error.value)
+
+
+def test_dormant_paths_are_unique_case_insensitively() -> None:
+    raw = minimal_catalog(
+        dormant_resources=[
+            dormant_resource("spell_rev/shared/unused.spl"),
+            dormant_resource("SPELL_REV/SHARED/UNUSED.SPL"),
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("dormant_resources[1].path:")
+    assert "duplicate dormant resource" in str(error.value)
+
+
+def test_deferred_ids_share_the_global_catalog_id_namespace() -> None:
+    raw = minimal_catalog(
+        changes=[change("future")],
+        deferred_source_scopes=[deferred_scope("FUTURE")],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("deferred_source_scopes[0].id:")
+    assert "duplicate ID" in str(error.value)
+
+
+def test_deferred_scopes_keep_the_migration_gate_closed() -> None:
+    raw = minimal_catalog(deferred_source_scopes=[deferred_scope()])
+    raw["migration"]["complete"] = True
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("migration.complete:")
+    assert "deferred" in str(error.value)
+
+
+def test_deferred_scope_requires_at_least_one_exact_source_span() -> None:
+    raw = minimal_catalog(
+        deferred_source_scopes=[deferred_scope(source_spans=[])]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(
+        "deferred_source_scopes[0].source_spans:"
+    )
+    assert "at least one" in str(error.value)
+
+
+def test_deferred_scope_cannot_satisfy_generated_source_ownership() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "generator",
+                source_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 1,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "%generated_source%",
+                        "reason": "Schema boundary fixture.",
+                        "generated_owners": ["deferred.future"],
+                    }
+                ],
+            )
+        ],
+        deferred_source_scopes=[deferred_scope("deferred.future")],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert "unknown catalog owner ID 'deferred.future'" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_path"),
+    [
+        (lambda record: record.__setitem__("offset", -1), "offset"),
+        (lambda record: record.__setitem__("offset", True), "offset"),
+        (lambda record: record.__setitem__("field", "  "), "field"),
+        (lambda record: record.__setitem__("opcode", -1), "opcode"),
+        (lambda record: record.__setitem__("opcode", True), "opcode"),
+        (lambda record: record.__setitem__("target", ""), "target"),
+        (lambda record: record.__setitem__("expected_types", []), "expected_types"),
+        (
+            lambda record: record.__setitem__("expected_types", ["SPL", "spl"]),
+            "expected_types[1]",
+        ),
+        (
+            lambda record: record.__setitem__("shadowed_candidates", []),
+            "shadowed_candidates",
+        ),
+        (
+            lambda record: record.__setitem__("classification", "local"),
+            "classification",
+        ),
+    ],
+)
+def test_binary_edge_resolution_metadata_is_strict(
+    mutation: Callable[[dict[str, Any]], object], expected_path: str
+) -> None:
+    record = binary_edge_resolution()
+    mutation(record)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(minimal_catalog(binary_edge_resolutions=[record]))
+
+    assert str(error.value).startswith(
+        f"binary_edge_resolutions[0].{expected_path}:"
+    )
+
+
+def test_binary_edge_resolution_key_is_unique_case_insensitively() -> None:
+    first = binary_edge_resolution()
+    duplicate = binary_edge_resolution(
+        source="SPELL_REV/SHARED/SOURCE.SPL",
+        field="ABILITY[0].EFFECT[0].RESOURCE",
+        opcode=None,
+        target="different",
+        expected_types=["ITM"],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(
+            minimal_catalog(binary_edge_resolutions=[first, duplicate])
+        )
+
+    assert str(error.value).startswith("binary_edge_resolutions[1]:")
+    assert "duplicate binary edge resolution" in str(error.value)
 
 
 def test_seed_catalog_loads_with_pinned_provenance_and_closed_migration() -> None:
@@ -1191,16 +1514,29 @@ def test_change_processor_edge_requires_reciprocal_infrastructure_consumer() -> 
     assert "infrastructure[0].consumers" in str(error.value)
 
 
-def test_infrastructure_consumer_can_describe_generic_shared_substrate() -> None:
+def test_infrastructure_consumer_requires_reciprocal_change_processor() -> None:
     raw = minimal_catalog(
         changes=[change("mixed.change")],
         infrastructure_records=[infrastructure("Shared", consumers=["MIXED.CHANGE"])],
     )
 
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].consumers[0]:")
+    assert "changes[0].processors" in str(error.value)
+
+
+def test_processor_consumer_reciprocity_accepts_exact_bidirectional_edge() -> None:
+    raw = minimal_catalog(
+        changes=[change("mixed.change", processors=["SHARED"])],
+        infrastructure_records=[infrastructure("Shared", consumers=["MIXED.CHANGE"])],
+    )
+
     catalog = Catalog.from_dict(raw)
 
+    assert catalog.changes[0].processors == ("SHARED",)
     assert catalog.infrastructure[0].consumers == ("MIXED.CHANGE",)
-    assert catalog.changes[0].processors == ()
 
 
 def test_change_processor_rejects_unknown_infrastructure() -> None:
@@ -1400,11 +1736,17 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
     assert catalog.infrastructure == (
         Infrastructure(
             id="shared.processor",
+            activation="consumer_selected",
+            infrastructure_requires=(),
             source_spans=(parsed_change.source_spans[1],),
             resources=(parsed_change.resources[1],),
             consumers=("MIXED.CHANGE",),
         ),
-        Infrastructure(id="other.processor"),
+        Infrastructure(
+            id="other.processor",
+            activation="consumer_selected",
+            infrastructure_requires=(),
+        ),
     )
 
     frozen_records: list[tuple[object, str, object]] = [
@@ -1429,7 +1771,15 @@ def test_infrastructure_category_represents_non_public_component_zero_work(
     category: str,
 ) -> None:
     raw = minimal_catalog(
-        infrastructure_records=[infrastructure("internal", category=category)]
+        infrastructure_records=[
+            infrastructure(
+                "internal",
+                category=category,
+                activation=(
+                    "always" if category == "mandatory_metadata" else "consumer_selected"
+                ),
+            )
+        ]
     )
 
     catalog = Catalog.from_dict(raw)
@@ -1443,6 +1793,112 @@ def test_infrastructure_category_defaults_to_derived_for_existing_records() -> N
     )
 
     assert catalog.infrastructure[0].category == "derived"
+
+
+@pytest.mark.parametrize("field", ["activation", "infrastructure_requires"])
+def test_infrastructure_activation_and_requirements_are_explicit(field: str) -> None:
+    record = infrastructure("internal")
+    record.pop(field)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(minimal_catalog(infrastructure_records=[record]))
+
+    assert str(error.value).startswith(f"infrastructure[0].{field}:")
+    assert "missing required field" in str(error.value)
+
+
+@pytest.mark.parametrize("activation", ["selected", "", 1, None])
+def test_infrastructure_activation_uses_a_closed_vocabulary(
+    activation: object,
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[infrastructure("internal", activation=activation)]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].activation:")
+
+
+@pytest.mark.parametrize(
+    ("category", "activation"),
+    [
+        ("derived", "always"),
+        ("compatibility", "always"),
+        ("mandatory_metadata", "consumer_selected"),
+    ],
+)
+def test_always_activation_is_exactly_mandatory_metadata(
+    category: str, activation: str
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("internal", category=category, activation=activation)
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("infrastructure[0].activation:")
+    assert "mandatory_metadata" in str(error.value)
+
+
+def test_infrastructure_requirements_reject_unknown_and_self_references() -> None:
+    unknown = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("source", infrastructure_requires=["missing"])
+        ]
+    )
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(unknown)
+    assert str(error.value).startswith(
+        "infrastructure[0].infrastructure_requires[0]:"
+    )
+    assert "unknown infrastructure ID" in str(error.value)
+
+    self_reference = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("source", infrastructure_requires=["SOURCE"])
+        ]
+    )
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(self_reference)
+    assert str(error.value).startswith(
+        "infrastructure[0].infrastructure_requires[0]:"
+    )
+    assert "cannot reference itself" in str(error.value)
+
+
+def test_infrastructure_requirements_reject_duplicates_and_cycles() -> None:
+    duplicate = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "source", infrastructure_requires=["target", "TARGET"]
+            ),
+            infrastructure("target"),
+        ]
+    )
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(duplicate)
+    assert str(error.value).startswith(
+        "infrastructure[0].infrastructure_requires[1]:"
+    )
+    assert "duplicate infrastructure ID" in str(error.value)
+
+    cycle = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("a", infrastructure_requires=["b"]),
+            infrastructure("b", infrastructure_requires=["A"]),
+        ]
+    )
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(cycle)
+    assert str(error.value).startswith(
+        "infrastructure[1].infrastructure_requires[0]:"
+    )
+    assert "infrastructure dependency cycle: a -> b -> a" in str(error.value)
 
 
 @pytest.mark.parametrize("category", ["shared", "metadata", "", 1, None])
