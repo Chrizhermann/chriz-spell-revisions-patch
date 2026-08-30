@@ -114,6 +114,7 @@ _SIMPLE_COMMANDS = frozenset(
         "EXTEND_TOP",
         "FAIL",
         "FORBID_COMPONENT",
+        "GET_DIRECTORY_ARRAY",
         "INCLUDE",
         "INSTALL_BY_DEFAULT",
         "LAM",
@@ -179,8 +180,13 @@ _PATCH_OR_COPY_CONTINUATIONS = frozenset(
         "BUT_ONLY",
         "BUT_ONLY_IF_IT_CHANGES",
         "CASE_SENSITIVE",
+        "CLEAR_ARRAY",
         "CLONE_EFFECT",
+        "COMPILE_BAF_TO_BCS",
+        "COUNT_2DA_COLS",
         "COUNT_2DA_ROWS",
+        "DECOMPILE_AND_PATCH",
+        "DECOMPILE_BCS_TO_BAF",
         "DELETE_BYTES",
         "DELETE_EFFECT",
         "DELETE_ITEM_HEADER",
@@ -193,6 +199,7 @@ _PATCH_OR_COPY_CONTINUATIONS = frozenset(
         "INSERT_BYTES",
         "INNER_ACTION",
         "INNER_PATCH",
+        "INSERT_FILE",
         "INT_VAR",
         "LPM",
         "LAUNCH_PATCH_FUNCTION",
@@ -202,6 +209,7 @@ _PATCH_OR_COPY_CONTINUATIONS = frozenset(
         "PATCH_IF",
         "PATCH_INCLUDE",
         "PATCH_MATCH",
+        "PHP_EACH",
         "PATCH_PHP_EACH",
         "PATCH_PRINT",
         "PATCH_READLN",
@@ -209,6 +217,7 @@ _PATCH_OR_COPY_CONTINUATIONS = frozenset(
         "PRETTY_PRINT_2DA",
         "READ_ASCII",
         "READ_BYTE",
+        "READ_2DA_ENTRIES_NOW",
         "READ_LONG",
         "READ_SHORT",
         "READ_STRREF",
@@ -243,6 +252,9 @@ _COPY_PREFIX_MODIFIERS = frozenset(
     {"CASE_SENSITIVE", "EVALUATE_BUFFER", "GLOB", "IF_EXISTS", "REGEXP"}
 )
 _IDENTIFIER_RE = re.compile(rb"[A-Za-z_][A-Za-z0-9_#]*")
+_PATCH_ASSIGNMENT_RE = re.compile(
+    rb"^[ \t]*[A-Za-z_][A-Za-z0-9_#]*[ \t]*(?:[+\-*/]?=)"
+)
 _DECORATIVE_COMMENT_RE = re.compile(r"[-=_*~. ]+\Z")
 
 
@@ -354,7 +366,9 @@ def inventory(
                         f"{line_number}; expected source, type, level, and IDS name"
                     )
                 if _starts_after_pipeline(
-                    first, complete_operands=complete_operands
+                    first,
+                    complete_operands=complete_operands,
+                    raw_line=raw_line,
                 ):
                     finish(open_node)
                     open_node = None
@@ -658,8 +672,21 @@ def _structural_tokens(source: bytes) -> tuple[tuple[str, int, int], ...]:
     return tuple(tokens)
 
 
-def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
-    """Resolve and hash-check an inclusive-start/exclusive-end source span."""
+@dataclass(frozen=True)
+class ResolvedSourceSpan:
+    """A validated source span with offsets into its original byte stream."""
+
+    source: bytes
+    start: int
+    end: int
+
+    @property
+    def raw(self) -> bytes:
+        return self.source[self.start : self.end]
+
+
+def resolve_span_offsets(root: str | Path, span: SourceSpan) -> ResolvedSourceSpan:
+    """Resolve anchors after newline normalization, preserving original offsets."""
 
     root_path = Path(root).resolve()
     source_path = (root_path / Path(span.path)).resolve()
@@ -674,32 +701,33 @@ def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
     except OSError as error:
         raise SourceError(f"{span.path}: unable to read source: {error}") from error
 
-    start_anchor = span.start.encode("utf-8")
-    start_matches = _occurrences(source, start_anchor)
+    normalized_source, boundaries = _normalize_newlines_with_boundaries(source)
+    start_anchor = _normalize_newlines(span.start.encode("utf-8"))
+    start_matches = _occurrences(normalized_source, start_anchor)
     if len(start_matches) != 1:
         raise SourceError(
             f"{span.path}: start anchor {span.start!r} has {len(start_matches)} matches; "
             "expected exactly 1"
         )
-    start = start_matches[0]
+    start = boundaries[start_matches[0]]
     if span.end is None:
         end = len(source)
     else:
-        end_anchor = span.end.encode("utf-8")
-        end_matches = _occurrences(source, end_anchor)
+        end_anchor = _normalize_newlines(span.end.encode("utf-8"))
+        end_matches = _occurrences(normalized_source, end_anchor)
         if len(end_matches) != 1:
             raise SourceError(
                 f"{span.path}: end anchor {span.end!r} has {len(end_matches)} "
                 "matches; expected exactly 1"
             )
-        end = end_matches[0]
+        end = boundaries[end_matches[0]]
         if end <= start:
             raise SourceError(
                 f"{span.path}: end anchor {span.end!r} occurs before start anchor "
                 f"{span.start!r}"
             )
     resolved = source[start:end]
-    normalized = resolved.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    normalized = _normalize_newlines(resolved)
     actual = hashlib.sha256(normalized).hexdigest()
     if actual.casefold() != span.sha256.casefold():
         raise SourceError(
@@ -707,7 +735,37 @@ def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
             f"{span.end if span.end is not None else 'EOF'!r}: "
             f"expected {span.sha256.lower()}, got {actual}"
         )
-    return resolved
+    return ResolvedSourceSpan(source, start, end)
+
+
+def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
+    """Resolve and hash-check an inclusive-start/exclusive-end source span."""
+
+    return resolve_span_offsets(root, span).raw
+
+
+def _normalize_newlines(value: bytes) -> bytes:
+    return value.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+
+def _normalize_newlines_with_boundaries(
+    value: bytes,
+) -> tuple[bytes, tuple[int, ...]]:
+    normalized = bytearray()
+    boundaries = [0]
+    index = 0
+    while index < len(value):
+        if value[index : index + 2] == b"\r\n":
+            normalized.append(ord("\n"))
+            index += 2
+        elif value[index] == ord("\r"):
+            normalized.append(ord("\n"))
+            index += 1
+        else:
+            normalized.append(value[index])
+            index += 1
+        boundaries.append(index)
+    return bytes(normalized), tuple(boundaries)
 
 
 def _display_path(path: Path, root: str | Path | None) -> str:
@@ -808,12 +866,16 @@ def _statement_candidate(first: str | None) -> tuple[str, str] | None:
 
 
 def _starts_after_pipeline(
-    first: str | None, *, complete_operands: bool = False
+    first: str | None,
+    *,
+    complete_operands: bool = False,
+    raw_line: bytes = b"",
 ) -> bool:
     if (
         first is None
         or first in _PATCH_OR_COPY_CONTINUATIONS
         or first in _PIPELINE_TERMINATORS
+        or _PATCH_ASSIGNMENT_RE.match(raw_line) is not None
     ):
         return False
     return (

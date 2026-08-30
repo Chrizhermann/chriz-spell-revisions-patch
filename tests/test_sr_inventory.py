@@ -16,7 +16,7 @@ from tools.sr_config.inventory import (
     inventory_tree,
     report_json_bytes,
 )
-from tools.sr_config.source import SourceError, resolve_span
+from tools.sr_config.source import SourceError, inventory_nested, resolve_span
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -232,6 +232,102 @@ def test_inventory_keeps_patch_fields_and_modifiers_inside_copy_pipeline(
     assert b"opcode = 206" in nodes[0].raw
     assert b"BUT_ONLY" in nodes[0].raw
     assert nodes[1].raw.strip().startswith(b"MYSTERY_STATEMENT")
+
+
+def test_nested_inventory_keeps_decompile_and_patch_through_but_only_in_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "decompile-copy.tpa"
+    path.write_text(
+        "ACTION_IF (1) BEGIN\n"
+        "  COPY_EXISTING ~cut01b.bcs~ ~override~\n"
+        "    DECOMPILE_AND_PATCH BEGIN\n"
+        "      REPLACE_TEXTUALLY ~OLD~ ~NEW~\n"
+        "    END\n"
+        "    BUT_ONLY\n"
+        "  PRINT ~after copy~\n"
+        "END\n",
+        encoding="utf-8",
+    )
+
+    outer = next(node for node in inventory(path) if node.command == "ACTION_IF")
+    nested = inventory_nested(outer)
+
+    assert [(node.kind, node.command) for node in nested] == [
+        ("executable", "COPY_EXISTING"),
+        ("executable", "PRINT"),
+    ]
+    assert b"DECOMPILE_AND_PATCH" in nested[0].raw
+    assert b"REPLACE_TEXTUALLY" in nested[0].raw
+    assert b"BUT_ONLY" in nested[0].raw
+
+
+def test_nested_inventory_keeps_assignments_loops_reads_and_writes_in_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "patch-stream-copy.tpa"
+    path.write_text(
+        "DEFINE_ACTION_FUNCTION patch_files BEGIN\n"
+        "  COPY ~spell_rev/a.spl~ ~override~\n"
+        "    arbitrary_offset = 0\n"
+        "    FOR (index = 0; index < 2; ++index) BEGIN\n"
+        "      READ_LONG arbitrary_offset value\n"
+        "      PATCH_IF value BEGIN\n"
+        "        WRITE_LONG arbitrary_offset 0\n"
+        "      END\n"
+        "    END\n"
+        "  GET_DIRECTORY_ARRAY folders ~spell_rev~ ~^sp.+$~\n"
+        "  MYSTERY_ACTION ~outside patch stream~\n"
+        "END\n",
+        encoding="utf-8",
+    )
+
+    outer = next(
+        node for node in inventory(path) if node.command == "DEFINE_ACTION_FUNCTION"
+    )
+    nested = inventory_nested(outer)
+
+    assert [(node.kind, node.command) for node in nested] == [
+        ("executable", "COPY"),
+        ("executable", "GET_DIRECTORY_ARRAY"),
+        ("unknown", "MYSTERY_ACTION"),
+    ]
+    assert b"arbitrary_offset = 0" in nested[0].raw
+    assert b"FOR (index = 0" in nested[0].raw
+    assert b"READ_LONG" in nested[0].raw
+    assert b"PATCH_IF" in nested[0].raw
+    assert b"WRITE_LONG" in nested[0].raw
+
+
+def test_nested_inventory_keeps_count_set_and_for_patch_stream_in_copy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "count-copy.tpa"
+    path.write_text(
+        "WITH_SCOPE BEGIN\n"
+        "  COPY ~spell_rev/table.2da~ ~override~\n"
+        "    COUNT_2DA_COLS cols\n"
+        "    COUNT_2DA_ROWS cols rows\n"
+        "    SET total = 0\n"
+        "    FOR (row = 0; row < rows; ++row) BEGIN\n"
+        "      SET total += 1\n"
+        "    END\n"
+        "  PRINT ~after table patch~\n"
+        "END\n",
+        encoding="utf-8",
+    )
+
+    outer = next(node for node in inventory(path) if node.command == "WITH_SCOPE")
+    nested = inventory_nested(outer)
+
+    assert [(node.kind, node.command) for node in nested] == [
+        ("executable", "COPY"),
+        ("executable", "PRINT"),
+    ]
+    assert b"COUNT_2DA_COLS" in nested[0].raw
+    assert b"COUNT_2DA_ROWS" in nested[0].raw
+    assert b"SET total = 0" in nested[0].raw
+    assert b"FOR (row = 0" in nested[0].raw
 
 
 def test_unknown_depth_zero_statement_ends_complete_copy_operands(
@@ -549,6 +645,84 @@ def test_resolve_span_supports_an_explicit_eof_end_anchor(tmp_path: Path) -> Non
     )
 
     assert resolve_span(tmp_path, span) == original_span
+
+
+@pytest.mark.parametrize(
+    ("source_newline", "anchor_newline"),
+    [
+        (b"\r\n", "\n"),
+        (b"\n", "\r\n"),
+        (b"\r", "\n"),
+        (b"\n", "\r"),
+    ],
+)
+def test_resolve_span_matches_multiline_anchors_across_newline_styles(
+    tmp_path: Path,
+    source_newline: bytes,
+    anchor_newline: str,
+) -> None:
+    source = source_newline.join(
+        (
+            b"preamble",
+            b"// unique start",
+            b"COPY ~a.spl~ ~override~",
+            b"// unique end",
+            b"tail",
+            b"",
+        )
+    )
+    path = tmp_path / "main.tpa"
+    path.write_bytes(source)
+    start = f"// unique start{anchor_newline}COPY ~a.spl~ ~override~"
+    end = f"// unique end{anchor_newline}tail"
+    start_offset = source.index(b"// unique start")
+    end_offset = source.index(b"// unique end")
+    original = source[start_offset:end_offset]
+    normalized = original.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    span = SourceSpan(
+        path="main.tpa",
+        start=start,
+        end=end,
+        sha256=hashlib.sha256(normalized).hexdigest(),
+    )
+
+    assert resolve_span(tmp_path, span) == original
+
+
+def test_resolve_span_rejects_newline_normalized_anchor_ambiguity(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// repeated\r\nCOPY ~a.spl~ ~override~\r\n"
+        b"// repeated\nCOPY ~a.spl~ ~override~\n"
+        b"// end\n"
+    )
+    (tmp_path / "main.tpa").write_bytes(source)
+    span = SourceSpan(
+        path="main.tpa",
+        start="// repeated\r\nCOPY ~a.spl~ ~override~",
+        end="// end",
+        sha256="0" * 64,
+    )
+
+    with pytest.raises(SourceError, match="start anchor.*2 matches"):
+        resolve_span(tmp_path, span)
+
+
+def test_resolve_span_rejects_reversed_normalized_multiline_anchors(
+    tmp_path: Path,
+) -> None:
+    source = b"// end\r\ntail\r\n// start\r\nCOPY ~a.spl~ ~override~\r\n"
+    (tmp_path / "main.tpa").write_bytes(source)
+    span = SourceSpan(
+        path="main.tpa",
+        start="// start\nCOPY ~a.spl~ ~override~",
+        end="// end\ntail",
+        sha256="0" * 64,
+    )
+
+    with pytest.raises(SourceError, match="end anchor.*before start anchor"):
+        resolve_span(tmp_path, span)
 
 
 def test_anchor_hash_rejects_upstream_drift(tmp_path: Path) -> None:
@@ -1197,6 +1371,37 @@ def test_eof_source_span_owns_the_final_executable_node(tmp_path: Path) -> None:
     assert result.ok
 
 
+def test_coverage_uses_newline_normalized_multiline_span_offsets(
+    tmp_path: Path,
+) -> None:
+    source = b"// unique start\r\nPRINT ~owned~\r\n// unique end\r\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    original = source[: source.index(b"// unique end")]
+    normalized = original.replace(b"\r\n", b"\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "normalized",
+                source_spans=[
+                    {
+                        "path": "spell_rev/components/main_component.tpa",
+                        "start": "// unique start\nPRINT ~owned~",
+                        "end": "// unique end\n",
+                        "sha256": hashlib.sha256(normalized).hexdigest(),
+                    }
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+
+
 def test_nested_action_commands_expose_all_local_dependency_edges(
     tmp_path: Path,
 ) -> None:
@@ -1428,6 +1633,266 @@ def test_dynamic_reinclude_is_not_hidden_outside_the_include_graph(
     ]
     assert [(edge.target, edge.classification) for edge in result.source_edges] == [
         ("spell_rev/lib/%GAME%.tph", None)
+    ]
+
+
+def test_known_dynamic_source_operand_requires_explicit_resolution(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/%SPELL%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "unresolved_dynamic_source"
+    ]
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/assets/%SPELL%.spl", None)
+    ]
+
+
+def test_dynamic_append_payload_is_not_mistaken_for_a_source_operand(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nAPPEND stats.ids ~%ind% %res%~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "unresolved_dynamic_source" not in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_dynamic_source_resolution_follows_concrete_owned_targets(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/%SPELL%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    target = tmp_path / "spell_rev/assets/a.spl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    span = _coverage_span(
+        "spell_rev/components/main_component.tpa", source, b"// start", None
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main", source_spans=[span], processors=["dynamic_sources"]
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "dynamic_sources",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [
+                    {"path": "spell_rev/assets/a.spl", "kind": "asset"}
+                ],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "command": "COPY",
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "targets": ["spell_rev/assets/a.spl"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/assets/a.spl", "shared")
+    ]
+
+
+def test_dynamic_source_resolution_can_explicitly_document_external_lookup(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "command": "COPY_EXISTING",
+                        "operand": "%spell%.spl",
+                        "external_reason": "Resolved from the base game at install time",
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("%spell%.spl", "external")
+    ]
+
+
+def test_dynamic_source_resolution_rejects_missing_targets_and_stale_rules(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nPRINT ~no dynamic source here~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "stale_dynamic_source",
+                "category": "derived",
+                "source_spans": [],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "command": "COPY",
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "targets": ["spell_rev/assets/missing.spl"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing_dynamic_source_target",
+        "stale_source_resolution",
+    ]
+
+
+def test_dynamic_source_resolution_source_must_exactly_exist(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "wrong_case",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/Main_component.tpa",
+                        "command": "COPY_EXISTING",
+                        "operand": "%spell%.spl",
+                        "external_reason": "Resolved from the base game",
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "stale_source_resolution"
     ]
 
 

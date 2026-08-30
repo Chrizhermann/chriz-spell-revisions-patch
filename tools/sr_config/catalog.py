@@ -94,6 +94,15 @@ class IncludeResolution:
 
 
 @dataclass(frozen=True)
+class SourceResolution:
+    source: str
+    command: str
+    operand: str
+    targets: tuple[str, ...] = field(default_factory=tuple)
+    external_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class Change:
     id: str
     setting: str
@@ -122,6 +131,7 @@ class Infrastructure:
     consumers: tuple[str, ...] = field(default_factory=tuple)
     category: str = "derived"
     include_resolutions: tuple[IncludeResolution, ...] = field(default_factory=tuple)
+    source_resolutions: tuple[SourceResolution, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -343,6 +353,56 @@ def _parse_include_resolution(value: Any, path: str) -> IncludeResolution:
     )
 
 
+def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={"source", "command", "operand", "targets", "external_reason"},
+        required={"source", "command", "operand"},
+    )
+    operand = _string(raw["operand"], f"{path}.operand")
+    if "%" not in operand:
+        raise CatalogError(f"{path}.operand: expected a dynamic source operand")
+    targets_raw = _list(raw.get("targets", []), f"{path}.targets")
+    targets: list[str] = []
+    seen: dict[str, int] = {}
+    for index, value in enumerate(targets_raw):
+        target_path = f"{path}.targets[{index}]"
+        target = _repository_path(value, target_path)
+        if "%" in target:
+            raise CatalogError(f"{target_path}: target must be concrete")
+        normalized = _normalize(target)
+        if normalized in seen:
+            raise CatalogError(
+                f"{target_path}: duplicate target {target!r}; first declared at "
+                f"{path}.targets[{seen[normalized]}]"
+            )
+        seen[normalized] = index
+        targets.append(target)
+    external_reason = _optional_string(
+        raw.get("external_reason"), f"{path}.external_reason"
+    )
+    if external_reason is not None and not external_reason.strip():
+        raise CatalogError(f"{path}.external_reason: must not be blank")
+    if bool(targets) == bool(external_reason):
+        raise CatalogError(
+            f"{path}: expected exactly one of concrete targets or external_reason"
+        )
+    command = _identifier(raw["command"], f"{path}.command")
+    if _SETTING_PATTERN.fullmatch(command) is None:
+        raise CatalogError(
+            f"{path}.command: expected a WeiDU command identifier"
+        )
+    return SourceResolution(
+        source=_repository_path(raw["source"], f"{path}.source"),
+        command=command.upper(),
+        operand=operand,
+        targets=tuple(targets),
+        external_reason=external_reason,
+    )
+
+
 def _parse_change(value: Any, path: str) -> Change:
     raw = _mapping(value, path)
     allowed = {
@@ -429,6 +489,7 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
             "consumers",
             "category",
             "include_resolutions",
+            "source_resolutions",
         },
         required={"id"},
     )
@@ -436,6 +497,9 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
     resources_raw = _list(raw.get("resources", []), f"{path}.resources")
     include_resolutions_raw = _list(
         raw.get("include_resolutions", []), f"{path}.include_resolutions"
+    )
+    source_resolutions_raw = _list(
+        raw.get("source_resolutions", []), f"{path}.source_resolutions"
     )
     return Infrastructure(
         id=_identifier(raw["id"], f"{path}.id"),
@@ -459,6 +523,12 @@ def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
             )
             for index, item in enumerate(include_resolutions_raw)
         ),
+        source_resolutions=tuple(
+            _parse_source_resolution(
+                item, f"{path}.source_resolutions[{index}]"
+            )
+            for index, item in enumerate(source_resolutions_raw)
+        ),
     )
 
 
@@ -480,6 +550,7 @@ def _validate_catalog(catalog: Catalog) -> None:
         value.casefold(): value for value in CONFIG_METADATA_SETTINGS
     }
     include_resolutions: dict[tuple[str, str], tuple[int, int]] = {}
+    source_resolutions: dict[tuple[str, str, str], tuple[int, int]] = {}
 
     for index, record in enumerate(catalog.groups):
         normalized_id = _normalize(record.id)
@@ -540,6 +611,22 @@ def _validate_catalog(catalog: Catalog) -> None:
                     f"[{previous_resolution}]"
                 )
             include_resolutions[key] = (index, resolution_index)
+        for resolution_index, resolution in enumerate(record.source_resolutions):
+            key = (
+                _normalize(resolution.source),
+                _normalize(resolution.command),
+                _normalize(resolution.operand.replace("\\", "/")),
+            )
+            previous = source_resolutions.get(key)
+            if previous is not None:
+                previous_infrastructure, previous_resolution = previous
+                raise CatalogError(
+                    f"infrastructure[{index}].source_resolutions[{resolution_index}]: "
+                    "duplicate dynamic source resolution; first declared at "
+                    f"infrastructure[{previous_infrastructure}].source_resolutions"
+                    f"[{previous_resolution}]"
+                )
+            source_resolutions[key] = (index, resolution_index)
 
     for index, record in enumerate(catalog.groups):
         if record.parent is not None and _normalize(record.parent) not in group_ids:

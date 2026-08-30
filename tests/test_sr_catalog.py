@@ -1187,3 +1187,143 @@ def test_include_resolution_requires_concrete_targets(
         Catalog.from_dict(raw)
 
     assert str(error.value).startswith(f"{expected_path}:")
+
+
+def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "dynamic_source",
+                source_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "command": "COPY",
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "targets": ["spell_rev/assets/a.spl"],
+                    },
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "command": "COPY_EXISTING",
+                        "operand": "%GAME_SPELL%.spl",
+                        "external_reason": "Resolved from the base game at install time",
+                    },
+                ],
+            )
+        ]
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    local, external = catalog.infrastructure[0].source_resolutions
+    assert (
+        local.source,
+        local.command,
+        local.operand,
+        local.targets,
+        local.external_reason,
+    ) == (
+        "spell_rev/components/main_component.tpa",
+        "COPY",
+        "spell_rev/assets/%SPELL%.spl",
+        ("spell_rev/assets/a.spl",),
+        None,
+    )
+    assert external.targets == ()
+    assert external.external_reason == "Resolved from the base game at install time"
+
+
+@pytest.mark.parametrize(
+    ("resolution", "expected_path"),
+    [
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY",
+                "operand": "spell_rev/assets/%SPELL%.spl",
+            },
+            "infrastructure[0].source_resolutions[0]",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY",
+                "operand": "spell_rev/assets/a.spl",
+                "targets": ["spell_rev/assets/a.spl"],
+            },
+            "infrastructure[0].source_resolutions[0].operand",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY",
+                "operand": "spell_rev/assets/%SPELL%.spl",
+                "targets": ["spell_rev/assets/%SPELL%.spl"],
+            },
+            "infrastructure[0].source_resolutions[0].targets[0]",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY",
+                "operand": "spell_rev/assets/%SPELL%.spl",
+                "targets": ["spell_rev/assets/a.spl"],
+                "external_reason": "Conflicting modes",
+            },
+            "infrastructure[0].source_resolutions[0]",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY INVALID",
+                "operand": "spell_rev/assets/%SPELL%.spl",
+                "targets": ["spell_rev/assets/a.spl"],
+            },
+            "infrastructure[0].source_resolutions[0].command",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "command": "COPY_EXISTING",
+                "operand": "%GAME_SPELL%.spl",
+                "external_reason": "  ",
+            },
+            "infrastructure[0].source_resolutions[0].external_reason",
+        ),
+    ],
+)
+def test_source_resolution_requires_one_strict_resolution_mode(
+    resolution: dict[str, object], expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("dynamic_source", source_resolutions=[resolution])
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+
+
+def test_dynamic_source_resolution_key_is_unique_across_infrastructure() -> None:
+    resolution = {
+        "source": "spell_rev/components/main_component.tpa",
+        "command": "COPY",
+        "operand": "spell_rev/assets/%SPELL%.spl",
+        "targets": ["spell_rev/assets/a.spl"],
+    }
+    duplicate = {
+        **resolution,
+        "command": "copy",
+        "operand": "spell_rev/assets/%spell%.spl",
+    }
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("first", source_resolutions=[resolution]),
+            infrastructure("second", source_resolutions=[duplicate]),
+        ]
+    )
+
+    with pytest.raises(CatalogError, match="duplicate dynamic source resolution"):
+        Catalog.from_dict(raw)
