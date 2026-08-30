@@ -1,0 +1,806 @@
+"""Lossless, conservative inventory helpers for WeiDU source files."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass
+from pathlib import Path
+
+from .catalog import SourceSpan
+
+
+class SourceError(ValueError):
+    """Raised when WeiDU source cannot be inventoried or anchored safely."""
+
+
+@dataclass(frozen=True)
+class ResourceOperand:
+    """A resource-like quoted operand attached to a WeiDU statement."""
+
+    role: str
+    value: str
+
+
+@dataclass(frozen=True)
+class SourceNode:
+    """One lossless slice of a WeiDU source file."""
+
+    path: str
+    line: int
+    kind: str
+    command: str | None
+    section_comments: tuple[str, ...]
+    resource_operands: tuple[ResourceOperand, ...]
+    raw: bytes
+
+
+# Action-level commands are deliberately explicit. Unfamiliar statements are still
+# emitted as ``unknown``; the list is used only to separate action statements from
+# the patch-language body owned by COPY-family commands.
+_COPY_COMMANDS = frozenset(
+    {
+        "COPY",
+        "COPY_ALL_GAM_FILES",
+        "COPY_EXISTING",
+        "COPY_EXISTING_REGEXP",
+        "COPY_LARGE",
+        "COPY_RANDOM",
+    }
+)
+_BLOCK_COMMANDS = frozenset(
+    {
+        "ACTION_BASH_FOR",
+        "ACTION_DEFINE_ARRAY",
+        "ACTION_DEFINE_ASSOCIATIVE_ARRAY",
+        "ACTION_FOR_EACH",
+        "ACTION_IF",
+        "ACTION_MATCH",
+        "ACTION_PHP_EACH",
+        "WITH_SCOPE",
+        "DEFINE_ACTION_FUNCTION",
+        "DEFINE_ACTION_MACRO",
+        "DEFINE_PATCH_FUNCTION",
+        "DEFINE_PATCH_MACRO",
+        "OUTER_FOR",
+        "OUTER_INNER_PATCH",
+        "OUTER_PATCH",
+        "OUTER_WHILE",
+    }
+)
+_CALL_COMMANDS = frozenset(
+    {
+        "ACTION_TRY",
+        "LAF",
+        "LAUNCH_ACTION_FUNCTION",
+    }
+)
+_END_DELIMITED_COMMANDS = frozenset(
+    {
+        "ACTION_TRY",
+        "LAF",
+        "LAUNCH_ACTION_FUNCTION",
+        "LAUNCH_PATCH_FUNCTION",
+        "LPF",
+        "PATCH_MATCH",
+    }
+)
+_SIMPLE_COMMANDS = frozenset(
+    {
+        "ADD_AREA_TYPE",
+        "ADD_GAM_NPC",
+        "ADD_JOURNAL",
+        "ADD_KIT",
+        "ADD_KIT_EX",
+        "ADD_MUSIC",
+        "ADD_PROJECTILE",
+        "ADD_SECTYPE",
+        "ADD_SPELL",
+        "ABORT",
+        "APPEND",
+        "APPEND_COL",
+        "APPEND_FILE",
+        "APPEND_OUTER",
+        "AT_EXIT",
+        "AT_INTERACTIVE_EXIT",
+        "AT_NOW",
+        "AUTO_EVAL_STRINGS",
+        "AUTO_TRA",
+        "COMPILE",
+        "DELETE",
+        "DESIGNATED",
+        "DISABLE_FROM_KEY",
+        "EXTEND_BOTTOM",
+        "EXTEND_TOP",
+        "FAIL",
+        "FORBID_COMPONENT",
+        "INCLUDE",
+        "INSTALL_BY_DEFAULT",
+        "LAM",
+        "LAUNCH_ACTION_MACRO",
+        "LANGUAGE",
+        "LOAD_TRA",
+        "MKDIR",
+        "MOVE",
+        "OUTER_SET",
+        "OUTER_SNPRINT",
+        "OUTER_SPRINT",
+        "OUTER_TEXT_SPRINT",
+        "PRINT",
+        "README",
+        "REINCLUDE",
+        "REQUIRE_COMPONENT",
+        "REQUIRE_PREDICATE",
+        "SILENT",
+        "STRING_SET",
+        "STRING_SET_RANGE",
+        "SUBCOMPONENT",
+        "UNINSTALL",
+        "UNINSTALL_NOW",
+        "VERBOSE",
+        "WARN",
+    }
+)
+_ACTION_COMMANDS = _COPY_COMMANDS | _BLOCK_COMMANDS | _CALL_COMMANDS | _SIMPLE_COMMANDS
+_PIPELINE_COMMANDS = _COPY_COMMANDS | {"ADD_SPELL", "APPEND"}
+_PIPELINE_TERMINATORS = frozenset(
+    {"BUT_ONLY", "BUT_ONLY_IF_IT_CHANGES", "UNLESS"}
+)
+
+# These commands/modifiers can legally occur at BEGIN-depth zero while remaining
+# part of a COPY-family patch body. The set need not classify them semantically;
+# it prevents false action boundaries.
+_PATCH_OR_COPY_CONTINUATIONS = frozenset(
+    {
+        "ADD_CRE_EFFECT",
+        "ADD_CRE_ITEM",
+        "ADD_MAP_NOTE",
+        "ADD_MEMORIZED_SPELL",
+        "ADD_SPELL_EFFECT",
+        "ADD_KNOWN_SPELL",
+        "ALTER_EFFECT",
+        "ALTER_ITEM_HEADER",
+        "ALTER_SPELL_HEADER",
+        "BUT_ONLY",
+        "BUT_ONLY_IF_IT_CHANGES",
+        "CASE_SENSITIVE",
+        "CLONE_EFFECT",
+        "COUNT_2DA_ROWS",
+        "DELETE_BYTES",
+        "DELETE_EFFECT",
+        "DELETE_ITEM_HEADER",
+        "EVALUATE_BUFFER",
+        "FOR",
+        "FOR_EACH",
+        "GET_OFFSET_ARRAY",
+        "GLOB",
+        "IF_EXISTS",
+        "INSERT_BYTES",
+        "INNER_ACTION",
+        "INNER_PATCH",
+        "INT_VAR",
+        "LPM",
+        "LAUNCH_PATCH_FUNCTION",
+        "LAUNCH_PATCH_MACRO",
+        "LPF",
+        "PATCH_FOR_EACH",
+        "PATCH_IF",
+        "PATCH_INCLUDE",
+        "PATCH_MATCH",
+        "PATCH_PHP_EACH",
+        "PATCH_PRINT",
+        "PATCH_READLN",
+        "PATCH_WARN",
+        "PRETTY_PRINT_2DA",
+        "READ_ASCII",
+        "READ_BYTE",
+        "READ_LONG",
+        "READ_SHORT",
+        "READ_STRREF",
+        "REGEXP",
+        "REMOVE_CRE_ITEM",
+        "REPLACE",
+        "REPLACE_EVALUATE",
+        "REPLACE_TEXTUALLY",
+        "RET",
+        "RET_ARRAY",
+        "SAY",
+        "SET",
+        "SET_2DA_ENTRY",
+        "SOURCE_BIFF",
+        "SOURCE_FILE",
+        "SOURCE_RES",
+        "SPRINT",
+        "STR_VAR",
+        "TEXT_SPRINT",
+        "TO_LOWER",
+        "TO_UPPER",
+        "WHILE",
+        "WRITE_ASCII",
+        "WRITE_ASCIIE",
+        "WRITE_BYTE",
+        "WRITE_LONG",
+        "WRITE_SHORT",
+        "WRITE_STRREF",
+    }
+)
+_COPY_PREFIX_MODIFIERS = frozenset(
+    {"CASE_SENSITIVE", "EVALUATE_BUFFER", "GLOB", "IF_EXISTS", "REGEXP"}
+)
+_IDENTIFIER_RE = re.compile(rb"[A-Za-z_][A-Za-z0-9_#]*")
+_DECORATIVE_COMMENT_RE = re.compile(r"[-=_*~. ]+\Z")
+
+
+@dataclass
+class _LexState:
+    block_comment: bool = False
+    quote: int | None = None
+    inline_file: bool = False
+
+
+@dataclass(frozen=True)
+class _LexedLine:
+    tokens: tuple[str, ...]
+    has_code: bool
+
+
+@dataclass
+class _OpenNode:
+    start: int
+    end: int
+    line: int
+    command: str
+    kind: str
+    mode: str
+    base_depth: int
+    root_opened: bool = False
+    pending_close: bool = False
+    pipeline_terminated: bool = False
+
+
+def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[SourceNode, ...]:
+    """Split *path* into lossless trivia and top-level WeiDU statement nodes."""
+
+    source_path = Path(path)
+    try:
+        source = source_path.read_bytes()
+    except OSError as error:
+        raise SourceError(f"{source_path}: unable to read source: {error}") from error
+
+    display_path = _display_path(source_path, root)
+    lines = tuple(_lines_with_offsets(source))
+    lex_state = _LexState()
+    frames: list[str] = []
+    open_node: _OpenNode | None = None
+    emitted: list[tuple[int, int, int, str, str]] = []
+    cursor = 0
+
+    def finish(node: _OpenNode) -> None:
+        nonlocal cursor
+        if cursor < node.start:
+            emitted.append((cursor, node.start, _line_at_offset(lines, cursor), "trivia", ""))
+        emitted.append((node.start, node.end, node.line, node.kind, node.command))
+        cursor = node.end
+
+    for line_number, start, end in lines:
+        raw_line = source[start:end]
+        depth_before = len(frames)
+        lexed = _lex_line(raw_line, lex_state)
+        tokens = lexed.tokens
+        first = tokens[0] if tokens else None
+        candidate = _statement_candidate(first)
+
+        if open_node is not None and open_node.pending_close and depth_before == 0:
+            if first == "ELSE":
+                open_node.end = end
+                open_node.pending_close = False
+                open_node.root_opened = "BEGIN" in tokens
+            elif lexed.has_code:
+                finish(open_node)
+                open_node = None
+            else:
+                continue
+
+        if open_node is not None and open_node.mode == "copy" and depth_before == 0:
+            if open_node.pipeline_terminated and lexed.has_code:
+                finish(open_node)
+                open_node = None
+            elif candidate is not None and _starts_after_copy(first):
+                finish(open_node)
+                open_node = None
+
+        if open_node is None and candidate is not None and depth_before == 0:
+            command, kind = candidate
+            mode = _statement_mode(command, kind, tokens)
+            open_node = _OpenNode(
+                start=start,
+                end=end,
+                line=line_number,
+                command=command,
+                kind=kind,
+                mode=mode,
+                base_depth=depth_before,
+                root_opened="BEGIN" in tokens,
+            )
+        elif open_node is not None:
+            if open_node.mode != "copy" or lexed.has_code or depth_before > 0:
+                open_node.end = end
+
+        for token in tokens:
+            if token in _END_DELIMITED_COMMANDS:
+                frames.append("end")
+                if open_node is not None and open_node.mode == "call":
+                    open_node.root_opened = True
+            elif token == "BEGIN":
+                frames.append("begin")
+                if open_node is not None and open_node.mode == "block":
+                    open_node.root_opened = True
+            elif token == "END" and frames:
+                frames.pop()
+
+        if (
+            open_node is not None
+            and open_node.mode == "copy"
+            and len(frames) == open_node.base_depth
+            and any(token in _PIPELINE_TERMINATORS for token in tokens)
+        ):
+            open_node.pipeline_terminated = True
+
+        if open_node is None:
+            continue
+        complete = False
+        if open_node.mode == "simple":
+            complete = True
+        elif open_node.mode == "call":
+            complete = (
+                open_node.root_opened
+                and "END" in tokens
+                and len(frames) == open_node.base_depth
+            )
+        elif open_node.mode == "block":
+            complete = (
+                open_node.root_opened
+                and "END" in tokens
+                and len(frames) == open_node.base_depth
+            )
+        if complete:
+            if open_node.mode == "block":
+                open_node.pending_close = True
+            else:
+                finish(open_node)
+                open_node = None
+
+    if open_node is not None:
+        finish(open_node)
+    if cursor < len(source):
+        emitted.append((cursor, len(source), _line_at_offset(lines, cursor), "trivia", ""))
+    if not emitted and source == b"":
+        return ()
+
+    nodes: list[SourceNode] = []
+    last_section: tuple[str, ...] = ()
+    for start, end, line_number, kind, command in emitted:
+        raw = source[start:end]
+        if kind == "trivia":
+            comments = _nearest_comment_group(raw)
+            if comments:
+                last_section = comments
+            operands: tuple[ResourceOperand, ...] = ()
+            node_command: str | None = None
+        else:
+            operands = _resource_operands(command, raw)
+            node_command = command
+        nodes.append(
+            SourceNode(
+                path=display_path,
+                line=line_number,
+                kind=kind,
+                command=node_command,
+                section_comments=last_section if kind != "trivia" else (),
+                resource_operands=operands,
+                raw=raw,
+            )
+        )
+    return tuple(nodes)
+
+
+def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
+    """Resolve and hash-check an inclusive-start/exclusive-end source span."""
+
+    root_path = Path(root).resolve()
+    source_path = (root_path / Path(span.path)).resolve()
+    try:
+        source_path.relative_to(root_path)
+    except ValueError as error:
+        raise SourceError(
+            f"{span.path}: source span path escapes root {root_path}"
+        ) from error
+    try:
+        source = source_path.read_bytes()
+    except OSError as error:
+        raise SourceError(f"{span.path}: unable to read source: {error}") from error
+
+    start_anchor = span.start.encode("utf-8")
+    end_anchor = span.end.encode("utf-8")
+    start_matches = _occurrences(source, start_anchor)
+    end_matches = _occurrences(source, end_anchor)
+    if len(start_matches) != 1:
+        raise SourceError(
+            f"{span.path}: start anchor {span.start!r} has {len(start_matches)} matches; "
+            "expected exactly 1"
+        )
+    if len(end_matches) != 1:
+        raise SourceError(
+            f"{span.path}: end anchor {span.end!r} has {len(end_matches)} matches; "
+            "expected exactly 1"
+        )
+    start = start_matches[0]
+    end = end_matches[0]
+    if end <= start:
+        raise SourceError(
+            f"{span.path}: end anchor {span.end!r} occurs before start anchor "
+            f"{span.start!r}"
+        )
+    resolved = source[start:end]
+    normalized = resolved.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    actual = hashlib.sha256(normalized).hexdigest()
+    if actual.casefold() != span.sha256.casefold():
+        raise SourceError(
+            f"{span.path}: anchor hash changed for {span.start!r} .. {span.end!r}: "
+            f"expected {span.sha256.lower()}, got {actual}"
+        )
+    return resolved
+
+
+def _display_path(path: Path, root: str | Path | None) -> str:
+    if root is None:
+        return path.name
+    root_path = Path(root).resolve()
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root_path).as_posix()
+    except ValueError as error:
+        raise SourceError(f"{path}: source is outside inventory root {root_path}") from error
+
+
+def _lines_with_offsets(source: bytes):
+    offset = 0
+    for line_number, raw in enumerate(source.splitlines(keepends=True), start=1):
+        end = offset + len(raw)
+        yield line_number, offset, end
+        offset = end
+    if source and offset < len(source):
+        yield source.count(b"\n") + 1, offset, len(source)
+
+
+def _line_at_offset(lines: tuple[tuple[int, int, int], ...], offset: int) -> int:
+    for line_number, start, end in lines:
+        if start <= offset < end:
+            return line_number
+    return lines[-1][0] if lines else 1
+
+
+def _lex_line(raw: bytes, state: _LexState) -> _LexedLine:
+    stripped = raw.lstrip(b" \t\r\n")
+    if state.inline_file:
+        if stripped.startswith(b">>>>>>>>"):
+            state.inline_file = False
+        return _LexedLine((), True)
+    if not state.block_comment and state.quote is None and stripped.startswith(b"<<<<<<<<"):
+        state.inline_file = True
+        return _LexedLine((), True)
+
+    tokens: list[str] = []
+    has_code = False
+    index = 0
+    while index < len(raw):
+        if state.block_comment:
+            close = raw.find(b"*/", index)
+            if close < 0:
+                return _LexedLine(tuple(tokens), has_code)
+            state.block_comment = False
+            index = close + 2
+            continue
+        if state.quote is not None:
+            close = raw.find(bytes((state.quote,)), index)
+            has_code = True
+            if close < 0:
+                return _LexedLine(tuple(tokens), has_code)
+            state.quote = None
+            index = close + 1
+            continue
+        if raw.startswith(b"//", index):
+            break
+        if raw.startswith(b"/*", index):
+            state.block_comment = True
+            index += 2
+            continue
+        byte = raw[index]
+        if byte in (ord("~"), ord('"')):
+            state.quote = byte
+            has_code = True
+            index += 1
+            continue
+        match = _IDENTIFIER_RE.match(raw, index)
+        if match is not None:
+            tokens.append(match.group().decode("ascii").upper())
+            has_code = True
+            index = match.end()
+            continue
+        if byte not in b" \t\r\n":
+            has_code = True
+        index += 1
+    return _LexedLine(tuple(tokens), has_code)
+
+
+def _statement_candidate(first: str | None) -> tuple[str, str] | None:
+    if first is None or first in {"BEGIN", "END", "ELSE"}:
+        return None
+    if first in _ACTION_COMMANDS:
+        return first, "executable"
+    return first, "unknown"
+
+
+def _starts_after_copy(first: str | None) -> bool:
+    return first in _ACTION_COMMANDS if first is not None else False
+
+
+def _statement_mode(command: str, kind: str, tokens: tuple[str, ...]) -> str:
+    if command in _PIPELINE_COMMANDS:
+        return "copy"
+    if command in _BLOCK_COMMANDS:
+        return "block"
+    if command in _CALL_COMMANDS:
+        return "call"
+    if kind == "unknown" and "BEGIN" in tokens:
+        return "block"
+    return "simple"
+
+
+def _nearest_comment_group(raw: bytes) -> tuple[str, ...]:
+    text = raw.decode("utf-8-sig", errors="replace")
+    groups: list[list[str]] = []
+    current: list[str] = []
+    in_block = False
+    for source_line in text.splitlines():
+        stripped = source_line.strip()
+        comment: str | None = None
+        if in_block:
+            before, marker, _ = stripped.partition("*/")
+            comment = before.lstrip("*").strip()
+            in_block = not bool(marker)
+        elif stripped.startswith("//"):
+            comment = stripped[2:].strip()
+        elif stripped.startswith("/*"):
+            body = stripped[2:]
+            before, marker, _ = body.partition("*/")
+            comment = before.lstrip("*").strip()
+            in_block = not bool(marker)
+        elif not stripped:
+            if current:
+                groups.append(current)
+                current = []
+            continue
+        else:
+            if current:
+                groups.append(current)
+                current = []
+            continue
+        if comment and not _DECORATIVE_COMMENT_RE.fullmatch(comment):
+            current.append(comment)
+    if current:
+        groups.append(current)
+    return tuple(groups[-1]) if groups else ()
+
+
+def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
+    quoted = _quoted_values(raw)
+    if not quoted:
+        if command not in _COPY_COMMANDS:
+            return ()
+    if command in _COPY_COMMANDS:
+        values = _copy_operand_values(raw)
+        return tuple(
+            ResourceOperand("source" if index % 2 == 0 else "destination", value)
+            for index, value in enumerate(values)
+        )
+    if command in {"INCLUDE", "REINCLUDE"}:
+        return tuple(ResourceOperand("include", value) for value in quoted)
+    if command == "ADD_SPELL":
+        values = _quoted_values(_copy_prefix(raw))
+        operands = [ResourceOperand("source", values[0])]
+        operands.extend(ResourceOperand("symbol", value) for value in values[1:])
+        return tuple(operands)
+    if command in _CALL_COMMANDS:
+        return tuple(ResourceOperand("argument", value) for value in quoted)
+    if command in _BLOCK_COMMANDS:
+        # Nested command strings are owned by the outer block. Only the block head
+        # is source-level dependency evidence for this conservative inventory.
+        head = raw.splitlines(keepends=True)[0] if raw.splitlines() else raw
+        return tuple(ResourceOperand("condition", value) for value in _quoted_values(head))
+    if command == "LAM":
+        # The quoted macro name is executable identity, not a resource dependency.
+        return ()
+    return tuple(ResourceOperand("argument", value) for value in quoted)
+
+
+def _copy_prefix(raw: bytes) -> bytes:
+    state = _LexState()
+    offset = 0
+    first_line = True
+    for line in raw.splitlines(keepends=True):
+        lexed = _lex_line(line, state)
+        first = lexed.tokens[0] if lexed.tokens else None
+        if not first_line and first is not None:
+            if first in _PATCH_OR_COPY_CONTINUATIONS - _COPY_PREFIX_MODIFIERS:
+                return raw[:offset]
+        first_line = False
+        offset += len(line)
+    return raw
+
+
+def _copy_operand_values(raw: bytes) -> tuple[str, ...]:
+    atoms = _source_atoms(_copy_prefix(raw))
+    command_index = next(
+        (
+            index
+            for index, (value, quoted) in enumerate(atoms)
+            if not quoted and value.upper() in _COPY_COMMANDS
+        ),
+        None,
+    )
+    if command_index is None:
+        return ()
+    values: list[str] = []
+    for value, quoted in atoms[command_index + 1 :]:
+        if not quoted and value.upper() in _COPY_PREFIX_MODIFIERS:
+            continue
+        values.append(value)
+    return tuple(values)
+
+
+def _source_atoms(raw: bytes) -> tuple[tuple[str, bool], ...]:
+    """Return ordered quoted/bare atoms while masking WeiDU opaque regions."""
+
+    atoms: list[tuple[str, bool]] = []
+    index = 0
+    block_comment = False
+    inline_file = False
+    line_start = True
+    while index < len(raw):
+        if line_start:
+            line_end = raw.find(b"\n", index)
+            if line_end < 0:
+                line_end = len(raw)
+            stripped = raw[index:line_end].lstrip(b" \t\r")
+            if inline_file:
+                if stripped.startswith(b">>>>>>>>"):
+                    inline_file = False
+                index = line_end + (line_end < len(raw))
+                line_start = True
+                continue
+            if not block_comment and stripped.startswith(b"<<<<<<<<"):
+                inline_file = True
+                index = line_end + (line_end < len(raw))
+                line_start = True
+                continue
+            line_start = False
+        if block_comment:
+            close = raw.find(b"*/", index)
+            if close < 0:
+                break
+            block_comment = False
+            index = close + 2
+            continue
+        if raw.startswith(b"//", index):
+            newline = raw.find(b"\n", index)
+            if newline < 0:
+                break
+            index = newline + 1
+            line_start = True
+            continue
+        if raw.startswith(b"/*", index):
+            block_comment = True
+            index += 2
+            continue
+        byte = raw[index]
+        if byte in (ord("~"), ord('"')):
+            close = raw.find(bytes((byte,)), index + 1)
+            if close < 0:
+                break
+            atoms.append(
+                (
+                    raw[index + 1 : close].decode("utf-8", errors="replace"),
+                    True,
+                )
+            )
+            index = close + 1
+            continue
+        if byte in b" \t\r\n":
+            if byte == ord("\n"):
+                line_start = True
+            index += 1
+            continue
+        start = index
+        while index < len(raw):
+            if raw[index] in b" \t\r\n~\"":
+                break
+            if raw.startswith(b"//", index) or raw.startswith(b"/*", index):
+                break
+            index += 1
+        if index == start:
+            index += 1
+            continue
+        atoms.append(
+            (raw[start:index].decode("utf-8", errors="replace"), False)
+        )
+    return tuple(atoms)
+
+
+def _quoted_values(raw: bytes) -> tuple[str, ...]:
+    values: list[str] = []
+    index = 0
+    block_comment = False
+    inline_file = False
+    line_start = True
+    while index < len(raw):
+        if line_start:
+            line_end = raw.find(b"\n", index)
+            if line_end < 0:
+                line_end = len(raw)
+            stripped = raw[index:line_end].lstrip(b" \t\r")
+            if inline_file:
+                if stripped.startswith(b">>>>>>>>"):
+                    inline_file = False
+                index = line_end + (line_end < len(raw))
+                line_start = True
+                continue
+            if not block_comment and stripped.startswith(b"<<<<<<<<"):
+                inline_file = True
+                index = line_end + (line_end < len(raw))
+                line_start = True
+                continue
+            line_start = False
+        if block_comment:
+            close = raw.find(b"*/", index)
+            if close < 0:
+                break
+            block_comment = False
+            index = close + 2
+            continue
+        if raw.startswith(b"//", index):
+            newline = raw.find(b"\n", index)
+            if newline < 0:
+                break
+            index = newline + 1
+            line_start = True
+            continue
+        if raw.startswith(b"/*", index):
+            block_comment = True
+            index += 2
+            continue
+        byte = raw[index]
+        if byte in (ord("~"), ord('"')):
+            close = raw.find(bytes((byte,)), index + 1)
+            if close < 0:
+                break
+            values.append(raw[index + 1 : close].decode("utf-8", errors="replace"))
+            index = close + 1
+            continue
+        if byte == ord("\n"):
+            line_start = True
+        index += 1
+    return tuple(values)
+
+
+def _occurrences(haystack: bytes, needle: bytes) -> tuple[int, ...]:
+    if not needle:
+        return ()
+    positions: list[int] = []
+    start = 0
+    while True:
+        position = haystack.find(needle, start)
+        if position < 0:
+            return tuple(positions)
+        positions.append(position)
+        start = position + 1

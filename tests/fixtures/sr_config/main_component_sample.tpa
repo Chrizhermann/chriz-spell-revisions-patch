@@ -1,0 +1,39 @@
+/* Leading block-comment trivia. */
+
+// --------------------------------------------------------------------------
+// Arcane level one
+// --------------------------------------------------------------------------
+COPY
+  ~spell_rev/a.spl~
+  ~override/a.spl~
+  ~spell_rev/b.spl~
+  ~override/b.spl~
+  PATCH_IF (SOURCE_SIZE > 0x71) BEGIN
+    // A quoted value in a nested patch body is not a COPY operand: ~ignored.spl~
+    LPF ALTER_EFFECT
+      INT_VAR match_opcode = 146
+      STR_VAR resource = ~nested.spl~
+    END
+  END
+
+// Existing resource
+COPY_EXISTING ~SpWi123.SPL~ override
+  PATCH_IF (SOURCE_SIZE > 0x71) BEGIN
+    WRITE_BYTE 0x27 1
+  END
+
+ADD_SPELL ~spell_rev/new.spl~ 2 3 ~WIZARD_NEW_SPELL~
+INCLUDE ~spell_rev/lib/library.tph~
+LAF install_spell
+  STR_VAR file = ~SPWI225.SPL~
+END
+LAM ~shared_macro~
+
+ACTION_IF FILE_EXISTS_IN_GAME ~spwi225.spl~ BEGIN
+  COPY ~spell_rev/conditional.spl~ ~override~
+    LPF ALTER_EFFECT
+      INT_VAR match_opcode = 206 parameter1 = 1
+    END
+END
+
+MYSTERY_STATEMENT ~odd.res~
