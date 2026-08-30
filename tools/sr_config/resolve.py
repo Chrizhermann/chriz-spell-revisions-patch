@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from .catalog import Catalog, Change, SUPPORTED_GAMES
+
+from .catalog import Catalog, Change, SUPPORTED_GAMES, feature_symbol
 
 
 _ASSIGNMENT_PATTERN = re.compile(
@@ -98,7 +99,7 @@ def feature_symbols(catalog: Catalog, game: str | None = None) -> dict[str, str]
     if game is not None:
         _validate_game(game)
     return {
-        record.id: f"sr_feature_{index:06d}"
+        record.id: feature_symbol(index)
         for index, record in enumerate(catalog.changes, start=1)
     }
 

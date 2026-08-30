@@ -12,6 +12,9 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+CONFIG_METADATA_SETTINGS = frozenset(
+    {"sr_config_schema", "sr_catalog_fingerprint"}
+)
 SUPPORTED_GAMES = frozenset(
     {
         "soa",
@@ -398,6 +401,13 @@ def _validate_catalog(catalog: Catalog) -> None:
     infrastructure_ids: dict[str, tuple[str, int]] = {}
     all_ids: dict[str, tuple[str, int, str]] = {}
     settings: dict[str, tuple[str, int, str]] = {}
+    reserved_settings = {
+        value.casefold(): value
+        for value in (
+            *CONFIG_METADATA_SETTINGS,
+            *(feature_symbol(index) for index in range(1, len(catalog.changes) + 1)),
+        )
+    }
 
     for index, record in enumerate(catalog.groups):
         normalized_id = _normalize(record.id)
@@ -409,6 +419,11 @@ def _validate_catalog(catalog: Catalog) -> None:
             all_ids,
         )
         group_ids[normalized_id] = (record.id, index)
+        _validate_setting_not_reserved(
+            record.setting,
+            path=f"groups[{index}].setting",
+            reserved=reserved_settings,
+        )
         _record_unique_setting(record.setting, index, "groups", settings)
 
     for index, record in enumerate(catalog.changes):
@@ -421,6 +436,11 @@ def _validate_catalog(catalog: Catalog) -> None:
             all_ids,
         )
         change_ids[normalized_id] = (record.id, index)
+        _validate_setting_not_reserved(
+            record.setting,
+            path=f"changes[{index}].setting",
+            reserved=reserved_settings,
+        )
         _record_unique_setting(record.setting, index, "changes", settings)
 
     for index, record in enumerate(catalog.infrastructure):
@@ -530,6 +550,17 @@ def _record_unique_setting(
             f"{previous_collection}[{previous_index}].setting"
         )
     seen[normalized] = (setting, index, collection)
+
+
+def _validate_setting_not_reserved(
+    setting: str, *, path: str, reserved: Mapping[str, str]
+) -> None:
+    generated_name = reserved.get(_normalize(setting))
+    if generated_name is not None:
+        raise CatalogError(
+            f"{path}: setting {setting!r} collides with reserved generated "
+            f"setting {generated_name!r}"
+        )
 
 
 def _validate_group_cycles(
@@ -839,3 +870,11 @@ def _identifier_tuple(value: Any, path: str) -> tuple[str, ...]:
 
 def _normalize(value: str) -> str:
     return value.casefold()
+
+
+def feature_symbol(index: int) -> str:
+    """Return the stable internal WeiDU symbol for a one-based catalog index."""
+
+    if type(index) is not int or index < 1:
+        raise ValueError("feature symbol index must be a positive integer")
+    return f"sr_feature_{index:06d}"

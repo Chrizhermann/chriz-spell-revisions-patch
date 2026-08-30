@@ -449,6 +449,69 @@ def test_setting_cannot_collide_with_non_catalog_configuration() -> None:
 
 
 @pytest.mark.parametrize(
+    ("owner", "setting", "expected_path"),
+    [
+        ("group", "SR_CONFIG_SCHEMA", "groups[0].setting"),
+        ("group", "sr_catalog_fingerprint", "groups[0].setting"),
+        ("change", "sr_config_schema", "changes[0].setting"),
+        ("change", "SR_CATALOG_FINGERPRINT", "changes[0].setting"),
+    ],
+)
+def test_metadata_setting_names_are_reserved_case_insensitively(
+    owner: str, setting: str, expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        groups=[
+            group(
+                "global",
+                setting=setting if owner == "group" else "sr_default",
+                parent=None,
+                default=1,
+            )
+        ],
+        changes=[change("a", setting=setting)] if owner == "change" else [],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "reserved generated setting" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("owner", "setting", "expected_path"),
+    [
+        ("group", "SR_FEATURE_000002", "groups[0].setting"),
+        ("change", "sr_feature_000001", "changes[0].setting"),
+    ],
+)
+def test_complete_generated_feature_symbol_set_is_reserved_case_insensitively(
+    owner: str, setting: str, expected_path: str
+) -> None:
+    changes = [change("a"), change("b")]
+    if owner == "change":
+        changes[0]["setting"] = setting
+    raw = minimal_catalog(
+        groups=[
+            group(
+                "global",
+                setting=setting if owner == "group" else "sr_default",
+                parent=None,
+                default=1,
+            )
+        ],
+        changes=changes,
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "reserved generated setting" in str(error.value)
+
+
+@pytest.mark.parametrize(
     ("mutate", "expected_path"),
     [
         (
