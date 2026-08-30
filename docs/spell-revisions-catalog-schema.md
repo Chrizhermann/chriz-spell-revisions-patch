@@ -24,21 +24,76 @@ The following arrays are required, including while empty:
   setting, feature flag, or execution output. Any deferred scope keeps
   `migration.complete` false.
 - `binary_edge_resolutions`: exact, reviewed exceptions for scanner edges that
-  would otherwise appear local because a same-resref package payload is dormant.
+  would otherwise appear local because every same-resref package payload is
+  non-runtime (dormant or preprocessing-only `source` ownership).
   Every record names the exact `source`, byte `offset`, `field`, nullable `opcode`,
   `target`, ordered `expected_types`, complete ordered `shadowed_candidates`, the
   fixed classification `external`, and a nonblank `reason`.
 
 A binary override identifies one physical scanner edge by source, offset, and
 field. Coverage requires every other metadata value and the complete scanner
-candidate list to match, requires every candidate to be dormant and unowned, and
-requires the override to be consumed exactly once. A stale, mismatched, missing,
-or multiply consumed override fails coverage without changing any other edge.
+candidate list to match before any filtering, requires every candidate to be
+either dormant and unowned or owned only as preprocessing `source`, and requires
+the override to be consumed exactly once. A runtime-owned candidate can never be
+hidden. A stale, mismatched, missing, or multiply consumed override fails
+coverage without changing any other edge.
 
 Deferred scopes may own only closed internal edge islands. A local source or binary
 edge that crosses between deferred ownership and an active change or infrastructure
 record remains unclassified and fails coverage until the deferred scope is resolved;
 dependency metadata cannot make that boundary executable.
+
+## Resource ownership and runtime payloads
+
+`ResourceOwnership.kind` has closed coverage semantics:
+
+- `asset` and `resource` own exact package files that component zero may install
+  or use at runtime.
+- `source` owns an exact package file only as preprocessing/read input. It still
+  participates in exact-existence, duplicate-ownership, dormant-conflict, source
+  command, and dynamic read-only checks, but it is never a runtime-installed
+  payload. A file owned only as `source` is skipped as a binary origin and is
+  removed from local binary target candidates before dependency classification.
+- `generated_resource` owns an output created during installation and therefore
+  does not require a matching package file.
+- `2da_write`, `ids_write`, `table_write`, and `tlk_write` describe non-file or
+  shared-table mutations and do not claim package-file ownership.
+
+Binary candidate filtering is narrow and fail-closed. Only exact dormant paths
+and paths owned exclusively as `source` are removed. Any remaining unowned or
+multiply owned live candidate still fails classification. If no runtime candidate
+remains, coverage requires an exact `binary_edge_resolutions` entry; it never
+assumes that an unknown game lookup is safe.
+
+## Dynamic source resolutions
+
+Each `infrastructure.source_resolutions` record identifies one physical dynamic
+operand by exact `source`, `line`, `command`, `operand_index`, and `operand`.
+Exactly one primary resolution mode is required:
+
+- ordered concrete `targets`;
+- ordered `generated_owners`; or
+- `external: true`.
+
+The optional closed `access` field defaults to `dependency`. Dependency access
+retains the normal owner-relation checks for each resolved target. Explicit
+`read_only` access is permitted only with concrete `targets`: every target must
+exist with exact path spelling and have exactly one non-deferred component-zero
+Change or Infrastructure owner (including `kind: source` ownership). Each such
+edge is reported as `read_only`. These complete inspected/read target lists do
+not infer public processors, infrastructure consumers, change dependencies, or
+`infrastructure_requires` edges.
+
+An external resolution may additionally list `internal_generated_owners` as
+supplemental provenance for an occurrence whose runtime lookup is primarily
+game-owned but can encounter internal `ADD_SPELL` outputs. This list is not a
+fourth primary mode and does not expand the external lookup into resource-level
+coverage edges. Every supplemental owner must be an executable component-zero
+Change or Infrastructure record, declare at least one `generated_resource`, and
+be reciprocal with the resolution-owner Infrastructure. Reciprocity means either
+the same Infrastructure record or both sides of a Change processor/Infrastructure
+consumer pair. A one-way `infrastructure_requires` edge is not reciprocity;
+deferred, stale, resource-less, and unrelated owners fail coverage.
 
 ## Infrastructure
 

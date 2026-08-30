@@ -2053,6 +2053,8 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         local.targets,
         local.generated_owners,
         local.external,
+        local.access,
+        local.internal_generated_owners,
     ) == (
         "spell_rev/components/main_component.tpa",
         10,
@@ -2063,11 +2065,164 @@ def test_infrastructure_can_resolve_a_dynamic_source_operand() -> None:
         ("spell_rev/assets/a.spl",),
         (),
         False,
+        "dependency",
+        (),
     )
     assert external.targets == ()
     assert external.generated_owners == ()
     assert external.external is True
+    assert external.access == "dependency"
+    assert external.internal_generated_owners == ()
     assert external.reason == "Resolved from the base game at install time"
+
+
+def test_source_resolution_accepts_read_only_targets_and_external_supplemental_owners() -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "generated_spell",
+                processors=["dynamic_source"],
+                resources=[
+                    {"path": "SPPR116.SPL", "kind": "generated_resource"}
+                ],
+            )
+        ],
+        infrastructure_records=[
+            infrastructure(
+                "dynamic_source",
+                consumers=["generated_spell"],
+                source_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 10,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop reads the complete reviewed input set",
+                        "targets": ["spell_rev/assets/a.spl"],
+                        "access": "read_only",
+                    },
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 11,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%GAME_SPELL%.spl",
+                        "reason": "Lookup is game-owned but may see a generated spell",
+                        "external": True,
+                        "internal_generated_owners": ["generated_spell"],
+                    },
+                ],
+            )
+        ],
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    read_only, mixed = catalog.infrastructure[0].source_resolutions
+    assert read_only.access == "read_only"
+    assert read_only.targets == ("spell_rev/assets/a.spl",)
+    assert read_only.internal_generated_owners == ()
+    assert mixed.external is True
+    assert mixed.access == "dependency"
+    assert mixed.internal_generated_owners == ("generated_spell",)
+    with pytest.raises(FrozenInstanceError):
+        mixed.access = "read_only"
+
+
+@pytest.mark.parametrize(
+    ("updates", "expected_path"),
+    [
+        ({"access": "inspect"}, ".access"),
+        ({"access": 1}, ".access"),
+        (
+            {"targets": [], "access": "read_only", "external": True},
+            ".access",
+        ),
+        (
+            {
+                "targets": [],
+                "access": "read_only",
+                "generated_owners": ["dynamic_source"],
+            },
+            ".access",
+        ),
+        (
+            {
+                "access": "read_only",
+                "internal_generated_owners": ["generated_spell"],
+            },
+            ".internal_generated_owners",
+        ),
+        (
+            {"internal_generated_owners": ["generated_spell"]},
+            ".internal_generated_owners",
+        ),
+    ],
+)
+def test_source_resolution_access_and_supplemental_modes_are_strict(
+    updates: dict[str, object], expected_path: str
+) -> None:
+    resolution: dict[str, object] = {
+        "source": "spell_rev/components/main_component.tpa",
+        "line": 10,
+        "command": "COPY",
+        "operand_index": 0,
+        "operand": "spell_rev/assets/%SPELL%.spl",
+        "reason": "Reviewed occurrence",
+        "targets": ["spell_rev/assets/a.spl"],
+    }
+    resolution.update(updates)
+    raw = minimal_catalog(
+        changes=[change("generated_spell")],
+        infrastructure_records=[
+            infrastructure("dynamic_source", source_resolutions=[resolution])
+        ],
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(
+        "infrastructure[0].source_resolutions[0]" + expected_path + ":"
+    )
+
+
+def test_internal_generated_source_owners_are_ordered_unique_and_executable() -> None:
+    resolution = {
+        "source": "spell_rev/components/main_component.tpa",
+        "line": 10,
+        "command": "COPY_EXISTING",
+        "operand_index": 0,
+        "operand": "%SPELL%.spl",
+        "reason": "Mixed game and generated lookup",
+        "external": True,
+        "internal_generated_owners": ["generated", "GENERATED"],
+    }
+    raw = minimal_catalog(
+        changes=[change("generated")],
+        infrastructure_records=[
+            infrastructure("dynamic_source", source_resolutions=[resolution])
+        ],
+    )
+
+    with pytest.raises(CatalogError, match="duplicate owner 'GENERATED'"):
+        Catalog.from_dict(raw)
+
+    resolution["internal_generated_owners"] = ["deferred.generated"]
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("dynamic_source", source_resolutions=[resolution])
+        ],
+        deferred_source_scopes=[
+            deferred_scope("deferred.generated", resources=[])
+        ],
+    )
+
+    with pytest.raises(
+        CatalogError, match="unknown catalog owner ID 'deferred.generated'"
+    ):
+        Catalog.from_dict(raw)
 
 
 @pytest.mark.parametrize(

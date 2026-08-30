@@ -32,7 +32,7 @@ from .text import load_english_tra
 
 
 EDGE_CLASSIFICATIONS = frozenset(
-    {"owned", "atomic", "hard", "soft", "shared", "external"}
+    {"owned", "atomic", "hard", "soft", "shared", "external", "read_only"}
 )
 _RESOURCE_SUFFIXES = frozenset(
     {
@@ -108,6 +108,12 @@ class _OwnershipHit:
     resource_kind: str | None = None
 
 
+def _is_source_only_ownership(
+    hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
+) -> bool:
+    return bool(hits) and all(hit.resource_kind == "source" for hit in hits)
+
+
 @dataclass(frozen=True)
 class _PositionedNode:
     node: SourceNode
@@ -126,6 +132,7 @@ class _PreparedIncludeResolution:
 class _PreparedSourceResolution:
     targets: tuple[str, ...]
     external: bool
+    access: str
     owner: _Owner
     declaration: str
 
@@ -429,17 +436,8 @@ def _prepare_source_resolutions(
                         )
                     )
                     continue
-                generated_targets = tuple(
-                    resource.path
-                    for resource in generated_owner.record.resources
-                    if resource.kind in _GENERATED_RESOURCE_KINDS
-                    and any(
-                        hit.owner == generated_owner
-                        and hit.resource_kind in _GENERATED_RESOURCE_KINDS
-                        for hit in resource_owners.get(
-                            resource.path.casefold(), ()
-                        )
-                    )
+                generated_targets = _generated_targets_for_owner(
+                    generated_owner, resource_owners
                 )
                 if not generated_targets:
                     issues.append(
@@ -451,6 +449,43 @@ def _prepare_source_resolutions(
                     )
                     continue
                 targets.extend(generated_targets)
+            for internal_index, internal_owner_id in enumerate(
+                resolution.internal_generated_owners
+            ):
+                internal_owner = owners_by_id.get(internal_owner_id.casefold())
+                internal_path = (
+                    f"{declaration}.internal_generated_owners[{internal_index}]"
+                )
+                if internal_owner is None:
+                    issues.append(
+                        CoverageIssue(
+                            "unavailable_internal_generated_source_owner",
+                            internal_path,
+                            f"owner {internal_owner_id!r} is unavailable to component zero",
+                        )
+                    )
+                    continue
+                if not _generated_targets_for_owner(
+                    internal_owner, resource_owners
+                ):
+                    issues.append(
+                        CoverageIssue(
+                            "undeclared_internal_generated_source_target",
+                            internal_path,
+                            f"owner {internal_owner_id!r} declares no generated_resource",
+                        )
+                    )
+                if not _supplemental_owner_is_reciprocal(
+                    owner, internal_owner
+                ):
+                    issues.append(
+                        CoverageIssue(
+                            "unrelated_internal_generated_source_owner",
+                            internal_path,
+                            f"owner {internal_owner_id!r} is not reciprocally related "
+                            "to the resolution infrastructure",
+                        )
+                    )
             prepared[
                 _source_resolution_key(
                     resolution.source,
@@ -462,10 +497,27 @@ def _prepare_source_resolutions(
             ] = _PreparedSourceResolution(
                 tuple(targets),
                 resolution.external,
+                resolution.access,
                 owner,
                 declaration,
             )
     return prepared
+
+
+def _generated_targets_for_owner(
+    owner: _Owner,
+    resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+) -> tuple[str, ...]:
+    return tuple(
+        resource.path
+        for resource in owner.record.resources
+        if resource.kind in _GENERATED_RESOURCE_KINDS
+        and any(
+            hit.owner == owner
+            and hit.resource_kind in _GENERATED_RESOURCE_KINDS
+            for hit in resource_owners.get(resource.path.casefold(), ())
+        )
+    )
 
 
 def _source_resolution_key(
@@ -989,19 +1041,62 @@ def _audit_source_edges(
                     continue
                 for target in resolution.targets:
                     reachable_paths.add(target.casefold())
-                    candidate_hits = (
-                        _candidate_ownership_hits(
-                            target, resource_owners, source_file_owners
-                        ),
+                    target_hits = _candidate_ownership_hits(
+                        target, resource_owners, source_file_owners
                     )
+                    if resolution.access == "read_only":
+                        classification = "read_only"
+                        if not target_hits:
+                            classification = None
+                            issues.append(
+                                CoverageIssue(
+                                    "unowned_read_only_source_target",
+                                    location,
+                                    f"read-only target {target!r} has no "
+                                    "component-zero owner",
+                                )
+                            )
+                        elif len(target_hits) > 1:
+                            classification = None
+                            issues.append(
+                                CoverageIssue(
+                                    "multiply_owned_read_only_source_target",
+                                    location,
+                                    _unclassified_message(
+                                        target, source_hits, target_hits
+                                    ),
+                                )
+                            )
+                        elif isinstance(
+                            target_hits[0].owner.record, DeferredSourceScope
+                        ):
+                            classification = None
+                            issues.append(
+                                CoverageIssue(
+                                    "deferred_read_only_source_target",
+                                    location,
+                                    f"read-only target {target!r} is owned only "
+                                    "by a deferred source scope",
+                                )
+                            )
+                        if not related:
+                            classification = None
+                        result.append(
+                            CoveredEdge(
+                                "source",
+                                node.path,
+                                location,
+                                target,
+                                classification,
+                            )
+                        )
+                        continue
+                    candidate_hits = (target_hits,)
                     classification = _classify_candidate_hits(
                         tuple(source_hits), candidate_hits
                     )
                     if not related:
                         classification = None
-                    target_hits = tuple(
-                        hit for hits in candidate_hits for hit in hits
-                    )
                     result.append(
                         CoveredEdge(
                             "source",
@@ -1127,6 +1222,25 @@ def _source_resolution_owner_is_reciprocal(
         source_owner.record.processors, resolution_owner.record.id
     ) and _contains_id(
         resolution_owner.record.consumers, source_owner.record.id
+    )
+
+
+def _supplemental_owner_is_reciprocal(
+    resolution_owner: _Owner, supplemental_owner: _Owner
+) -> bool:
+    if (
+        resolution_owner.collection == supplemental_owner.collection
+        and resolution_owner.index == supplemental_owner.index
+    ):
+        return True
+    if not isinstance(supplemental_owner.record, Change) or not isinstance(
+        resolution_owner.record, Infrastructure
+    ):
+        return False
+    return _contains_id(
+        supplemental_owner.record.processors, resolution_owner.record.id
+    ) and _contains_id(
+        resolution_owner.record.consumers, supplemental_owner.record.id
     )
 
 
@@ -1401,6 +1515,8 @@ def _audit_binary_edges(
         if source.casefold() in dormant_paths:
             continue
         source_hits = resource_owners.get(source.casefold(), ())
+        if _is_source_only_ownership(source_hits):
+            continue
         for edge in resource.edges:
             location = f"{source}:0x{edge.offset:x}:{edge.field}"
             resolution_key = (
@@ -1481,7 +1597,10 @@ def _audit_binary_edges(
                         candidate_hits = resource_owners.get(
                             candidate.casefold(), ()
                         )
-                        if candidate_hits:
+                        source_only_candidate = _is_source_only_ownership(
+                            candidate_hits
+                        )
+                        if candidate_hits and not source_only_candidate:
                             invalid_candidate = True
                             issues.append(
                                 CoverageIssue(
@@ -1490,7 +1609,10 @@ def _audit_binary_edges(
                                     f"{candidate!r} has component-zero ownership",
                                 )
                             )
-                        if candidate.casefold() not in dormant_paths:
+                        if (
+                            candidate.casefold() not in dormant_paths
+                            and not source_only_candidate
+                        ):
                             invalid_candidate = True
                             issues.append(
                                 CoverageIssue(
@@ -1524,6 +1646,9 @@ def _audit_binary_edges(
                         edge.local_candidates, full_candidates, strict=True
                     )
                     if full_candidate.casefold() not in dormant_paths
+                    and not _is_source_only_ownership(
+                        resource_owners.get(full_candidate.casefold(), ())
+                    )
                 )
                 if not runtime_candidates:
                     classification = None
@@ -1532,7 +1657,8 @@ def _audit_binary_edges(
                             CoverageIssue(
                                 "missing_binary_edge_resolution",
                                 location,
-                                "local scanner edge resolves only to dormant payloads "
+                                "local scanner edge resolves only to non-runtime "
+                                "payloads (dormant or preprocessing-only source) "
                                 "and needs an exact external override",
                             )
                         )

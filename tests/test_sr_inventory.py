@@ -1865,6 +1865,302 @@ def test_dormant_binary_shadow_does_not_hide_unowned_live_candidate(
     )
 
 
+def test_preprocessing_source_resource_is_not_a_runtime_binary_origin(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "source"},
+                    {"path": "spell_rev/assets/child.spl", "kind": "asset"},
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.binary_edges == ()
+
+
+def test_preprocessing_source_ownership_cannot_claim_a_dormant_resource(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    asset = tmp_path / "spell_rev/assets/input.spl"
+    asset.parent.mkdir(parents=True)
+    asset.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Input~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Dormant ownership fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/input.spl", "kind": "source"}
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/input.spl",
+                "reason": "Invalid dormant/source overlap fixture.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "claimed_dormant_resource" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_preprocessing_source_shadow_is_filtered_before_live_binary_classification(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    live = assets / "live"
+    preprocessing = assets / "preprocessing"
+    dormant = assets / "dormant"
+    live.mkdir(parents=True)
+    preprocessing.mkdir()
+    dormant.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (live / "child.spl").write_bytes(_minimal_coverage_spl())
+    (preprocessing / "child.spl").write_bytes(_minimal_coverage_spl())
+    (dormant / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {"path": "spell_rev/assets/live/child.spl", "kind": "asset"},
+                    {
+                        "path": "spell_rev/assets/preprocessing/child.spl",
+                        "kind": "source",
+                    },
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": "spell_rev/assets/dormant/child.spl",
+                "reason": "This same-resref payload is not installed.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.binary_edges[0].classification == "owned"
+
+
+def test_preprocessing_source_shadow_does_not_hide_unowned_live_candidate(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    live = assets / "live"
+    preprocessing = assets / "preprocessing"
+    live.mkdir(parents=True)
+    preprocessing.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (live / "child.spl").write_bytes(_minimal_coverage_spl())
+    (preprocessing / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {
+                        "path": "spell_rev/assets/preprocessing/child.spl",
+                        "kind": "source",
+                    },
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.binary_edges[0].classification is None
+    assert sum(
+        issue.code == "unclassified_local_binary_edge" for issue in result.issues
+    ) == 1
+    assert not any(
+        issue.code == "missing_binary_edge_resolution" for issue in result.issues
+    )
+
+
+def test_preprocessing_source_shadow_does_not_hide_multiply_owned_live_candidate(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    live = assets / "live"
+    preprocessing = assets / "preprocessing"
+    live.mkdir(parents=True)
+    preprocessing.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (live / "child.spl").write_bytes(_minimal_coverage_spl())
+    (preprocessing / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    live_resource = {
+        "path": "spell_rev/assets/live/child.spl",
+        "kind": "asset",
+    }
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {
+                        "path": "spell_rev/assets/preprocessing/child.spl",
+                        "kind": "source",
+                    },
+                ],
+            ),
+            _coverage_change(
+                "first_live_owner",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[live_resource],
+            ),
+            _coverage_change(
+                "second_live_owner",
+                documentation_only_reason="Binary coverage fixture.",
+                resources=[live_resource],
+            ),
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+    issue_codes = {issue.code for issue in result.issues}
+
+    assert result.binary_edges[0].classification is None
+    assert "multiply_declared_resource" in issue_codes
+    assert "unclassified_local_binary_edge" in issue_codes
+
+
+def test_source_only_binary_candidates_require_an_exact_external_override(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    change = _coverage_change(
+        "source",
+        documentation_only_reason="Binary coverage fixture.",
+        resources=[
+            {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+            {"path": "spell_rev/assets/child.spl", "kind": "source"},
+        ],
+    )
+
+    unresolved = audit_catalog_coverage(
+        tmp_path, _coverage_catalog(changes=[change])
+    )
+    resolved = audit_catalog_coverage(
+        tmp_path,
+        _coverage_catalog(
+            changes=[change],
+            binary_edge_resolutions=[_binary_resolution()],
+        ),
+    )
+
+    assert unresolved.binary_edges[0].classification is None
+    assert [issue.code for issue in unresolved.issues] == [
+        "missing_binary_edge_resolution"
+    ]
+    assert resolved.ok
+    assert resolved.binary_edges[0].classification == "external"
+
+
+def test_binary_override_matches_full_raw_set_before_source_filtering(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    assets = tmp_path / "spell_rev/assets"
+    shadow = tmp_path / "spell_rev/shadow"
+    assets.mkdir()
+    shadow.mkdir()
+    (assets / "source.spl").write_bytes(_coverage_spl_with_effects("CHILD"))
+    (assets / "child.spl").write_bytes(_minimal_coverage_spl())
+    (shadow / "child.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Source~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "source",
+                resources=[
+                    {"path": "spell_rev/assets/source.spl", "kind": "asset"},
+                    {"path": "spell_rev/assets/child.spl", "kind": "source"},
+                    {"path": "spell_rev/shadow/child.spl", "kind": "source"},
+                ],
+            )
+        ],
+        binary_edge_resolutions=[_binary_resolution()],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "mismatched_binary_edge_resolution" in {
+        issue.code for issue in result.issues
+    }
+    assert result.binary_edges[0].classification is None
+
+
 def test_binary_external_override_is_exact_and_only_changes_one_edge(
     tmp_path: Path,
 ) -> None:
@@ -2881,6 +3177,7 @@ def test_dynamic_source_resolution_follows_concrete_owned_targets(
                         "operand": "spell_rev/assets/%SPELL%.spl",
                         "reason": "Loop expands the reviewed asset set",
                         "targets": ["spell_rev/assets/a.spl"],
+                        "access": "dependency",
                     }
                 ],
             }
@@ -2893,6 +3190,467 @@ def test_dynamic_source_resolution_follows_concrete_owned_targets(
     assert [(edge.target, edge.classification) for edge in result.source_edges] == [
         ("spell_rev/assets/a.spl", "shared")
     ]
+
+
+def test_read_only_dynamic_targets_require_ownership_without_dependency_edges(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/%SPELL%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "runtime.spl").write_bytes(_minimal_coverage_spl())
+    (assets / "preprocessing.spl").write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Runtime~\n@2=~Description~\n"
+    )
+    span = _coverage_span(
+        "spell_rev/components/main_component.tpa", source, b"// start", None
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "runtime_owner",
+                documentation_only_reason="Read-only coverage fixture.",
+                resources=[
+                    {"path": "spell_rev/assets/runtime.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "dynamic_reader",
+                "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [span],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop reads all reviewed inputs",
+                        "targets": [
+                            "spell_rev/assets/runtime.spl",
+                            "spell_rev/assets/preprocessing.spl",
+                        ],
+                        "access": "read_only",
+                    }
+                ],
+            },
+            {
+                "id": "preprocessing_owner",
+                "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [
+                    {
+                        "path": "spell_rev/assets/preprocessing.spl",
+                        "kind": "source",
+                    }
+                ],
+                "consumers": [],
+            },
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/assets/runtime.spl", "read_only"),
+        ("spell_rev/assets/preprocessing.spl", "read_only"),
+    ]
+
+
+def test_read_only_dynamic_targets_reject_unowned_multiply_owned_and_deferred_inputs(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/%SPELL%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    for name in ("unowned.spl", "duplicate.spl", "deferred.spl"):
+        (assets / name).write_bytes(_minimal_coverage_spl())
+    deferred_source = b"// deferred input\nPRINT ~deferred~\n"
+    deferred_file = tmp_path / "spell_rev/lib/deferred-input.tpa"
+    deferred_file.parent.mkdir(parents=True)
+    deferred_file.write_bytes(deferred_source)
+    _write_coverage_language_files(
+        tmp_path, "@1=~Input~\n@2=~Description~\n"
+    )
+    duplicate = {
+        "path": "spell_rev/assets/duplicate.spl",
+        "kind": "source",
+    }
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "first",
+                documentation_only_reason="Read-only coverage fixture.",
+                resources=[duplicate],
+            ),
+            _coverage_change(
+                "second",
+                documentation_only_reason="Read-only coverage fixture.",
+                resources=[duplicate],
+            ),
+        ],
+        infrastructure=[
+            {
+                "id": "dynamic_reader",
+                "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop reads all reviewed inputs",
+                        "targets": [
+                            "spell_rev/assets/unowned.spl",
+                            "spell_rev/assets/duplicate.spl",
+                            "spell_rev/assets/deferred.spl",
+                        ],
+                        "access": "read_only",
+                    }
+                ],
+            }
+        ],
+        deferred_source_scopes=[
+            {
+                "id": "deferred.input",
+                "reason": "Deferred read-only fixture.",
+                "source_spans": [
+                    _coverage_span(
+                        "spell_rev/lib/deferred-input.tpa",
+                        deferred_source,
+                        b"// deferred input",
+                        None,
+                    )
+                ],
+                "resources": [
+                    {
+                        "path": "spell_rev/assets/deferred.spl",
+                        "kind": "source",
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+    issue_codes = {issue.code for issue in result.issues}
+
+    assert "unowned_read_only_source_target" in issue_codes
+    assert "multiply_owned_read_only_source_target" in issue_codes
+    assert "deferred_read_only_source_target" in issue_codes
+    assert all(edge.classification is None for edge in result.source_edges)
+
+
+def test_read_only_resolution_still_requires_reciprocal_occurrence_ownership(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/%SPELL%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    target = tmp_path / "spell_rev/assets/a.spl"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(
+        tmp_path, "@1=~Input~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[
+                    {"path": "spell_rev/assets/a.spl", "kind": "asset"}
+                ],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "unrelated_reader",
+                "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [],
+                "consumers": [],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY",
+                        "operand_index": 0,
+                        "operand": "spell_rev/assets/%SPELL%.spl",
+                        "reason": "Loop reads a reviewed input",
+                        "targets": ["spell_rev/assets/a.spl"],
+                        "access": "read_only",
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "unrelated_source_resolution" in {
+        issue.code for issue in result.issues
+    }
+    assert result.source_edges[0].classification is None
+
+
+def test_external_dynamic_lookup_validates_supplemental_generated_producers(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(
+        tmp_path, "@1=~Spell~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["game_lookup"],
+            ),
+            _coverage_change(
+                "generated_spell",
+                documentation_only_reason="Generated spell fixture.",
+                processors=["game_lookup"],
+                resources=[
+                    {"path": "SPPR116.SPL", "kind": "generated_resource"}
+                ],
+            ),
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [
+                    {"path": "SPWI999.SPL", "kind": "generated_resource"}
+                ],
+                "consumers": ["main", "generated_spell"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Game lookup may include generated spells",
+                        "external": True,
+                        "internal_generated_owners": [
+                            "generated_spell",
+                            "game_lookup",
+                        ],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("%spell%.spl", "external")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("generator_component", "generator_resources", "related", "expected_code"),
+    [
+        (65, [{"path": "SPPR116.SPL", "kind": "generated_resource"}], True,
+         "unavailable_internal_generated_source_owner"),
+        (0, [], True, "undeclared_internal_generated_source_target"),
+        (0, [{"path": "SPPR116.SPL", "kind": "generated_resource"}], False,
+         "unrelated_internal_generated_source_owner"),
+    ],
+)
+def test_external_dynamic_lookup_rejects_stale_or_unrelated_supplemental_producers(
+    tmp_path: Path,
+    generator_component: int,
+    generator_resources: list[dict[str, str]],
+    related: bool,
+    expected_code: str,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(
+        tmp_path, "@1=~Spell~\n@2=~Description~\n"
+    )
+    generator = _coverage_change(
+        "generated_spell",
+        component=generator_component,
+        documentation_only_reason="Generated spell fixture.",
+        processors=["game_lookup"] if related else [],
+        resources=generator_resources,
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["game_lookup"],
+            ),
+            generator,
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [],
+                "consumers": (
+                    ["main", "generated_spell"] if related else ["main"]
+                ),
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Game lookup may include generated spells",
+                        "external": True,
+                        "internal_generated_owners": ["generated_spell"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert expected_code in {issue.code for issue in result.issues}
+    assert result.source_edges[0].classification == "external"
+
+
+def test_directional_infrastructure_dependency_is_not_supplemental_reciprocity(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY_EXISTING ~%spell%.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(
+        tmp_path, "@1=~Spell~\n@2=~Description~\n"
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                processors=["game_lookup"],
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "game_lookup",
+                "category": "compatibility",
+                "activation": "consumer_selected",
+                "infrastructure_requires": [],
+                "source_spans": [],
+                "resources": [],
+                "consumers": ["main"],
+                "source_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "line": 2,
+                        "command": "COPY_EXISTING",
+                        "operand_index": 0,
+                        "operand": "%spell%.spl",
+                        "reason": "Game lookup may include generated spells",
+                        "external": True,
+                        "internal_generated_owners": ["generated_support"],
+                    }
+                ],
+            },
+            {
+                "id": "generated_support",
+                "category": "derived",
+                "activation": "consumer_selected",
+                "infrastructure_requires": ["game_lookup"],
+                "source_spans": [],
+                "resources": [
+                    {"path": "SPPR116.SPL", "kind": "generated_resource"}
+                ],
+                "consumers": [],
+            },
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "unrelated_internal_generated_source_owner" in {
+        issue.code for issue in result.issues
+    }
+    assert result.source_edges[0].classification == "external"
 
 
 def test_dynamic_source_resolution_can_explicitly_document_external_lookup(
@@ -2990,6 +3748,7 @@ def test_dynamic_source_resolution_rejects_missing_targets_and_stale_rules(
                         "operand": "spell_rev/assets/%SPELL%.spl",
                         "reason": "Reviewed occurrence",
                         "targets": ["spell_rev/assets/missing.spl"],
+                        "access": "read_only",
                     }
                 ],
             }

@@ -144,6 +144,8 @@ class SourceResolution:
     targets: tuple[str, ...] = field(default_factory=tuple)
     generated_owners: tuple[str, ...] = field(default_factory=tuple)
     external: bool = False
+    access: str = "dependency"
+    internal_generated_owners: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -598,6 +600,8 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
             "targets",
             "generated_owners",
             "external",
+            "access",
+            "internal_generated_owners",
         },
         required={
             "source",
@@ -651,6 +655,20 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
                 f"[{generated_seen[normalized]}]"
             )
         generated_seen[normalized] = index
+    internal_generated_owners = _identifier_tuple(
+        raw.get("internal_generated_owners", []),
+        f"{path}.internal_generated_owners",
+    )
+    internal_generated_seen: dict[str, int] = {}
+    for index, owner in enumerate(internal_generated_owners):
+        normalized = _normalize(owner)
+        if normalized in internal_generated_seen:
+            raise CatalogError(
+                f"{path}.internal_generated_owners[{index}]: duplicate owner "
+                f"{owner!r}; first declared at {path}.internal_generated_owners"
+                f"[{internal_generated_seen[normalized]}]"
+            )
+        internal_generated_seen[normalized] = index
     external = raw.get("external", False)
     if type(external) is not bool:
         raise CatalogError(f"{path}.external: expected a boolean")
@@ -659,6 +677,20 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
     if sum((bool(targets), bool(generated_owners), external)) != 1:
         raise CatalogError(
             f"{path}: expected exactly one of targets, generated_owners, or external"
+        )
+    access = _string(raw.get("access", "dependency"), f"{path}.access")
+    if access not in {"dependency", "read_only"}:
+        raise CatalogError(
+            f"{path}.access: expected 'dependency' or 'read_only'"
+        )
+    if access == "read_only" and not targets:
+        raise CatalogError(
+            f"{path}.access: read_only access requires concrete targets mode"
+        )
+    if internal_generated_owners and not external:
+        raise CatalogError(
+            f"{path}.internal_generated_owners: supplemental generated owners "
+            "are allowed only with external mode"
         )
     command = _identifier(raw["command"], f"{path}.command")
     if _SETTING_PATTERN.fullmatch(command) is None:
@@ -675,6 +707,8 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
         targets=tuple(targets),
         generated_owners=generated_owners,
         external=external,
+        access=access,
+        internal_generated_owners=internal_generated_owners,
     )
 
 
@@ -1184,6 +1218,15 @@ def _validate_catalog(catalog: Catalog) -> None:
                 path=(
                     f"infrastructure[{index}].source_resolutions"
                     f"[{resolution_index}].generated_owners"
+                ),
+                known=catalog_owner_ids,
+                description="catalog owner ID",
+            )
+            _validate_known_references(
+                resolution.internal_generated_owners,
+                path=(
+                    f"infrastructure[{index}].source_resolutions"
+                    f"[{resolution_index}].internal_generated_owners"
                 ),
                 known=catalog_owner_ids,
                 description="catalog owner ID",

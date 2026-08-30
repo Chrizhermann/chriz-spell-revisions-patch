@@ -525,6 +525,69 @@ def test_fingerprint_includes_every_support_metadata_collection() -> None:
     assert len(fingerprints) == 6
 
 
+def test_fingerprint_includes_source_access_and_supplemental_owner_order() -> None:
+    raw = json.loads(json.dumps(asdict(_catalog_with_support_metadata())))
+    raw["changes"][0]["resources"].append(
+        {"path": "SPWI999.SPL", "kind": "generated_resource"}
+    )
+    raw["infrastructure"][0]["resources"].append(
+        {"path": "SPPR999.SPL", "kind": "generated_resource"}
+    )
+    raw["infrastructure"][0]["source_resolutions"] = [
+        {
+            "source": "spell_rev/lib/support.tpa",
+            "line": 10,
+            "command": "COPY",
+            "operand_index": 0,
+            "operand": "spell_rev/%INPUT%.spl",
+            "reason": "Complete inspected input set",
+            "targets": ["spell_rev/lib/support.tpa"],
+            "access": "dependency",
+        },
+        {
+            "source": "spell_rev/lib/support.tpa",
+            "line": 11,
+            "command": "COPY_EXISTING",
+            "operand_index": 0,
+            "operand": "%SPELL%.spl",
+            "reason": "Mixed game and generated lookup",
+            "external": True,
+            "internal_generated_owners": [
+                "arcane.level1.magic_missile",
+                "support.processor",
+            ],
+        },
+    ]
+    baseline = Catalog.from_dict(raw)
+    changed_access = json.loads(json.dumps(raw))
+    changed_access["infrastructure"][0]["source_resolutions"][0][
+        "access"
+    ] = "read_only"
+    reordered_owners = json.loads(json.dumps(raw))
+    reordered_owners["infrastructure"][0]["source_resolutions"][1][
+        "internal_generated_owners"
+    ].reverse()
+    removed_owner = json.loads(json.dumps(raw))
+    removed_owner["infrastructure"][0]["source_resolutions"][1][
+        "internal_generated_owners"
+    ].pop()
+    compact = json.loads(json.dumps(raw, separators=(",", ":")))
+    pretty = json.loads(json.dumps(raw, indent=4, ensure_ascii=False))
+
+    fingerprints = {
+        catalog_fingerprint(baseline),
+        catalog_fingerprint(Catalog.from_dict(changed_access)),
+        catalog_fingerprint(Catalog.from_dict(reordered_owners)),
+        catalog_fingerprint(Catalog.from_dict(removed_owner)),
+    }
+
+    assert baseline.schema_version == 1
+    assert len(fingerprints) == 4
+    assert catalog_fingerprint(Catalog.from_dict(compact)) == catalog_fingerprint(
+        Catalog.from_dict(pretty)
+    )
+
+
 def test_support_metadata_uses_table_safe_variable_length_code_spans() -> None:
     raw = json.loads(json.dumps(asdict(_catalog_with_support_metadata())))
     raw["changes"][0]["processors"] = ["support`|processor"]
