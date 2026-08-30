@@ -65,6 +65,8 @@ git commit -m "feat: define strict Spell Revisions catalog schema"
 ### Task 2: Deterministic source inventory and anchor validation
 
 **Files:**
+- Modify: `.gitignore`
+- Create: `tools/sr_config/__main__.py`
 - Create: `tools/sr_config/inventory.py`
 - Create: `tools/sr_config/source.py`
 - Create: `tools/sr_config/resources.py`
@@ -124,7 +126,7 @@ git commit -m "feat: inventory configurable WeiDU source losslessly"
 **Files:**
 - Create: `tools/sr_config/resolve.py`
 - Create: `tools/sr_config/generate.py`
-- Create: `tools/sr_config/__main__.py`
+- Modify: `tools/sr_config/__main__.py`
 - Create: `tests/test_sr_resolve.py`
 - Create: `tests/test_sr_generate.py`
 - Generate: `spell_rev/settings.ini`
