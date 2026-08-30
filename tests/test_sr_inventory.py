@@ -97,6 +97,81 @@ def test_inventory_path_is_relative_to_explicit_root() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("name", "source", "message"),
+    [
+        ("quote", b"PRINT ~unterminated\n", "unterminated quote.*line 1"),
+        ("comment", b"/* unterminated\n", "unterminated block comment.*line 1"),
+        (
+            "inline-file",
+            b"<<<<<<<< generated\nPRINT ~opaque~\n",
+            "unterminated inline-file.*line 1",
+        ),
+    ],
+)
+def test_inventory_rejects_unterminated_opaque_regions_with_opener_context(
+    tmp_path: Path, name: str, source: bytes, message: str
+) -> None:
+    path = tmp_path / f"{name}.tpa"
+    path.write_bytes(source)
+
+    with pytest.raises(SourceError, match=message) as error:
+        inventory(path)
+
+    assert path.name in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "source", "message"),
+    [
+        (
+            "action-block",
+            "ACTION_IF (1) BEGIN\n  PRINT ~inside~\n",
+            "unterminated ACTION_IF block.*line 1",
+        ),
+        (
+            "patch-block",
+            "OUTER_INNER_PATCH ~abc~ BEGIN\n  READ_BYTE 0 value\n",
+            "unterminated OUTER_INNER_PATCH block.*line 1",
+        ),
+        (
+            "call",
+            "LAF Example\n  INT_VAR value = 1\n",
+            "unterminated LAF call.*line 1",
+        ),
+    ],
+)
+def test_inventory_rejects_unterminated_blocks_and_calls_with_opener_context(
+    tmp_path: Path, name: str, source: str, message: str
+) -> None:
+    path = tmp_path / f"{name}.tpa"
+    path.write_text(source, encoding="utf-8")
+
+    with pytest.raises(SourceError, match=message) as error:
+        inventory(path)
+
+    assert path.name in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "source", "message"),
+    [
+        ("unmatched-end", "END\n", "unmatched END.*line 1"),
+        ("unclosed-begin", "BEGIN\n", "unterminated BEGIN delimiter.*line 1"),
+    ],
+)
+def test_inventory_rejects_unmatched_structural_delimiters(
+    tmp_path: Path, name: str, source: str, message: str
+) -> None:
+    path = tmp_path / f"{name}.tpa"
+    path.write_text(source, encoding="utf-8")
+
+    with pytest.raises(SourceError, match=message) as error:
+        inventory(path)
+
+    assert path.name in str(error.value)
+
+
 def test_inventory_keeps_end_delimited_patch_calls_inside_their_owner(
     tmp_path: Path,
 ) -> None:
@@ -154,6 +229,31 @@ def test_inventory_keeps_patch_fields_and_modifiers_inside_copy_pipeline(
     assert b"opcode = 206" in nodes[0].raw
     assert b"BUT_ONLY" in nodes[0].raw
     assert nodes[1].raw.strip().startswith(b"MYSTERY_STATEMENT")
+
+
+def test_unknown_depth_zero_statement_ends_complete_copy_operands(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "unknown-after-copy.tpa"
+    path.write_text(
+        "COPY ~a.spl~ ~override~\n"
+        "MYSTERY_STATEMENT ~odd.res~\n"
+        "PRINT ~next action~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "COPY"),
+        ("unknown", "MYSTERY_STATEMENT"),
+        ("executable", "PRINT"),
+    ]
+    assert [(operand.role, operand.value) for operand in nodes[0].resource_operands] == [
+        ("source", "a.spl"),
+        ("destination", "override"),
+    ]
+    assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
 
 
 def test_inventory_keeps_unless_modifier_with_append(tmp_path: Path) -> None:
@@ -549,4 +649,59 @@ def test_inventory_report_uses_repository_relative_binary_paths(
     ]
     edge = report["binary_edges"][0]
     assert edge["source"] == "spell_rev/source.spl"
+    assert edge["semantics"] == "resource"
+    assert edge["expected_types"] == ["BAM"]
     assert edge["local_candidates"] == ["spell_rev/ChildSpl.bam"]
+
+
+def test_inventory_report_counts_payload_semantics_separately(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "spell_rev/components").mkdir(parents=True)
+    (tmp_path / "spell_rev/components/main_component.tpa").write_text(
+        "PRINT ~inventory~\n", encoding="utf-8"
+    )
+    ability_offset = 0x72
+    effect_offset = ability_offset + 0x28
+    resource = bytearray(effect_offset + 3 * 0x30)
+    resource[:8] = b"SPL V1  "
+    struct.pack_into("<I", resource, 0x64, ability_offset)
+    struct.pack_into("<H", resource, 0x68, 1)
+    struct.pack_into("<I", resource, 0x6A, effect_offset)
+    struct.pack_into("<H", resource, ability_offset + 0x1E, 3)
+    for index, (opcode, target) in enumerate(
+        ((177, b"ChildEff"), (265, b"GLOBNAME"), (999, b"Mystery"))
+    ):
+        offset = effect_offset + index * 0x30
+        struct.pack_into("<H", resource, offset, opcode)
+        resource[offset + 0x14 : offset + 0x1C] = target.ljust(8, b"\0")
+    (tmp_path / "spell_rev/source.spl").write_bytes(resource)
+    child_eff = bytearray(0x110)
+    child_eff[:16] = b"EFF V2.0EFF V2.0"
+    (tmp_path / "spell_rev/ChildEff.eff").write_bytes(child_eff)
+
+    report = build_inventory_report(tmp_path)
+
+    assert [edge["semantics"] for edge in report["binary_edges"]] == [
+        "resource",
+        "non_resource",
+        "unknown",
+    ]
+    assert [edge["classification"] for edge in report["binary_edges"]] == [
+        "local",
+        None,
+        None,
+    ]
+    assert report["summary"] == {
+        "source_file_count": 1,
+        "source_node_count": 1,
+        "include_edge_count": 0,
+        "dynamic_include_edge_count": 0,
+        "resource_file_count": 2,
+        "binary_edge_count": 3,
+        "resource_payload_count": 1,
+        "non_resource_payload_count": 1,
+        "unknown_payload_count": 1,
+        "local_binary_edge_count": 1,
+        "external_binary_edge_count": 0,
+    }

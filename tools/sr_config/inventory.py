@@ -130,6 +130,8 @@ def build_inventory_report(root: str | Path) -> dict[str, object]:
                 "opcode": edge.opcode,
                 "offset": edge.offset,
                 "target": edge.target,
+                "semantics": edge.semantics,
+                "expected_types": list(edge.expected_types),
                 "classification": edge.classification,
                 "local_candidates": [
                     _resource_report_path(candidate)
@@ -147,6 +149,15 @@ def build_inventory_report(root: str | Path) -> dict[str, object]:
             ),
             "resource_file_count": len(resources),
             "binary_edge_count": len(binary_edges),
+            "resource_payload_count": sum(
+                edge.semantics == "resource" for edge in binary_edges
+            ),
+            "non_resource_payload_count": sum(
+                edge.semantics == "non_resource" for edge in binary_edges
+            ),
+            "unknown_payload_count": sum(
+                edge.semantics == "unknown" for edge in binary_edges
+            ),
             "local_binary_edge_count": sum(
                 edge.classification == "local" for edge in binary_edges
             ),

@@ -15,7 +15,7 @@ class ResourceError(ValueError):
 
 @dataclass(frozen=True)
 class ResourceEdge:
-    """One resource reference with exact binary provenance."""
+    """One typed, non-resource, or unknown payload with binary provenance."""
 
     source: str
     format: str
@@ -23,7 +23,9 @@ class ResourceEdge:
     target: str
     offset: int
     opcode: int | None
-    classification: str
+    semantics: str
+    expected_types: tuple[str, ...]
+    classification: str | None
     local_candidates: tuple[str, ...]
 
 
@@ -36,7 +38,7 @@ class ScannedResource:
     edges: tuple[ResourceEdge, ...]
 
 
-ResourceIndex = Mapping[str, tuple[str, ...]]
+ResourceIndex = Mapping[tuple[str, str], tuple[str, ...]]
 
 _FORMATS = {
     ".spl": "SPL V1",
@@ -46,9 +48,35 @@ _FORMATS = {
 }
 _HEADER_SIZE = {"SPL V1": 0x72, "ITM V1": 0x72, "CRE V1": 0x2D4}
 
+_PRIMARY_EFFECT_RESOURCE_TYPES = {
+    67: ("CRE",),
+    82: ("BCS",),
+    111: ("ITM",),
+    112: ("ITM",),
+    122: ("ITM",),
+    135: ("CRE",),
+    146: ("SPL",),
+    147: ("SPL",),
+    148: ("SPL",),
+    171: ("SPL",),
+    172: ("SPL",),
+    174: ("WAV",),
+    177: ("EFF",),
+    201: ("SPL",),
+    206: ("SPL",),
+    215: ("BAM", "VVC"),
+    232: ("SPL",),
+    248: ("EFF",),
+    251: ("SPL",),
+    255: ("ITM",),
+    296: ("BAM", "VVC"),
+}
+_PRIMARY_NON_RESOURCE_OPCODES = frozenset({258, 265, 267, 309})
+_ALL_FIELD_NON_RESOURCE_OPCODES = frozenset({265, 309})
+
 
 def build_resource_index(root: str | Path) -> ResourceIndex:
-    """Index package files by case-insensitive resref, preserving path spelling."""
+    """Index package files by case-insensitive resref/type and path spelling."""
 
     root_path = Path(root)
     if not root_path.is_dir():
@@ -57,10 +85,11 @@ def build_resource_index(root: str | Path) -> ResourceIndex:
         files = tuple(path for path in root_path.rglob("*") if path.is_file())
     except OSError as error:
         raise ResourceError(f"{root_path}: unable to index package: {error}") from error
-    candidates: dict[str, list[str]] = {}
+    candidates: dict[tuple[str, str], list[str]] = {}
     for path in files:
         relative = path.relative_to(root_path).as_posix()
-        candidates.setdefault(path.stem.casefold(), []).append(relative)
+        key = (path.stem.casefold(), path.suffix.removeprefix(".").casefold())
+        candidates.setdefault(key, []).append(relative)
     frozen = {
         key: tuple(sorted(values, key=lambda value: (value.casefold(), value)))
         for key, values in candidates.items()
@@ -74,7 +103,7 @@ def scan_resource_edges(
     package_root: str | Path | None = None,
     resource_index: ResourceIndex | None = None,
 ) -> tuple[ResourceEdge, ...]:
-    """Scan one SPL/ITM/EFF/CRE resource without heuristic string hunting."""
+    """Scan typed payload evidence without heuristic string hunting."""
 
     source_path = Path(path)
     suffix = source_path.suffix.casefold()
@@ -168,11 +197,35 @@ class _EdgeBuilder:
     def error(self, message: str) -> ResourceError:
         return ResourceError(f"{self.source}: {message}")
 
-    def add(self, field: str, offset: int, opcode: int | None = None) -> None:
+    def add(
+        self,
+        field: str,
+        offset: int,
+        opcode: int | None = None,
+        *,
+        semantics: str = "unknown",
+        expected_types: tuple[str, ...] = (),
+    ) -> None:
         target = _resref(self, field, offset)
         if not target or target.casefold() == "none":
             return
-        candidates = self.resource_index.get(target.casefold(), ())
+        if semantics not in {"resource", "non_resource", "unknown"}:
+            raise self.error(f"{field} has invalid payload semantics {semantics!r}")
+        normalized_types = tuple(
+            dict.fromkeys(resource_type.upper() for resource_type in expected_types)
+        )
+        if semantics == "resource" and not normalized_types:
+            raise self.error(f"{field} resource payload has no expected resource type")
+        candidates = tuple(
+            candidate
+            for resource_type in normalized_types
+            for candidate in self.resource_index.get(
+                (target.casefold(), resource_type.casefold()), ()
+            )
+        )
+        classification = None
+        if semantics == "resource":
+            classification = "local" if candidates else "external"
         edge = ResourceEdge(
             source=self.source,
             format=self.format,
@@ -180,11 +233,37 @@ class _EdgeBuilder:
             target=target,
             offset=offset,
             opcode=opcode,
-            classification="local" if candidates else "external",
+            semantics=semantics,
+            expected_types=normalized_types,
+            classification=classification,
             local_candidates=tuple(candidates),
         )
         self._edges.append((self._serial, edge))
         self._serial += 1
+
+    def add_effect_payload(
+        self,
+        field: str,
+        offset: int,
+        opcode: int,
+        *,
+        payload_field: str,
+        parameter1: int,
+        parameter2: int,
+    ) -> None:
+        semantics, expected_types = _effect_payload_semantics(
+            opcode,
+            payload_field=payload_field,
+            parameter1=parameter1,
+            parameter2=parameter2,
+        )
+        self.add(
+            field,
+            offset,
+            opcode,
+            semantics=semantics,
+            expected_types=expected_types,
+        )
 
     def finish(self) -> tuple[ResourceEdge, ...]:
         return tuple(
@@ -195,13 +274,110 @@ class _EdgeBuilder:
         )
 
 
+def _effect_payload_semantics(
+    opcode: int,
+    *,
+    payload_field: str,
+    parameter1: int,
+    parameter2: int,
+) -> tuple[str, tuple[str, ...]]:
+    if payload_field == "resource":
+        if opcode == 214:
+            if parameter2 == 0:
+                return "resource", ("2DA",)
+            if parameter2 in {1, 2}:
+                return "non_resource", ()
+            return "unknown", ()
+        expected_types = _PRIMARY_EFFECT_RESOURCE_TYPES.get(opcode)
+        if expected_types is not None:
+            return "resource", expected_types
+        if opcode in _PRIMARY_NON_RESOURCE_OPCODES:
+            return "non_resource", ()
+        return "unknown", ()
+
+    if opcode == 67:
+        return "resource", ("VVC", "BAM")
+    if opcode == 122:
+        return "resource", ("ITM",)
+    if opcode == 112 and payload_field == "resource2":
+        if parameter1 == 2:
+            return "resource", ("WAV",)
+        return "non_resource", ()
+    if opcode in _ALL_FIELD_NON_RESOURCE_OPCODES:
+        return "non_resource", ()
+    return "unknown", ()
+
+
+def _add_v1_effect_payload(
+    builder: _EdgeBuilder, field: str, effect_offset: int, opcode: int
+) -> None:
+    parameter1 = _u32(
+        builder, effect_offset + 0x04, f"{field} parameter1"
+    )
+    parameter2 = _u32(
+        builder, effect_offset + 0x08, f"{field} parameter2"
+    )
+    builder.add_effect_payload(
+        field,
+        effect_offset + 0x14,
+        opcode,
+        payload_field="resource",
+        parameter1=parameter1,
+        parameter2=parameter2,
+    )
+
+
+def _add_v2_effect_payloads(
+    builder: _EdgeBuilder, field_prefix: str, effect_offset: int, opcode: int
+) -> None:
+    parameter1 = _u32(
+        builder, effect_offset + 0x14, f"{field_prefix} parameter1"
+    )
+    parameter2 = _u32(
+        builder, effect_offset + 0x18, f"{field_prefix} parameter2"
+    )
+    for payload_field, relative_offset in (
+        ("resource", 0x28),
+        ("resource2", 0x68),
+        ("resource3", 0x70),
+    ):
+        builder.add_effect_payload(
+            f"{field_prefix}.{payload_field}",
+            effect_offset + relative_offset,
+            opcode,
+            payload_field=payload_field,
+            parameter1=parameter1,
+            parameter2=parameter2,
+        )
+
+    parent_type = _u32(
+        builder, effect_offset + 0x88, f"{field_prefix} parent type"
+    )
+    parent_types = {1: ("SPL",), 2: ("ITM",)}.get(parent_type, ())
+    builder.add(
+        f"{field_prefix}.parent_resource",
+        effect_offset + 0x8C,
+        opcode,
+        semantics="resource" if parent_types else "unknown",
+        expected_types=parent_types,
+    )
+
+
 def _scan_spl(builder: _EdgeBuilder) -> None:
     data = builder.data
     _signature(builder, b"SPL V1  ", _HEADER_SIZE[builder.format])
-    builder.add("header.completion_sound", 0x10)
-    builder.add("header.spellbook_icon", 0x3A)
-    builder.add("header.ground_icon", 0x44)
-    builder.add("header.description_icon", 0x58)
+    builder.add(
+        "header.completion_sound", 0x10, semantics="resource", expected_types=("WAV",)
+    )
+    builder.add(
+        "header.spellbook_icon", 0x3A, semantics="resource", expected_types=("BAM",)
+    )
+    builder.add(
+        "header.ground_icon", 0x44, semantics="resource", expected_types=("BAM",)
+    )
+    builder.add(
+        "header.description_icon", 0x58, semantics="resource", expected_types=("BAM",)
+    )
 
     ability_offset = _u32(builder, 0x64, "ability table offset field 0x64")
     ability_count = _u16(builder, 0x68, "ability table count field 0x68")
@@ -221,7 +397,12 @@ def _scan_spl(builder: _EdgeBuilder) -> None:
     slices: list[tuple[str, int, int]] = [("casting_effect", casting_first, casting_count)]
     for ability_index in range(ability_count):
         offset = ability_offset + ability_index * 0x28
-        builder.add(f"ability[{ability_index}].icon", offset + 0x04)
+        builder.add(
+            f"ability[{ability_index}].icon",
+            offset + 0x04,
+            semantics="resource",
+            expected_types=("BAM",),
+        )
         count = _u16(
             builder,
             offset + 0x1E,
@@ -251,23 +432,36 @@ def _scan_spl(builder: _EdgeBuilder) -> None:
             referenced.add(index)
             effect = effect_offset + index * 0x30
             opcode = _u16(builder, effect, f"{scope}[{relative_index}] opcode")
-            builder.add(
-                f"{scope}[{relative_index}].resource", effect + 0x14, opcode
+            _add_v1_effect_payload(
+                builder,
+                f"{scope}[{relative_index}].resource",
+                effect,
+                opcode,
             )
     for index in range(effect_count):
         if index not in referenced:
             effect = effect_offset + index * 0x30
             opcode = _u16(builder, effect, f"effect[{index}] opcode")
-            builder.add(f"effect[{index}].resource", effect + 0x14, opcode)
+            _add_v1_effect_payload(
+                builder, f"effect[{index}].resource", effect, opcode
+            )
 
 
 def _scan_itm(builder: _EdgeBuilder) -> None:
     data = builder.data
     _signature(builder, b"ITM V1  ", _HEADER_SIZE[builder.format])
-    builder.add("header.replacement_item", 0x10)
-    builder.add("header.inventory_icon", 0x3A)
-    builder.add("header.ground_icon", 0x44)
-    builder.add("header.description_icon", 0x58)
+    builder.add(
+        "header.replacement_item", 0x10, semantics="resource", expected_types=("ITM",)
+    )
+    builder.add(
+        "header.inventory_icon", 0x3A, semantics="resource", expected_types=("BAM",)
+    )
+    builder.add(
+        "header.ground_icon", 0x44, semantics="resource", expected_types=("BAM",)
+    )
+    builder.add(
+        "header.description_icon", 0x58, semantics="resource", expected_types=("BAM",)
+    )
 
     ability_offset = _u32(builder, 0x64, "ability table offset field 0x64")
     ability_count = _u16(builder, 0x68, "ability table count field 0x68")
@@ -289,7 +483,12 @@ def _scan_itm(builder: _EdgeBuilder) -> None:
     ]
     for ability_index in range(ability_count):
         offset = ability_offset + ability_index * 0x38
-        builder.add(f"ability[{ability_index}].icon", offset + 0x04)
+        builder.add(
+            f"ability[{ability_index}].icon",
+            offset + 0x04,
+            semantics="resource",
+            expected_types=("BAM",),
+        )
         count = _u16(
             builder,
             offset + 0x1E,
@@ -319,14 +518,19 @@ def _scan_itm(builder: _EdgeBuilder) -> None:
             referenced.add(index)
             effect = effect_offset + index * 0x30
             opcode = _u16(builder, effect, f"{scope}[{relative_index}] opcode")
-            builder.add(
-                f"{scope}[{relative_index}].resource", effect + 0x14, opcode
+            _add_v1_effect_payload(
+                builder,
+                f"{scope}[{relative_index}].resource",
+                effect,
+                opcode,
             )
     for index in range(effect_count):
         if index not in referenced:
             effect = effect_offset + index * 0x30
             opcode = _u16(builder, effect, f"effect[{index}] opcode")
-            builder.add(f"effect[{index}].resource", effect + 0x14, opcode)
+            _add_v1_effect_payload(
+                builder, f"effect[{index}].resource", effect, opcode
+            )
 
 
 def _scan_eff(builder: _EdgeBuilder) -> None:
@@ -347,10 +551,7 @@ def _scan_eff(builder: _EdgeBuilder) -> None:
             "or b'EFF V2.0'"
         )
     opcode = _u32(builder, 0x10, "effect opcode at 0x10")
-    builder.add("effect.resource", 0x30, opcode)
-    builder.add("effect.resource2", 0x70, opcode)
-    builder.add("effect.resource3", 0x78, opcode)
-    builder.add("effect.parent_resource", 0x94, opcode)
+    _add_v2_effect_payloads(builder, "effect", 0x08, opcode)
 
 
 def _scan_cre(builder: _EdgeBuilder) -> None:
@@ -362,17 +563,22 @@ def _scan_cre(builder: _EdgeBuilder) -> None:
             f"effect version field 0x33 is {effect_version}; expected 0 or 1"
         )
 
-    for field, offset in (
-        ("header.small_portrait", 0x34),
-        ("header.large_portrait", 0x3C),
-        ("header.override_script", 0x248),
-        ("header.class_script", 0x250),
-        ("header.race_script", 0x258),
-        ("header.general_script", 0x260),
-        ("header.default_script", 0x268),
-        ("header.dialog", 0x2CC),
+    for field, offset, resource_type in (
+        ("header.small_portrait", 0x34, "BMP"),
+        ("header.large_portrait", 0x3C, "BMP"),
+        ("header.override_script", 0x248, "BCS"),
+        ("header.class_script", 0x250, "BCS"),
+        ("header.race_script", 0x258, "BCS"),
+        ("header.general_script", 0x260, "BCS"),
+        ("header.default_script", 0x268, "BCS"),
+        ("header.dialog", 0x2CC, "DLG"),
     ):
-        builder.add(field, offset)
+        builder.add(
+            field,
+            offset,
+            semantics="resource",
+            expected_types=(resource_type,),
+        )
 
     known_offset = _u32(builder, 0x2A0, "known spells offset field 0x2a0")
     known_count = _u32(builder, 0x2A4, "known spells count field 0x2a4")
@@ -434,27 +640,48 @@ def _scan_cre(builder: _EdgeBuilder) -> None:
                 f"0x{entry + 0x08:x}/0x{entry + 0x0C:x})"
             )
 
+    for slot_index in range(38):
+        slot_offset = slots_offset + slot_index * 2
+        item_index = _u16(
+            builder, slot_offset, f"item slot[{slot_index}] at 0x{slot_offset:x}"
+        )
+        if item_index != 0xFFFF and item_index >= items_count:
+            raise builder.error(
+                f"item slot[{slot_index}] at 0x{slot_offset:x} has index "
+                f"{item_index}, outside item count {items_count}"
+            )
+
     for index in range(known_count):
-        builder.add(f"known_spell[{index}]", known_offset + index * 0x0C)
+        builder.add(
+            f"known_spell[{index}]",
+            known_offset + index * 0x0C,
+            semantics="resource",
+            expected_types=("SPL",),
+        )
     for index in range(memorized_count):
         builder.add(
-            f"memorized_spell[{index}]", memorized_offset + index * 0x0C
+            f"memorized_spell[{index}]",
+            memorized_offset + index * 0x0C,
+            semantics="resource",
+            expected_types=("SPL",),
         )
     for index in range(items_count):
-        builder.add(f"item[{index}]", items_offset + index * 0x14)
+        builder.add(
+            f"item[{index}]",
+            items_offset + index * 0x14,
+            semantics="resource",
+            expected_types=("ITM",),
+        )
     for index in range(effects_count):
         effect = effects_offset + index * effect_stride
         if effect_version == 0:
             opcode = _u16(builder, effect, f"effect[{index}] opcode")
-            builder.add(f"effect[{index}].resource", effect + 0x14, opcode)
+            _add_v1_effect_payload(
+                builder, f"effect[{index}].resource", effect, opcode
+            )
         else:
             opcode = _u32(builder, effect + 0x08, f"effect[{index}] opcode")
-            builder.add(f"effect[{index}].resource", effect + 0x28, opcode)
-            builder.add(f"effect[{index}].resource2", effect + 0x68, opcode)
-            builder.add(f"effect[{index}].resource3", effect + 0x70, opcode)
-            builder.add(
-                f"effect[{index}].parent_resource", effect + 0x8C, opcode
-            )
+            _add_v2_effect_payloads(builder, f"effect[{index}]", effect, opcode)
 
 
 def _signature(builder: _EdgeBuilder, expected: bytes, header_size: int) -> None:

@@ -234,8 +234,17 @@ _DECORATIVE_COMMENT_RE = re.compile(r"[-=_*~. ]+\Z")
 @dataclass
 class _LexState:
     block_comment: bool = False
+    block_comment_line: int | None = None
     quote: int | None = None
+    quote_line: int | None = None
     inline_file: bool = False
+    inline_file_line: int | None = None
+
+
+@dataclass(frozen=True)
+class _Frame:
+    kind: str
+    line: int
 
 
 @dataclass(frozen=True)
@@ -270,7 +279,7 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
     display_path = _display_path(source_path, root)
     lines = tuple(_lines_with_offsets(source))
     lex_state = _LexState()
-    frames: list[str] = []
+    frames: list[_Frame] = []
     open_node: _OpenNode | None = None
     emitted: list[tuple[int, int, int, str, str]] = []
     cursor = 0
@@ -285,7 +294,7 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
     for line_number, start, end in lines:
         raw_line = source[start:end]
         depth_before = len(frames)
-        lexed = _lex_line(raw_line, lex_state)
+        lexed = _lex_line(raw_line, lex_state, line_number=line_number)
         tokens = lexed.tokens
         first = tokens[0] if tokens else None
         candidate = _statement_candidate(first)
@@ -305,7 +314,15 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
             if open_node.pipeline_terminated and lexed.has_code:
                 finish(open_node)
                 open_node = None
-            elif candidate is not None and _starts_after_copy(first):
+            elif candidate is not None and _starts_after_copy(
+                first,
+                complete_copy=(
+                    open_node.command in _COPY_COMMANDS
+                    and _copy_operands_complete(
+                        source[open_node.start : open_node.end]
+                    )
+                ),
+            ):
                 finish(open_node)
                 open_node = None
 
@@ -337,14 +354,18 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
 
         for token in tokens:
             if token in _END_DELIMITED_COMMANDS:
-                frames.append("end")
+                frames.append(_Frame(token, line_number))
                 if open_node is not None and open_node.mode == "call":
                     open_node.root_opened = True
             elif token == "BEGIN":
-                frames.append("begin")
+                frames.append(_Frame("BEGIN", line_number))
                 if open_node is not None and open_node.mode == "block":
                     open_node.root_opened = True
-            elif token == "END" and frames:
+            elif token == "END":
+                if not frames:
+                    raise SourceError(
+                        f"{display_path}: unmatched END at line {line_number}"
+                    )
                 frames.pop()
 
         if (
@@ -382,6 +403,36 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
                 finish(open_node)
                 open_node = None
 
+    if lex_state.quote is not None:
+        raise SourceError(
+            f"{display_path}: unterminated quote opened at line "
+            f"{lex_state.quote_line}"
+        )
+    if lex_state.block_comment:
+        raise SourceError(
+            f"{display_path}: unterminated block comment opened at line "
+            f"{lex_state.block_comment_line}"
+        )
+    if lex_state.inline_file:
+        raise SourceError(
+            f"{display_path}: unterminated inline-file opened at line "
+            f"{lex_state.inline_file_line}"
+        )
+    if (
+        open_node is not None
+        and open_node.mode in {"block", "call"}
+        and not open_node.pending_close
+    ):
+        raise SourceError(
+            f"{display_path}: unterminated {open_node.command} {open_node.mode} "
+            f"opened at line {open_node.line}"
+        )
+    if frames:
+        frame = frames[-1]
+        raise SourceError(
+            f"{display_path}: unterminated {frame.kind} delimiter opened at "
+            f"line {frame.line}"
+        )
     if open_node is not None:
         finish(open_node)
     if cursor < len(source):
@@ -492,14 +543,18 @@ def _line_at_offset(lines: tuple[tuple[int, int, int], ...], offset: int) -> int
     return lines[-1][0] if lines else 1
 
 
-def _lex_line(raw: bytes, state: _LexState) -> _LexedLine:
+def _lex_line(
+    raw: bytes, state: _LexState, *, line_number: int = 1
+) -> _LexedLine:
     stripped = raw.lstrip(b" \t\r\n")
     if state.inline_file:
         if stripped.startswith(b">>>>>>>>"):
             state.inline_file = False
+            state.inline_file_line = None
         return _LexedLine((), True)
     if not state.block_comment and state.quote is None and stripped.startswith(b"<<<<<<<<"):
         state.inline_file = True
+        state.inline_file_line = line_number
         return _LexedLine((), True)
 
     tokens: list[str] = []
@@ -511,6 +566,7 @@ def _lex_line(raw: bytes, state: _LexState) -> _LexedLine:
             if close < 0:
                 return _LexedLine(tuple(tokens), has_code)
             state.block_comment = False
+            state.block_comment_line = None
             index = close + 2
             continue
         if state.quote is not None:
@@ -519,17 +575,20 @@ def _lex_line(raw: bytes, state: _LexState) -> _LexedLine:
             if close < 0:
                 return _LexedLine(tuple(tokens), has_code)
             state.quote = None
+            state.quote_line = None
             index = close + 1
             continue
         if raw.startswith(b"//", index):
             break
         if raw.startswith(b"/*", index):
             state.block_comment = True
+            state.block_comment_line = line_number
             index += 2
             continue
         byte = raw[index]
         if byte in (ord("~"), ord('"')):
             state.quote = byte
+            state.quote_line = line_number
             has_code = True
             index += 1
             continue
@@ -553,10 +612,21 @@ def _statement_candidate(first: str | None) -> tuple[str, str] | None:
     return first, "unknown"
 
 
-def _starts_after_copy(first: str | None) -> bool:
+def _starts_after_copy(
+    first: str | None, *, complete_copy: bool = False
+) -> bool:
     if first is None or first in _PATCH_OR_COPY_CONTINUATIONS:
         return False
-    return first in _ACTION_COMMANDS or first.startswith(("ACTION_", "AT_"))
+    return (
+        complete_copy
+        or first in _ACTION_COMMANDS
+        or first.startswith(("ACTION_", "AT_"))
+    )
+
+
+def _copy_operands_complete(raw: bytes) -> bool:
+    values = _copy_operand_values(raw)
+    return len(values) >= 2 and len(values) % 2 == 0
 
 
 def _else_awaits_begin(tokens: tuple[str, ...]) -> bool:

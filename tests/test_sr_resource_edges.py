@@ -84,15 +84,25 @@ def _make_itm() -> bytes:
     return bytes(data)
 
 
-def _make_eff(secondary_preamble: bytes = b"EFF V2.0") -> bytes:
+def _make_eff(
+    secondary_preamble: bytes = b"EFF V2.0",
+    *,
+    opcode: int = 326,
+    parameter1: int = 0,
+    parameter2: int = 0,
+    parent_type: int = 1,
+) -> bytes:
     assert len(secondary_preamble) == 8
     data = bytearray(EFF_V2_SIZE)
     data[:8] = b"EFF V2.0"
     data[8:16] = secondary_preamble
-    _put_u32(data, 0x10, 326)
+    _put_u32(data, 0x10, opcode)
+    _put_u32(data, 0x1C, parameter1)
+    _put_u32(data, 0x20, parameter2)
     _put_resref(data, 0x30, "Primary")
     _put_resref(data, 0x70, "Visual")
     _put_resref(data, 0x78, "Tertiary")
+    _put_u32(data, 0x90, parent_type)
     _put_resref(data, 0x94, "Parent")
     return bytes(data)
 
@@ -189,6 +199,189 @@ def test_itm_v1_edges_cover_header_ability_and_equipped_effects(
     assert (equipped.target, equipped.opcode) == ("Equipped", 272)
 
 
+def test_opcode_177_payload_matches_only_eff_candidates(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "source.spl"
+    source.write_bytes(_make_spl(((177, "SPWI118C"),)))
+    (package / "SPWI118C.eff").write_bytes(b"")
+    (package / "spwi118c.SPL").write_bytes(b"")
+
+    payload = _edge(
+        scan_resource_edges(source, package_root=package),
+        "ability[0].effect[0].resource",
+    )
+
+    assert payload.semantics == "resource"
+    assert payload.expected_types == ("EFF",)
+    assert payload.classification == "local"
+    assert payload.local_candidates == ("SPWI118C.eff",)
+
+
+@pytest.mark.parametrize(
+    ("opcode", "expected_types"),
+    [
+        (67, ("CRE",)),
+        (82, ("BCS",)),
+        (111, ("ITM",)),
+        (112, ("ITM",)),
+        (122, ("ITM",)),
+        (135, ("CRE",)),
+        (146, ("SPL",)),
+        (147, ("SPL",)),
+        (148, ("SPL",)),
+        (171, ("SPL",)),
+        (172, ("SPL",)),
+        (174, ("WAV",)),
+        (177, ("EFF",)),
+        (201, ("SPL",)),
+        (206, ("SPL",)),
+        (214, ("2DA",)),
+        (215, ("BAM", "VVC")),
+        (232, ("SPL",)),
+        (248, ("EFF",)),
+        (251, ("SPL",)),
+        (255, ("ITM",)),
+        (296, ("BAM", "VVC")),
+    ],
+)
+def test_documented_primary_effect_resource_types(
+    tmp_path: Path, opcode: int, expected_types: tuple[str, ...]
+) -> None:
+    path = tmp_path / "typed.spl"
+    path.write_bytes(_make_spl(((opcode, "Target"),)))
+
+    payload = _edge(
+        scan_resource_edges(path), "ability[0].effect[0].resource"
+    )
+
+    assert payload.semantics == "resource"
+    assert payload.expected_types == expected_types
+
+
+@pytest.mark.parametrize(
+    ("opcode", "parameter1", "field", "expected_types"),
+    [
+        (67, 0, "effect.resource2", ("VVC", "BAM")),
+        (67, 0, "effect.resource3", ("VVC", "BAM")),
+        (112, 2, "effect.resource2", ("WAV",)),
+        (122, 0, "effect.resource2", ("ITM",)),
+        (122, 0, "effect.resource3", ("ITM",)),
+    ],
+)
+def test_documented_secondary_effect_resource_types(
+    tmp_path: Path,
+    opcode: int,
+    parameter1: int,
+    field: str,
+    expected_types: tuple[str, ...],
+) -> None:
+    path = tmp_path / "typed.eff"
+    path.write_bytes(_make_eff(opcode=opcode, parameter1=parameter1))
+
+    payload = _edge(scan_resource_edges(path), field)
+
+    assert payload.semantics == "resource"
+    assert payload.expected_types == expected_types
+
+
+@pytest.mark.parametrize(
+    ("opcode", "parameter1", "parameter2", "field"),
+    [
+        (112, 1, 0, "effect.resource2"),
+        (214, 0, 1, "effect.resource"),
+        (214, 0, 2, "effect.resource"),
+    ],
+)
+def test_conditionally_ignored_effect_payloads_are_non_resources(
+    tmp_path: Path,
+    opcode: int,
+    parameter1: int,
+    parameter2: int,
+    field: str,
+) -> None:
+    path = tmp_path / "ignored.eff"
+    path.write_bytes(
+        _make_eff(
+            opcode=opcode,
+            parameter1=parameter1,
+            parameter2=parameter2,
+        )
+    )
+
+    payload = _edge(scan_resource_edges(path), field)
+
+    assert payload.semantics == "non_resource"
+    assert payload.expected_types == ()
+    assert payload.classification is None
+
+
+@pytest.mark.parametrize(
+    ("opcode", "target"),
+    [
+        (258, "ACTKEY"),
+        (265, "GLOBNAME"),
+        (267, "STALE"),
+        (309, "dvgldust"),
+    ],
+)
+def test_documented_non_resource_effect_payloads_remain_visible_without_edges(
+    tmp_path: Path, opcode: int, target: str
+) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "source.spl"
+    source.write_bytes(_make_spl(((opcode, target),)))
+    (package / f"{target}.spl").write_bytes(b"")
+
+    payload = _edge(
+        scan_resource_edges(source, package_root=package),
+        "ability[0].effect[0].resource",
+    )
+
+    assert (payload.target, payload.opcode) == (target, opcode)
+    assert payload.semantics == "non_resource"
+    assert payload.expected_types == ()
+    assert payload.classification is None
+    assert payload.local_candidates == ()
+
+
+def test_unknown_effect_payload_remains_visible_without_dependency_classification(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "source.spl"
+    source.write_bytes(_make_spl(((999, "Mystery"),)))
+    (package / "Mystery.spl").write_bytes(b"")
+
+    payload = _edge(
+        scan_resource_edges(source, package_root=package),
+        "ability[0].effect[0].resource",
+    )
+
+    assert payload.semantics == "unknown"
+    assert payload.expected_types == ()
+    assert payload.classification is None
+    assert payload.local_candidates == ()
+
+
+@pytest.mark.parametrize("opcode", [265, 309])
+def test_concatenated_variable_payload_fields_are_all_non_resources(
+    tmp_path: Path, opcode: int
+) -> None:
+    path = tmp_path / "variable.eff"
+    path.write_bytes(_make_eff(opcode=opcode))
+
+    edges = scan_resource_edges(path)
+
+    for field in ("effect.resource", "effect.resource2", "effect.resource3"):
+        payload = _edge(edges, field)
+        assert payload.semantics == "non_resource"
+        assert payload.expected_types == ()
+        assert payload.classification is None
+
+
 def test_itm_zero_ability_offset_is_independent_from_effect_table(
     tmp_path: Path,
 ) -> None:
@@ -226,6 +419,34 @@ def test_eff_v2_edges_cover_all_resource_fields(tmp_path: Path) -> None:
     ]
     assert [edge.offset for edge in edges] == [0x30, 0x70, 0x78, 0x94]
     assert {edge.opcode for edge in edges} == {326}
+    parent = _edge(edges, "effect.parent_resource")
+    assert parent.semantics == "resource"
+    assert parent.expected_types == ("SPL",)
+
+
+@pytest.mark.parametrize(
+    ("parent_type", "expected_type", "wrong_type"),
+    [(1, "SPL", "ITM"), (2, "ITM", "SPL")],
+)
+def test_eff_parent_resource_uses_declared_parent_type(
+    tmp_path: Path, parent_type: int, expected_type: str, wrong_type: str
+) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "source.eff"
+    source.write_bytes(_make_eff(parent_type=parent_type))
+    (package / f"Parent.{expected_type.lower()}").write_bytes(b"")
+    (package / f"parent.{wrong_type.lower()}").write_bytes(b"")
+
+    parent = _edge(
+        scan_resource_edges(source, package_root=package),
+        "effect.parent_resource",
+    )
+
+    assert parent.semantics == "resource"
+    assert parent.expected_types == (expected_type,)
+    assert parent.classification == "local"
+    assert parent.local_candidates == (f"Parent.{expected_type.lower()}",)
 
 
 @pytest.mark.parametrize(
@@ -286,7 +507,7 @@ def test_cre_v1_edges_cover_spells_items_scripts_portraits_and_effects(
     assert _edge(edges, "effect[0].resource").opcode == 232
 
 
-def test_local_classification_is_case_insensitive_and_preserves_candidates(
+def test_local_classification_is_case_insensitive_and_filters_candidate_types(
     tmp_path: Path,
 ) -> None:
     package = tmp_path / "package"
@@ -301,9 +522,58 @@ def test_local_classification_is_case_insensitive_and_preserves_candidates(
     effect = _edge(edges, "ability[0].effect[0].resource")
 
     assert effect.target == "mIxEd"
+    assert effect.expected_types == ("SPL",)
     assert effect.classification == "local"
-    assert effect.local_candidates == ("a/MIXED.SPL", "b/mixed.itm")
+    assert effect.local_candidates == ("a/MIXED.SPL",)
     assert _edge(edges, "header.spellbook_icon").classification == "external"
+
+
+def test_fixed_icon_matches_only_same_type_candidates_in_stable_order(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package"
+    (package / "a").mkdir(parents=True)
+    (package / "b").mkdir()
+    (package / "c").mkdir()
+    source = package / "source.spl"
+    payload = bytearray(_make_spl(()))
+    _put_resref(payload, 0x3A, "SPWI118C")
+    source.write_bytes(payload)
+    (package / "a/SPWI118C.bam").write_bytes(b"")
+    (package / "b/spwi118c.BAM").write_bytes(b"")
+    (package / "c/SPWI118C.spl").write_bytes(b"")
+
+    icon = _edge(
+        scan_resource_edges(source, package_root=package),
+        "header.spellbook_icon",
+    )
+
+    assert icon.semantics == "resource"
+    assert icon.expected_types == ("BAM",)
+    assert icon.classification == "local"
+    assert icon.local_candidates == (
+        "a/SPWI118C.bam",
+        "b/spwi118c.BAM",
+    )
+
+
+def test_cre_script_does_not_match_same_stem_cre_or_itm(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    source = package / "source.cre"
+    source.write_bytes(_make_cre())
+    (package / "Override.cre").write_bytes(b"")
+    (package / "override.ITM").write_bytes(b"")
+
+    script = _edge(
+        scan_resource_edges(source, package_root=package),
+        "header.override_script",
+    )
+
+    assert script.semantics == "resource"
+    assert script.expected_types == ("BCS",)
+    assert script.classification == "external"
+    assert script.local_candidates == ()
 
 
 def test_duplicate_edges_are_preserved_in_source_offset_order(tmp_path: Path) -> None:
@@ -352,6 +622,43 @@ def test_bad_table_offsets_name_the_file_and_field(tmp_path: Path, kind: str) ->
 
     assert path.name in str(error.value)
     assert f"0x{fields[kind]:x}" in str(error.value).lower()
+
+
+@pytest.mark.parametrize(
+    ("items_count", "slot_index", "slot_value"),
+    [
+        (0, 0, 0),
+        (1, 37, 1),
+    ],
+)
+def test_cre_item_slots_reject_indices_outside_item_table(
+    tmp_path: Path, items_count: int, slot_index: int, slot_value: int
+) -> None:
+    payload = bytearray(_make_cre())
+    slots_offset = struct.unpack_from("<I", payload, 0x2B8)[0]
+    _put_u32(payload, 0x2C0, items_count)
+    _put_u16(payload, slots_offset + slot_index * 2, slot_value)
+    path = tmp_path / "bad-slot.cre"
+    path.write_bytes(payload)
+
+    with pytest.raises(ResourceError) as error:
+        scan_resource_edges(path)
+
+    message = str(error.value)
+    assert path.as_posix() in message
+    assert f"slot[{slot_index}]" in message
+    assert f"0x{slots_offset + slot_index * 2:x}" in message.lower()
+
+
+def test_cre_non_item_slot_tail_words_are_not_item_indices(tmp_path: Path) -> None:
+    payload = bytearray(_make_cre())
+    slots_offset = struct.unpack_from("<I", payload, 0x2B8)[0]
+    _put_u16(payload, slots_offset + 0x4C, 0x1234)
+    _put_u16(payload, slots_offset + 0x4E, 0x5678)
+    path = tmp_path / "slot-tail.cre"
+    path.write_bytes(payload)
+
+    assert scan_resource_edges(path)
 
 
 def test_unsupported_or_missing_resource_paths_fail_with_context(tmp_path: Path) -> None:
@@ -419,6 +726,7 @@ def test_binary_edges_include_dynamic_spell_reference() -> None:
     assert matches
     assert all(edge.opcode == 206 for edge in matches)
     assert all(edge.field.endswith(".resource") for edge in matches)
+    assert all(edge.expected_types == ("SPL",) for edge in matches)
     assert all(edge.classification == "local" for edge in matches)
 
 
