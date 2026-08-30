@@ -32,9 +32,20 @@ _TRI_STATE_VALUES = frozenset({-1, 0, 1})
 INFRASTRUCTURE_CATEGORIES = frozenset(
     {"derived", "compatibility", "mandatory_metadata"}
 )
+MEMBER_REFERENCE_ROLES = frozenset(
+    {
+        "active",
+        "active_replacement",
+        "deprecated_slot",
+        "game_compatibility_slot",
+        "ai_deprecated_slot",
+    }
+)
+NAME_FALLBACK_KINDS = frozenset({"game_resource"})
 _HEX_DIGITS = frozenset(string.hexdigits)
 _SETTING_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]*\Z")
 _TRA_REFERENCE_PATTERN = re.compile(r"@[0-9]+\Z")
+_RESREF_PATTERN = re.compile(r"[A-Z0-9_#]{1,8}\Z")
 _WINDOWS_FORBIDDEN_PATH_CHARACTERS = frozenset('<>:"|?*')
 _WINDOWS_RESERVED_PATH_NAMES = frozenset(
     {"CON", "PRN", "AUX", "NUL"}
@@ -107,6 +118,22 @@ class SourceResolution:
 
 
 @dataclass(frozen=True)
+class NameFallback:
+    kind: str
+    resource: str
+
+
+@dataclass(frozen=True)
+class MemberReference:
+    source_spell: str
+    level: int
+    role: str
+    name_ref: str | None
+    name_fallback: NameFallback | None
+    description_ref: str
+
+
+@dataclass(frozen=True)
 class Change:
     id: str
     setting: str
@@ -116,7 +143,9 @@ class Change:
     component: int = 0
     games: tuple[str, ...] = field(default_factory=tuple)
     name_ref: str | None = None
+    name_fallback: NameFallback | None = None
     description_ref: str | None = None
+    member_refs: tuple[MemberReference, ...] = field(default_factory=tuple)
     source_spans: tuple[SourceSpan, ...] = field(default_factory=tuple)
     resources: tuple[ResourceOwnership, ...] = field(default_factory=tuple)
     atomic_group: str | None = None
@@ -452,6 +481,122 @@ def _parse_source_resolution(value: Any, path: str) -> SourceResolution:
     )
 
 
+def _parse_name_fallback(value: Any, path: str) -> NameFallback:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={"kind", "resource"},
+        required={"kind", "resource"},
+    )
+    kind = _identifier(raw["kind"], f"{path}.kind")
+    if kind not in NAME_FALLBACK_KINDS:
+        expected = ", ".join(sorted(NAME_FALLBACK_KINDS))
+        raise CatalogError(f"{path}.kind: expected one of {expected}")
+    return NameFallback(
+        kind=kind,
+        resource=_resref(raw["resource"], f"{path}.resource"),
+    )
+
+
+def _parse_optional_name_fallback(value: Any, path: str) -> NameFallback | None:
+    if value is None:
+        return None
+    return _parse_name_fallback(value, path)
+
+
+def _parse_member_reference(value: Any, path: str) -> MemberReference:
+    raw = _mapping(value, path)
+    _check_keys(
+        raw,
+        path=path,
+        allowed={
+            "source_spell",
+            "level",
+            "role",
+            "name_ref",
+            "name_fallback",
+            "description_ref",
+        },
+        required={
+            "source_spell",
+            "level",
+            "role",
+            "name_ref",
+            "name_fallback",
+            "description_ref",
+        },
+    )
+    level = _integer(raw["level"], f"{path}.level")
+    if not 1 <= level <= 10:
+        raise CatalogError(f"{path}.level: expected an integer from 1 through 10")
+    role = _identifier(raw["role"], f"{path}.role")
+    if role not in MEMBER_REFERENCE_ROLES:
+        expected = ", ".join(sorted(MEMBER_REFERENCE_ROLES))
+        raise CatalogError(f"{path}.role: expected one of {expected}")
+    name_ref = _optional_tra_reference(raw["name_ref"], f"{path}.name_ref")
+    name_fallback = _parse_optional_name_fallback(
+        raw["name_fallback"], f"{path}.name_fallback"
+    )
+    if name_ref is None and name_fallback is None:
+        raise CatalogError(
+            f"{path}.name_ref: expected exactly one of name_ref or name_fallback"
+        )
+    if name_ref is not None and name_fallback is not None:
+        raise CatalogError(
+            f"{path}.name_fallback: expected exactly one of name_ref or name_fallback"
+        )
+    return MemberReference(
+        source_spell=_resref(raw["source_spell"], f"{path}.source_spell"),
+        level=level,
+        role=role,
+        name_ref=name_ref,
+        name_fallback=name_fallback,
+        description_ref=_tra_reference(
+            raw["description_ref"], f"{path}.description_ref"
+        ),
+    )
+
+
+def _validate_documentation_mode(change: Change, path: str) -> None:
+    member_count = len(change.member_refs)
+    if member_count == 0:
+        if change.name_ref is None and change.name_fallback is None:
+            raise CatalogError(
+                f"{path}.name_ref: singleton documentation requires exactly one "
+                "of name_ref or name_fallback"
+            )
+        if change.name_ref is not None and change.name_fallback is not None:
+            raise CatalogError(
+                f"{path}.name_fallback: singleton documentation requires exactly "
+                "one of name_ref or name_fallback"
+            )
+        if change.description_ref is None:
+            raise CatalogError(
+                f"{path}.description_ref: singleton documentation requires a "
+                "description_ref"
+            )
+        return
+    if member_count == 1:
+        raise CatalogError(
+            f"{path}.member_refs: composite documentation requires at least two members"
+        )
+    if change.name_ref is not None:
+        raise CatalogError(
+            f"{path}.name_ref: composite documentation requires null top-level text refs"
+        )
+    if change.name_fallback is not None:
+        raise CatalogError(
+            f"{path}.name_fallback: composite documentation requires null top-level "
+            "text refs"
+        )
+    if change.description_ref is not None:
+        raise CatalogError(
+            f"{path}.description_ref: composite documentation requires null top-level "
+            "text refs"
+        )
+
+
 def _parse_change(value: Any, path: str) -> Change:
     raw = _mapping(value, path)
     allowed = {
@@ -463,7 +608,9 @@ def _parse_change(value: Any, path: str) -> Change:
         "component",
         "games",
         "name_ref",
+        "name_fallback",
         "description_ref",
+        "member_refs",
         "source_spans",
         "resources",
         "atomic_group",
@@ -477,7 +624,15 @@ def _parse_change(value: Any, path: str) -> Change:
         raw,
         path=path,
         allowed=allowed,
-        required={"id", "setting", "display_name", "default", "group"},
+        required={
+            "id",
+            "setting",
+            "display_name",
+            "default",
+            "group",
+            "name_fallback",
+            "member_refs",
+        },
     )
 
     component = _integer(raw.get("component", 0), f"{path}.component")
@@ -486,7 +641,23 @@ def _parse_change(value: Any, path: str) -> Change:
 
     source_spans_raw = _list(raw.get("source_spans", []), f"{path}.source_spans")
     resources_raw = _list(raw.get("resources", []), f"{path}.resources")
-    return Change(
+    member_refs_raw = _list(raw["member_refs"], f"{path}.member_refs")
+    member_refs = tuple(
+        _parse_member_reference(item, f"{path}.member_refs[{index}]")
+        for index, item in enumerate(member_refs_raw)
+    )
+    seen_source_spells: dict[str, int] = {}
+    for index, member in enumerate(member_refs):
+        normalized = member.source_spell.casefold()
+        previous = seen_source_spells.get(normalized)
+        if previous is not None:
+            raise CatalogError(
+                f"{path}.member_refs[{index}].source_spell: duplicate source spell "
+                f"{member.source_spell!r}; first declared at "
+                f"{path}.member_refs[{previous}].source_spell"
+            )
+        seen_source_spells[normalized] = index
+    change = Change(
         id=_identifier(raw["id"], f"{path}.id"),
         setting=_setting(raw["setting"], f"{path}.setting"),
         display_name=_string(raw["display_name"], f"{path}.display_name"),
@@ -495,9 +666,13 @@ def _parse_change(value: Any, path: str) -> Change:
         component=component,
         games=_games(raw.get("games", []), f"{path}.games"),
         name_ref=_optional_tra_reference(raw.get("name_ref"), f"{path}.name_ref"),
+        name_fallback=_parse_optional_name_fallback(
+            raw["name_fallback"], f"{path}.name_fallback"
+        ),
         description_ref=_optional_tra_reference(
             raw.get("description_ref"), f"{path}.description_ref"
         ),
+        member_refs=member_refs,
         source_spans=tuple(
             _parse_source_span(item, f"{path}.source_spans[{index}]")
             for index, item in enumerate(source_spans_raw)
@@ -524,6 +699,8 @@ def _parse_change(value: Any, path: str) -> Change:
             f"{path}.documentation_only_reason",
         ),
     )
+    _validate_documentation_mode(change, path)
+    return change
 
 
 def _parse_infrastructure(value: Any, path: str) -> Infrastructure:
@@ -1014,6 +1191,23 @@ def _optional_tra_reference(value: Any, path: str) -> str | None:
     if reference is not None and _TRA_REFERENCE_PATTERN.fullmatch(reference) is None:
         raise CatalogError(f"{path}: expected a TRA reference such as @123")
     return reference
+
+
+def _tra_reference(value: Any, path: str) -> str:
+    reference = _optional_tra_reference(value, path)
+    if reference is None:
+        raise CatalogError(f"{path}: expected a TRA reference such as @123")
+    return reference
+
+
+def _resref(value: Any, path: str) -> str:
+    resource = _string(value, path)
+    if _RESREF_PATTERN.fullmatch(resource) is None:
+        raise CatalogError(
+            f"{path}: expected an uppercase Infinity Engine resref of 1 to 8 "
+            "letters, digits, underscores, or # characters"
+        )
+    return resource
 
 
 def _identifier(value: Any, path: str) -> str:

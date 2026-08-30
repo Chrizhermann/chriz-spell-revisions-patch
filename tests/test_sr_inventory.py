@@ -1012,7 +1012,9 @@ def _coverage_change(
     source_spans: list[dict[str, object]] | None = None,
     resources: list[dict[str, object]] | None = None,
     name_ref: str | None = "@1",
+    name_fallback: dict[str, object] | None = None,
     description_ref: str | None = "@2",
+    member_refs: list[dict[str, object]] | None = None,
     documentation_only_reason: str | None = None,
     component: int = 0,
     processors: list[str] | None = None,
@@ -1026,7 +1028,9 @@ def _coverage_change(
         "component": component,
         "games": ["all"],
         "name_ref": name_ref,
+        "name_fallback": name_fallback,
         "description_ref": description_ref,
+        "member_refs": member_refs or [],
         "source_spans": source_spans or [],
         "resources": resources or [],
         "atomic_group": None,
@@ -1109,17 +1113,69 @@ def test_catalog_coverage_reports_every_unowned_and_multiply_owned_source_node(
     assert result.source_node_count == 2
 
 
-def test_catalog_coverage_requires_current_english_change_text_and_code_evidence(
+def test_catalog_coverage_accepts_game_name_fallback_without_hiding_evidence_checks(
     tmp_path: Path,
 ) -> None:
     component = tmp_path / "spell_rev/components/main_component.tpa"
     component.parent.mkdir(parents=True)
     component.write_text("", encoding="utf-8")
-    _write_coverage_language_files(tmp_path)
+    _write_coverage_language_files(tmp_path, "@2=~Fallback description~\n")
     catalog = _coverage_catalog(
         changes=[
             _coverage_change(
-                "undocumented", name_ref=None, description_ref=None
+                "fallback",
+                name_ref=None,
+                name_fallback={"kind": "game_resource", "resource": "SPWI101"},
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == ["missing_change_evidence"]
+    assert all(issue.location == "changes[0]" for issue in result.issues)
+
+
+def test_catalog_coverage_audits_every_composite_member_reference(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    _write_coverage_language_files(
+        tmp_path,
+        "@1=~Unused singleton name~\n@2=~Unused singleton description~\n"
+        "@9002=~   ~\n@9003=~Fallback member description~\n",
+    )
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    {
+                        "source_spell": "SPWI101",
+                        "level": 1,
+                        "role": "active",
+                        "name_ref": "@9001",
+                        "name_fallback": None,
+                        "description_ref": "@9002",
+                    },
+                    {
+                        "source_spell": "SPWI205",
+                        "level": 2,
+                        "role": "deprecated_slot",
+                        "name_ref": None,
+                        "name_fallback": {
+                            "kind": "game_resource",
+                            "resource": "SPWI205",
+                        },
+                        "description_ref": "@9003",
+                    },
+                ],
+                documentation_only_reason="fixture has no executable source",
             )
         ]
     )
@@ -1127,11 +1183,13 @@ def test_catalog_coverage_requires_current_english_change_text_and_code_evidence
     result = audit_catalog_coverage(tmp_path, catalog)
 
     assert [issue.code for issue in result.issues] == [
-        "missing_change_name_ref",
-        "missing_change_description_ref",
-        "missing_change_evidence",
+        "missing_english_reference",
+        "blank_english_reference",
     ]
-    assert all(issue.location == "changes[0]" for issue in result.issues)
+    assert [issue.location for issue in result.issues] == [
+        "changes[0].member_refs[0].name_ref",
+        "changes[0].member_refs[0].description_ref",
+    ]
 
 
 def test_catalog_coverage_reports_each_missing_english_reference(

@@ -14,7 +14,14 @@ from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .catalog import Catalog, Change, Group, load_catalog
+from .catalog import (
+    Catalog,
+    Change,
+    Group,
+    MemberReference,
+    NameFallback,
+    load_catalog,
+)
 from .resolve import feature_symbols
 from .text import TraError, load_english_tra, resolve_tra_reference
 
@@ -145,6 +152,47 @@ def render_markdown_catalog(catalog: Catalog, texts: Mapping[str, str]) -> str:
             )
             + " |"
         )
+    composite_changes = [
+        (index, change)
+        for index, change in enumerate(catalog.changes)
+        if change.member_refs
+    ]
+    if composite_changes:
+        lines.extend(
+            [
+                "",
+                "## Atomic bundle member descriptions",
+                "",
+                "The members listed here are controlled together by one atomic "
+                "option and are not separate options.",
+            ]
+        )
+        for change_index, change in composite_changes:
+            lines.extend(
+                [
+                    "",
+                    f"### {_markdown(change.display_name)} (`{change.setting}`)",
+                    "",
+                    "| Source spell | Level / role | Current name | Current description |",
+                    "|---|---|---|---|",
+                ]
+            )
+            for member_index, member in enumerate(change.member_refs):
+                name, description = _member_text(
+                    change_index, member_index, member, texts
+                )
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        (
+                            f"`{member.source_spell}`",
+                            _markdown(f"{member.level} / {member.role}"),
+                            _markdown(name),
+                            _markdown(description),
+                        )
+                    )
+                    + " |"
+                )
     if not catalog.changes:
         lines.extend(
             [
@@ -200,6 +248,48 @@ def render_html_catalog(
             "    <tr>" + "".join(f"<td>{_html(value)}</td>" for value in values) + "</tr>"
         )
     lines.extend(("  </tbody>", "</table>"))
+    composite_changes = [
+        (index, change)
+        for index, change in enumerate(catalog.changes)
+        if change.member_refs
+    ]
+    if composite_changes:
+        lines.extend(
+            (
+                "<h4>Atomic bundle member descriptions</h4>",
+                "<p>The members listed here are controlled together by one atomic "
+                "option and are not separate options.</p>",
+            )
+        )
+        for change_index, change in composite_changes:
+            lines.extend(
+                (
+                    f"<h5>{_html(change.display_name)} "
+                    f"(<code>{_html(change.setting)}</code>)</h5>",
+                    '<table class="sr-config-bundle-members">',
+                    "  <thead>",
+                    "    <tr><th>Source spell</th><th>Level / role</th>"
+                    "<th>Current name</th><th>Current description</th></tr>",
+                    "  </thead>",
+                    "  <tbody>",
+                )
+            )
+            for member_index, member in enumerate(change.member_refs):
+                name, description = _member_text(
+                    change_index, member_index, member, texts
+                )
+                values = (
+                    member.source_spell,
+                    f"{member.level} / {member.role}",
+                    name,
+                    description,
+                )
+                lines.append(
+                    "    <tr>"
+                    + "".join(f"<td>{_html(value)}</td>" for value in values)
+                    + "</tr>"
+                )
+            lines.extend(("  </tbody>", "</table>"))
     if not catalog.changes:
         lines.append(
             "<p>No public changes have been cataloged yet. The migration gate remains "
@@ -535,21 +625,64 @@ def _change_text(
     index: int,
     texts: Mapping[str, str],
 ) -> tuple[str, str]:
-    name = (
-        resolve_tra_reference(texts, change.name_ref, path=f"changes[{index}].name_ref")
-        if change.name_ref is not None
-        else change.display_name
-    )
-    description = (
-        resolve_tra_reference(
-            texts,
-            change.description_ref,
-            path=f"changes[{index}].description_ref",
+    if change.member_refs:
+        return (
+            change.display_name,
+            f"One atomic option controls {len(change.member_refs)} member spells "
+            "listed below.",
         )
-        if change.description_ref is not None
-        else change.documentation_only_reason or "No description supplied."
+    name = _resolved_name(
+        change.name_ref,
+        change.name_fallback,
+        texts,
+        path=f"changes[{index}]",
+    )
+    assert change.description_ref is not None
+    description = resolve_tra_reference(
+        texts,
+        change.description_ref,
+        path=f"changes[{index}].description_ref",
+    )
+    if change.name_fallback is not None:
+        description = (
+            "Name retained from installed game resource "
+            f"{change.name_fallback.resource}. {description}"
+        )
+    return name, description
+
+
+def _member_text(
+    change_index: int,
+    member_index: int,
+    member: MemberReference,
+    texts: Mapping[str, str],
+) -> tuple[str, str]:
+    prefix = f"changes[{change_index}].member_refs[{member_index}]"
+    name = _resolved_name(
+        member.name_ref,
+        member.name_fallback,
+        texts,
+        path=prefix,
+    )
+    description = resolve_tra_reference(
+        texts,
+        member.description_ref,
+        path=f"{prefix}.description_ref",
     )
     return name, description
+
+
+def _resolved_name(
+    reference: str | None,
+    fallback: NameFallback | None,
+    texts: Mapping[str, str],
+    *,
+    path: str,
+) -> str:
+    if reference is not None:
+        return resolve_tra_reference(texts, reference, path=f"{path}.name_ref")
+    assert fallback is not None
+    return f"Game-provided name ({fallback.resource})"
 
 
 def _relations(

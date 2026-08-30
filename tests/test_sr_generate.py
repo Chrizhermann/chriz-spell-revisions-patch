@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import stat
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -74,7 +75,9 @@ def _catalog(
                 "component": 0,
                 "games": ["bg2ee", "eet"],
                 "name_ref": "@1",
+                "name_fallback": None,
                 "description_ref": "@2",
+                "member_refs": [],
                 "source_spans": [
                     {
                         "path": "spell_rev/components/main_component.tpa",
@@ -101,6 +104,45 @@ def _texts() -> dict[str, str]:
     return {
         "@1": "Magic | Missile <name>",
         "@2": "Deals <damage> & escapes | pipes. `code` [link](target) *bold*.",
+    }
+
+
+def _composite_catalog() -> Catalog:
+    raw = json.loads(json.dumps(asdict(_catalog())))
+    record = raw["changes"][0]
+    record["display_name"] = "Shared | Deflection <bundle>"
+    record["name_ref"] = None
+    record["name_fallback"] = None
+    record["description_ref"] = None
+    record["member_refs"] = [
+        {
+            "source_spell": "SPWI101",
+            "level": 1,
+            "role": "active",
+            "name_ref": "@3",
+            "name_fallback": None,
+            "description_ref": "@4",
+        },
+        {
+            "source_spell": "SPWI205",
+            "level": 2,
+            "role": "game_compatibility_slot",
+            "name_ref": None,
+            "name_fallback": {
+                "kind": "game_resource",
+                "resource": "SPWI205",
+            },
+            "description_ref": "@5",
+        },
+    ]
+    return Catalog.from_dict(raw)
+
+
+def _composite_texts() -> dict[str, str]:
+    return {
+        "@3": "First | Name <one>",
+        "@4": "First & description `one`.",
+        "@5": "Second | description <two>.",
     }
 
 
@@ -261,6 +303,34 @@ def test_fingerprint_is_canonical_semantic_json_not_source_formatting() -> None:
     ).hexdigest()
 
 
+def test_fingerprint_includes_member_order_refs_and_fallback_with_schema_one() -> None:
+    baseline = _composite_catalog()
+    raw = json.loads(json.dumps(asdict(baseline)))
+
+    reordered = json.loads(json.dumps(raw))
+    reordered["changes"][0]["member_refs"].reverse()
+    changed_ref = json.loads(json.dumps(raw))
+    changed_ref["changes"][0]["member_refs"][0]["description_ref"] = "@99"
+    changed_fallback = json.loads(json.dumps(raw))
+    changed_fallback["changes"][0]["member_refs"][1]["name_fallback"][
+        "resource"
+    ] = "SPWI206"
+    compact = json.loads(json.dumps(raw, separators=(",", ":")))
+    pretty = json.loads(json.dumps(raw, indent=4, ensure_ascii=False))
+
+    fingerprints = {
+        catalog_fingerprint(baseline),
+        catalog_fingerprint(Catalog.from_dict(reordered)),
+        catalog_fingerprint(Catalog.from_dict(changed_ref)),
+        catalog_fingerprint(Catalog.from_dict(changed_fallback)),
+    }
+    assert baseline.schema_version == 1
+    assert len(fingerprints) == 4
+    assert catalog_fingerprint(Catalog.from_dict(compact)) == catalog_fingerprint(
+        Catalog.from_dict(pretty)
+    )
+
+
 def test_config_preserves_tobex_prefix_and_emits_exact_metadata_and_defaults() -> None:
     existing = (
         "// Main Component   \r\n"
@@ -316,6 +386,83 @@ def test_docs_resolve_tra_and_escape_markdown_and_html() -> None:
     assert "Magic | Missile &lt;name&gt;" in html_region
     assert "Deals &lt;damage&gt; &amp; escapes | pipes." in html_region
     assert html_region.count('id="spell_changes"') == 1
+
+
+def test_singleton_fallback_renders_game_name_note_before_description() -> None:
+    raw = json.loads(json.dumps(asdict(_catalog())))
+    record = raw["changes"][0]
+    record["name_ref"] = None
+    record["name_fallback"] = {
+        "kind": "game_resource",
+        "resource": "SPWI101",
+    }
+    catalog = Catalog.from_dict(raw)
+    texts = {"@2": "Resolved <description>."}
+
+    markdown = render_markdown_catalog(catalog, texts)
+    html_region = render_html_catalog(catalog, texts, newline="\n")
+
+    markdown_name = "Game\\-provided name \\(SPWI101\\)"
+    html_name = "Game-provided name (SPWI101)"
+    rendered_description = (
+        "Name retained from installed game resource SPWI101. "
+        "Resolved &lt;description&gt;."
+    )
+    assert markdown_name in markdown
+    assert rendered_description in markdown
+    assert markdown.index("Name retained") < markdown.index("Resolved &lt;description&gt;")
+    assert html_name in html_region
+    assert rendered_description in html_region
+
+
+def test_composite_docs_render_one_neutral_main_row_and_ordered_member_details() -> None:
+    catalog = _composite_catalog()
+    texts = _composite_texts()
+
+    markdown = render_markdown_catalog(catalog, texts)
+    html_region = render_html_catalog(catalog, texts, newline="\r\n")
+
+    neutral = "One atomic option controls 2 member spells listed below."
+    assert neutral in markdown
+    assert neutral in html_region
+    assert "Shared \\| Deflection &lt;bundle&gt;" in markdown
+    assert "Atomic bundle member descriptions" in markdown
+    assert "controlled together" in markdown
+    assert "not separate options" in markdown
+    assert markdown.index("`SPWI101`") < markdown.index("`SPWI205`")
+    assert "1 / active" in markdown
+    assert r"2 / game\_compatibility\_slot" in markdown
+    assert "First \\| Name &lt;one&gt;" in markdown
+    assert "First &amp; description \\`one\\`." in markdown
+    assert r"Game\-provided name \(SPWI205\)" in markdown
+    assert "Second \\| description &lt;two&gt;." in markdown
+
+    assert "Atomic bundle member descriptions" in html_region
+    assert "controlled together" in html_region
+    assert "not separate options" in html_region
+    assert html_region.index("SPWI101") < html_region.index("SPWI205")
+    assert "First | Name &lt;one&gt;" in html_region
+    assert "First &amp; description `one`." in html_region
+    assert "Game-provided name (SPWI205)" in html_region
+    assert "Second | description &lt;two&gt;." in html_region
+
+
+def test_composite_keeps_exactly_one_setting_flag_and_main_row_per_change() -> None:
+    catalog = _composite_catalog()
+    markdown = render_markdown_catalog(catalog, _composite_texts())
+    html_region = render_html_catalog(catalog, _composite_texts(), newline="\n")
+    config = render_config(catalog, "install_tobex = 1\n", newline="\n")
+
+    assert config.splitlines().count("sr_wizard_magic_missile = -1") == 1
+    assert config.count("internal flag sr_feature_000001") == 1
+    main_markdown = markdown.split("## Atomic bundle member descriptions", 1)[0]
+    assert main_markdown.count("`sr_wizard_magic_missile`") == 1
+    assert main_markdown.count("`sr_feature_000001`") == 1
+    main_html = html_region.split("<h4>Atomic bundle member descriptions</h4>", 1)[0]
+    assert main_html.count("sr_wizard_magic_missile") == 1
+    assert main_html.count("sr_feature_000001") == 1
+    main_body = main_html.split("  <tbody>", 1)[1].split("  </tbody>", 1)[0]
+    assert main_body.count("    <tr>") == 1
 
 
 def test_eof_source_span_has_unambiguous_generated_provenance() -> None:

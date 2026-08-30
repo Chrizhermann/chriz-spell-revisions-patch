@@ -15,7 +15,9 @@ from tools.sr_config.catalog import (
     Group,
     IncludeResolution,
     Infrastructure,
+    MemberReference,
     Migration,
+    NameFallback,
     ResourceOwnership,
     SourceSpan,
     Upstream,
@@ -52,8 +54,10 @@ def change(change_id: str, **overrides: Any) -> dict[str, Any]:
         "group": "global",
         "component": 0,
         "games": ["all"],
-        "name_ref": None,
-        "description_ref": None,
+        "name_ref": "@1",
+        "name_fallback": None,
+        "description_ref": "@2",
+        "member_refs": [],
         "source_spans": [],
         "resources": [],
         "atomic_group": None,
@@ -65,6 +69,29 @@ def change(change_id: str, **overrides: Any) -> dict[str, Any]:
     }
     raw.update(overrides)
     return raw
+
+
+def name_fallback(resource: str = "SPWI101", *, kind: str = "game_resource") -> dict[str, str]:
+    return {"kind": kind, "resource": resource}
+
+
+def member_reference(
+    source_spell: str,
+    *,
+    level: int = 1,
+    role: str = "active",
+    name_ref: str | None = "@1",
+    name_fallback_value: dict[str, str] | None = None,
+    description_ref: str = "@2",
+) -> dict[str, Any]:
+    return {
+        "source_spell": source_spell,
+        "level": level,
+        "role": role,
+        "name_ref": name_ref,
+        "name_fallback": name_fallback_value,
+        "description_ref": description_ref,
+    }
 
 
 def infrastructure(infrastructure_id: str, **overrides: Any) -> dict[str, Any]:
@@ -654,6 +681,341 @@ def test_tra_references_must_use_at_decimal_syntax(
     assert str(error.value).startswith(f"changes[0].{field}:")
 
 
+def test_singleton_documentation_accepts_exactly_one_name_source() -> None:
+    tra_catalog = Catalog.from_dict(minimal_catalog(changes=[change("tra")]))
+    fallback_catalog = Catalog.from_dict(
+        minimal_catalog(
+            changes=[
+                change(
+                    "fallback",
+                    name_ref=None,
+                    name_fallback=name_fallback("SPWI101"),
+                )
+            ]
+        )
+    )
+
+    assert tra_catalog.changes[0].name_ref == "@1"
+    assert tra_catalog.changes[0].name_fallback is None
+    assert fallback_catalog.changes[0].name_ref is None
+    assert fallback_catalog.changes[0].name_fallback == NameFallback(
+        "game_resource", "SPWI101"
+    )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_field"),
+    [
+        ({"name_ref": None, "name_fallback": None}, "name_ref"),
+        ({"name_ref": "@1", "name_fallback": name_fallback()}, "name_fallback"),
+        ({"description_ref": None}, "description_ref"),
+        (
+            {
+                "member_refs": [member_reference("SPWI101")],
+                "name_ref": None,
+                "name_fallback": None,
+                "description_ref": None,
+            },
+            "member_refs",
+        ),
+        (
+            {
+                "member_refs": [
+                    member_reference("SPWI101"),
+                    member_reference("SPWI102"),
+                ]
+            },
+            "name_ref",
+        ),
+    ],
+)
+def test_documentation_mode_matrix_rejects_missing_mixed_and_one_member_modes(
+    overrides: dict[str, Any], expected_field: str
+) -> None:
+    raw = minimal_catalog(changes=[change("invalid", **overrides)])
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"changes[0].{expected_field}:")
+
+
+def test_documentation_only_reason_cannot_replace_text_provenance() -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "undocumented",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                documentation_only_reason="prose is not upstream text provenance",
+            )
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].name_ref:")
+
+
+def test_composite_documentation_preserves_order_and_frozen_member_records() -> None:
+    members = [
+        member_reference(
+            "SPWI101",
+            level=1,
+            role="active_replacement",
+            name_ref="@10",
+            description_ref="@11",
+        ),
+        member_reference(
+            "SPWI205",
+            level=2,
+            role="deprecated_slot",
+            name_ref=None,
+            name_fallback_value=name_fallback("SPWI205"),
+            description_ref="@12",
+        ),
+    ]
+    catalog = Catalog.from_dict(
+        minimal_catalog(
+            changes=[
+                change(
+                    "bundle",
+                    name_ref=None,
+                    name_fallback=None,
+                    description_ref=None,
+                    member_refs=members,
+                )
+            ]
+        )
+    )
+
+    assert catalog.changes[0].member_refs == (
+        MemberReference(
+            "SPWI101", 1, "active_replacement", "@10", None, "@11"
+        ),
+        MemberReference(
+            "SPWI205",
+            2,
+            "deprecated_slot",
+            None,
+            NameFallback("game_resource", "SPWI205"),
+            "@12",
+        ),
+    )
+    with pytest.raises(FrozenInstanceError):
+        catalog.changes[0].member_refs[0].role = "active"  # type: ignore[misc]
+    with pytest.raises(FrozenInstanceError):
+        catalog.changes[0].member_refs[1].name_fallback.resource = "SPWI999"  # type: ignore[misc,union-attr]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_path"),
+    [
+        (
+            lambda raw: raw["changes"][0].pop("name_fallback"),
+            "changes[0].name_fallback",
+        ),
+        (
+            lambda raw: raw["changes"][0].pop("member_refs"),
+            "changes[0].member_refs",
+        ),
+        (
+            lambda raw: raw["changes"][0]["name_fallback"].pop("kind"),
+            "changes[0].name_fallback.kind",
+        ),
+        (
+            lambda raw: raw["changes"][0]["member_refs"][0].pop("description_ref"),
+            "changes[0].member_refs[0].description_ref",
+        ),
+    ],
+)
+def test_documentation_metadata_missing_fields_are_rejected_strictly(
+    mutation: Callable[[dict[str, Any]], object], expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    member_reference("SPWI101"),
+                    member_reference("SPWI102"),
+                ],
+            )
+        ]
+    )
+    if expected_path.startswith("changes[0].name_fallback."):
+        raw["changes"][0]["name_ref"] = None
+        raw["changes"][0]["name_fallback"] = name_fallback()
+        raw["changes"][0]["description_ref"] = "@2"
+        raw["changes"][0]["member_refs"] = []
+    mutation(raw)
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "missing required field" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("target", "expected_path"),
+    [
+        ("change", "changes[0].surprise"),
+        ("fallback", "changes[0].name_fallback.surprise"),
+        ("member", "changes[0].member_refs[0].surprise"),
+        ("member_fallback", "changes[0].member_refs[0].name_fallback.surprise"),
+    ],
+)
+def test_documentation_metadata_unknown_fields_are_rejected_strictly(
+    target: str, expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    member_reference(
+                        "SPWI101",
+                        name_ref=None,
+                        name_fallback_value=name_fallback(),
+                    ),
+                    member_reference("SPWI102"),
+                ],
+            )
+        ]
+    )
+    record = raw["changes"][0]
+    if target == "change":
+        record["surprise"] = True
+    elif target == "fallback":
+        record["name_ref"] = None
+        record["name_fallback"] = name_fallback()
+        record["description_ref"] = "@2"
+        record["member_refs"] = []
+        record["name_fallback"]["surprise"] = True
+    elif target == "member":
+        record["member_refs"][0]["surprise"] = True
+    else:
+        record["member_refs"][0]["name_fallback"]["surprise"] = True
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+    assert "unknown field" in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("target", "value", "expected_path"),
+    [
+        ("fallback_kind", "installed_resource", "changes[0].name_fallback.kind"),
+        ("fallback_resource", "spwi101", "changes[0].name_fallback.resource"),
+        ("fallback_resource", "SPWI101.SPL", "changes[0].name_fallback.resource"),
+        ("source_spell", "spwi101", "changes[0].member_refs[0].source_spell"),
+        ("source_spell", "SPWI101.SPL", "changes[0].member_refs[0].source_spell"),
+        ("level", 0, "changes[0].member_refs[0].level"),
+        ("level", 11, "changes[0].member_refs[0].level"),
+        ("level", True, "changes[0].member_refs[0].level"),
+        ("role", "replacement", "changes[0].member_refs[0].role"),
+        ("description_ref", None, "changes[0].member_refs[0].description_ref"),
+    ],
+)
+def test_documentation_metadata_uses_closed_exact_vocabularies(
+    target: str, value: object, expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    member_reference("SPWI101"),
+                    member_reference("SPWI102"),
+                ],
+            )
+        ]
+    )
+    record = raw["changes"][0]
+    if target.startswith("fallback_"):
+        record["name_ref"] = None
+        record["name_fallback"] = name_fallback()
+        record["description_ref"] = "@2"
+        record["member_refs"] = []
+        record["name_fallback"][target.removeprefix("fallback_")] = value
+    else:
+        record["member_refs"][0][target] = value
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")
+
+
+@pytest.mark.parametrize(
+    ("name_ref", "fallback"),
+    [(None, None), ("@1", name_fallback())],
+)
+def test_member_name_requires_exactly_one_source(
+    name_ref: str | None, fallback: dict[str, str] | None
+) -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    member_reference(
+                        "SPWI101",
+                        name_ref=name_ref,
+                        name_fallback_value=fallback,
+                    ),
+                    member_reference("SPWI102"),
+                ],
+            )
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].member_refs[0].name_")
+
+
+def test_member_source_spells_are_unique_case_insensitively() -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "bundle",
+                name_ref=None,
+                name_fallback=None,
+                description_ref=None,
+                member_refs=[
+                    member_reference("SPWI101"),
+                    member_reference("SPWI101"),
+                ],
+            )
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].member_refs[1].source_spell:")
+    assert "duplicate source spell" in str(error.value)
+
+
 def test_catalog_requires_one_root_group() -> None:
     with pytest.raises(CatalogError) as error:
         Catalog.from_dict(minimal_catalog(groups=[]))
@@ -989,7 +1351,9 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
         parsed_change.component,
         parsed_change.games,
         parsed_change.name_ref,
+        parsed_change.name_fallback,
         parsed_change.description_ref,
+        parsed_change.member_refs,
         parsed_change.atomic_group,
         parsed_change.requires,
         parsed_change.conflicts,
@@ -1005,7 +1369,9 @@ def test_populated_catalog_preserves_all_fields_and_records_are_frozen() -> None
         65,
         ("bg2ee", "iwdee"),
         "@100",
+        None,
         "@101",
+        (),
         "Atomic.Family",
         ("Required",),
         ("Conflict",),

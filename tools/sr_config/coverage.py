@@ -434,28 +434,59 @@ def _audit_change_documentation(
     for owner in owners:
         record = owner.record
         assert isinstance(record, Change)
-        if record.name_ref is None:
-            issues.append(
-                CoverageIssue(
-                    "missing_change_name_ref",
-                    owner.location,
-                    "public change must cite its current English TRA name",
+        if not record.member_refs:
+            if record.name_ref is None and record.name_fallback is None:
+                issues.append(
+                    CoverageIssue(
+                        "missing_change_name_ref",
+                        owner.location,
+                        "public change must cite its current English TRA name or "
+                        "an explicit game-resource fallback",
+                    )
                 )
-            )
-        else:
-            _audit_tra_reference(owner, "name_ref", record.name_ref, texts, issues)
-        if record.description_ref is None:
-            issues.append(
-                CoverageIssue(
-                    "missing_change_description_ref",
-                    owner.location,
-                    "public change must cite its current English TRA description",
+            elif record.name_ref is not None:
+                _audit_tra_reference(
+                    owner, "name_ref", record.name_ref, texts, issues
                 )
-            )
+            if record.description_ref is None:
+                issues.append(
+                    CoverageIssue(
+                        "missing_change_description_ref",
+                        owner.location,
+                        "public change must cite its current English TRA description",
+                    )
+                )
+            else:
+                _audit_tra_reference(
+                    owner, "description_ref", record.description_ref, texts, issues
+                )
         else:
-            _audit_tra_reference(
-                owner, "description_ref", record.description_ref, texts, issues
-            )
+            for member_index, member in enumerate(record.member_refs):
+                prefix = f"member_refs[{member_index}]"
+                if member.name_ref is None and member.name_fallback is None:
+                    issues.append(
+                        CoverageIssue(
+                            "missing_member_name_ref",
+                            f"{owner.location}.{prefix}",
+                            "bundle member must cite its current English TRA name or "
+                            "an explicit game-resource fallback",
+                        )
+                    )
+                elif member.name_ref is not None:
+                    _audit_tra_reference(
+                        owner,
+                        f"{prefix}.name_ref",
+                        member.name_ref,
+                        texts,
+                        issues,
+                    )
+                _audit_tra_reference(
+                    owner,
+                    f"{prefix}.description_ref",
+                    member.description_ref,
+                    texts,
+                    issues,
+                )
         if not record.source_spans and record.documentation_only_reason is None:
             issues.append(
                 CoverageIssue(
