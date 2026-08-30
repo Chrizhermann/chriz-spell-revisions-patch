@@ -179,6 +179,7 @@ def test_inventory_keeps_unless_modifier_with_append(tmp_path: Path) -> None:
     [
         "END ELSE\nBEGIN\n",
         "END ELSE ACTION_IF (2)\nBEGIN\n",
+        "END ELSE PATCH_IF (2)\nBEGIN\n",
     ],
 )
 def test_inventory_keeps_split_else_headers_in_one_action_node(
@@ -221,6 +222,29 @@ def test_inventory_closes_fully_inline_else_branch(tmp_path: Path) -> None:
         ("executable", "ACTION_IF"),
         ("unknown", "MYSTERY_STATEMENT"),
     ]
+
+
+def test_patch_read_fallback_else_does_not_extend_action_block(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "patch-fallback-else.tpa"
+    path.write_text(
+        "ACTION_IF (1) BEGIN\n"
+        "  OUTER_INNER_PATCH ~abc~ BEGIN\n"
+        "    READ_BYTE 0 value ELSE 0 END END\n"
+        "PRINT ~after action~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", "ACTION_IF"),
+        ("executable", "PRINT"),
+    ]
+    normalized = nodes[0].raw.replace(b"\r\n", b"\n")
+    assert normalized.endswith(b"READ_BYTE 0 value ELSE 0 END END\n")
+    assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
 
 
 def test_unknown_action_forms_end_copy_pipeline_without_losing_text(

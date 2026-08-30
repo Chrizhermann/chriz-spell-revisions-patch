@@ -563,7 +563,14 @@ def _else_awaits_begin(tokens: tuple[str, ...]) -> bool:
     if "ELSE" not in tokens:
         return False
     last_else = len(tokens) - 1 - tokens[::-1].index("ELSE")
-    return "BEGIN" not in tokens[last_else + 1 :]
+    # Patch reads also use ELSE for a fallback value. A branch continuation is
+    # instead attached to the END that closed the preceding branch.
+    if last_else == 0 or tokens[last_else - 1] != "END":
+        return False
+    branch_head = tokens[last_else + 1 :]
+    if "BEGIN" in branch_head:
+        return False
+    return not branch_head or branch_head[0] in {"ACTION_IF", "PATCH_IF"}
 
 
 def _statement_mode(command: str, kind: str, tokens: tuple[str, ...]) -> str:
