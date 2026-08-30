@@ -142,6 +142,21 @@ _SIMPLE_COMMANDS = frozenset(
     }
 )
 _ACTION_COMMANDS = _COPY_COMMANDS | _BLOCK_COMMANDS | _CALL_COMMANDS | _SIMPLE_COMMANDS
+_NESTED_ACTION_BLOCK_COMMANDS = frozenset(
+    {
+        "ACTION_BASH_FOR",
+        "ACTION_FOR_EACH",
+        "ACTION_IF",
+        "ACTION_MATCH",
+        "ACTION_PHP_EACH",
+        "ACTION_TRY",
+        "DEFINE_ACTION_FUNCTION",
+        "DEFINE_ACTION_MACRO",
+        "OUTER_FOR",
+        "OUTER_WHILE",
+        "WITH_SCOPE",
+    }
+)
 _PIPELINE_COMMANDS = _COPY_COMMANDS | {"ADD_SPELL", "APPEND"}
 _PIPELINE_TERMINATORS = frozenset(
     {"BUT_ONLY", "BUT_ONLY_IF_IT_CHANGES", "UNLESS"}
@@ -267,16 +282,29 @@ class _OpenNode:
     pipeline_terminated: bool = False
 
 
-def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[SourceNode, ...]:
+def inventory(
+    path: str | Path,
+    *,
+    root: str | Path | None = None,
+    _source: bytes | None = None,
+    _display_path_override: str | None = None,
+) -> tuple[SourceNode, ...]:
     """Split *path* into lossless trivia and top-level WeiDU statement nodes."""
 
     source_path = Path(path)
-    try:
-        source = source_path.read_bytes()
-    except OSError as error:
-        raise SourceError(f"{source_path}: unable to read source: {error}") from error
+    if _source is None:
+        try:
+            source = source_path.read_bytes()
+        except OSError as error:
+            raise SourceError(f"{source_path}: unable to read source: {error}") from error
+    else:
+        source = _source
 
-    display_path = _display_path(source_path, root)
+    display_path = (
+        _display_path_override
+        if _display_path_override is not None
+        else _display_path(source_path, root)
+    )
     lines = tuple(_lines_with_offsets(source))
     lex_state = _LexState()
     frames: list[_Frame] = []
@@ -472,6 +500,164 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
     return tuple(nodes)
 
 
+def inventory_nested(node: SourceNode) -> tuple[SourceNode, ...]:
+    """Inventory executable action streams nested inside an action block.
+
+    A top-level block remains one lossless node, while dependency-bearing
+    commands in its action-language bodies are returned as contextual child
+    nodes. Patch-language bodies are intentionally excluded.
+    """
+
+    if node.command not in _NESTED_ACTION_BLOCK_COMMANDS:
+        return ()
+
+    result: list[SourceNode] = []
+    body_ranges = (
+        _action_try_bodies(node.raw)
+        if node.command == "ACTION_TRY"
+        else _top_level_block_bodies(node.raw)
+    )
+    for start, end in body_ranges:
+        line_prefix = node.line - 1 + node.raw[:start].count(b"\n")
+        body = b"\n" * line_prefix + node.raw[start:end]
+        children = inventory(
+            node.path,
+            _source=body,
+            _display_path_override=node.path,
+        )
+        for child in children:
+            if child.kind == "trivia":
+                continue
+            result.append(child)
+            result.extend(inventory_nested(child))
+    return tuple(result)
+
+
+def _action_try_bodies(source: bytes) -> tuple[tuple[int, int], ...]:
+    """Return ACTION_TRY's try stream and executable handler bodies."""
+
+    frames: list[str] = []
+    bodies: list[tuple[int, int]] = []
+    try_start: int | None = None
+    handler_start: int | None = None
+    default_start: int | None = None
+    for token, start, end in _structural_tokens(source):
+        if token in _END_DELIMITED_COMMANDS:
+            frames.append(token)
+            if len(frames) == 1 and token == "ACTION_TRY":
+                try_start = end
+        elif token == "WITH" and frames == ["ACTION_TRY"]:
+            if try_start is not None:
+                bodies.append((try_start, start))
+                try_start = None
+        elif token == "DEFAULT" and frames == ["ACTION_TRY"]:
+            default_start = end
+        elif token == "BEGIN":
+            if frames == ["ACTION_TRY"]:
+                handler_start = end
+                default_start = None
+            frames.append(token)
+        elif token == "END" and frames:
+            frame = frames.pop()
+            if (
+                frame == "BEGIN"
+                and frames == ["ACTION_TRY"]
+                and handler_start is not None
+            ):
+                bodies.append((handler_start, start))
+                handler_start = None
+            elif frame == "ACTION_TRY" and not frames:
+                if default_start is not None:
+                    bodies.append((default_start, start))
+                break
+    return tuple(bodies)
+
+
+def _top_level_block_bodies(source: bytes) -> tuple[tuple[int, int], ...]:
+    tokens = _structural_tokens(source)
+    bodies: list[tuple[int, int]] = []
+    frames: list[str] = []
+    body_start: int | None = None
+    for token, start, end in tokens:
+        if token in _END_DELIMITED_COMMANDS:
+            frames.append(token)
+        elif token == "BEGIN":
+            if not frames:
+                body_start = end
+            frames.append(token)
+        elif token == "END" and frames:
+            frame = frames.pop()
+            if not frames and frame == "BEGIN" and body_start is not None:
+                bodies.append((body_start, start))
+                body_start = None
+    return tuple(bodies)
+
+
+def _structural_tokens(source: bytes) -> tuple[tuple[str, int, int], ...]:
+    """Return identifiers while masking WeiDU literal regions."""
+
+    tokens: list[tuple[str, int, int]] = []
+    index = 0
+    line_start = True
+    block_comment = False
+    inline_file = False
+    while index < len(source):
+        if line_start:
+            line_end = source.find(b"\n", index)
+            if line_end < 0:
+                line_end = len(source)
+            stripped = source[index:line_end].lstrip(b" \t\r")
+            if inline_file:
+                if stripped.startswith(b">>>>>>>>"):
+                    inline_file = False
+                index = line_end + (line_end < len(source))
+                line_start = True
+                continue
+            if not block_comment and stripped.startswith(b"<<<<<<<<"):
+                inline_file = True
+                index = line_end + (line_end < len(source))
+                line_start = True
+                continue
+            line_start = False
+
+        if block_comment:
+            close = source.find(b"*/", index)
+            if close < 0:
+                break
+            block_comment = False
+            index = close + 2
+            continue
+        if source.startswith(b"//", index):
+            newline = source.find(b"\n", index)
+            if newline < 0:
+                break
+            index = newline + 1
+            line_start = True
+            continue
+        if source.startswith(b"/*", index):
+            block_comment = True
+            index += 2
+            continue
+        byte = source[index]
+        if byte in (ord("~"), ord('"')):
+            close = source.find(bytes((byte,)), index + 1)
+            if close < 0:
+                break
+            line_start = b"\n" in source[index:close]
+            index = close + 1
+            continue
+        match = _IDENTIFIER_RE.match(source, index)
+        if match is not None:
+            token = match.group().decode("ascii").upper()
+            tokens.append((token, match.start(), match.end()))
+            index = match.end()
+            continue
+        if byte == ord("\n"):
+            line_start = True
+        index += 1
+    return tuple(tokens)
+
+
 def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
     """Resolve and hash-check an inclusive-start/exclusive-end source span."""
 
@@ -489,32 +675,36 @@ def resolve_span(root: str | Path, span: SourceSpan) -> bytes:
         raise SourceError(f"{span.path}: unable to read source: {error}") from error
 
     start_anchor = span.start.encode("utf-8")
-    end_anchor = span.end.encode("utf-8")
     start_matches = _occurrences(source, start_anchor)
-    end_matches = _occurrences(source, end_anchor)
     if len(start_matches) != 1:
         raise SourceError(
             f"{span.path}: start anchor {span.start!r} has {len(start_matches)} matches; "
             "expected exactly 1"
         )
-    if len(end_matches) != 1:
-        raise SourceError(
-            f"{span.path}: end anchor {span.end!r} has {len(end_matches)} matches; "
-            "expected exactly 1"
-        )
     start = start_matches[0]
-    end = end_matches[0]
-    if end <= start:
-        raise SourceError(
-            f"{span.path}: end anchor {span.end!r} occurs before start anchor "
-            f"{span.start!r}"
-        )
+    if span.end is None:
+        end = len(source)
+    else:
+        end_anchor = span.end.encode("utf-8")
+        end_matches = _occurrences(source, end_anchor)
+        if len(end_matches) != 1:
+            raise SourceError(
+                f"{span.path}: end anchor {span.end!r} has {len(end_matches)} "
+                "matches; expected exactly 1"
+            )
+        end = end_matches[0]
+        if end <= start:
+            raise SourceError(
+                f"{span.path}: end anchor {span.end!r} occurs before start anchor "
+                f"{span.start!r}"
+            )
     resolved = source[start:end]
     normalized = resolved.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     actual = hashlib.sha256(normalized).hexdigest()
     if actual.casefold() != span.sha256.casefold():
         raise SourceError(
-            f"{span.path}: anchor hash changed for {span.start!r} .. {span.end!r}: "
+            f"{span.path}: anchor hash changed for {span.start!r} .. "
+            f"{span.end if span.end is not None else 'EOF'!r}: "
             f"expected {span.sha256.lower()}, got {actual}"
         )
     return resolved

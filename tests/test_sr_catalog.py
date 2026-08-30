@@ -13,6 +13,7 @@ from tools.sr_config.catalog import (
     CatalogError,
     Change,
     Group,
+    IncludeResolution,
     Infrastructure,
     Migration,
     ResourceOwnership,
@@ -1090,3 +1091,99 @@ def test_infrastructure_category_uses_a_closed_explicit_vocabulary(
         Catalog.from_dict(raw)
 
     assert str(error.value).startswith("infrastructure[0].category:")
+
+
+def test_source_span_can_explicitly_end_at_eof() -> None:
+    raw = minimal_catalog(
+        changes=[
+            change(
+                "eof",
+                source_spans=[
+                    {
+                        "path": "spell_rev/components/main_component.tpa",
+                        "start": "// final section",
+                        "end": None,
+                        "sha256": "a" * 64,
+                    }
+                ],
+            )
+        ]
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    assert catalog.changes[0].source_spans[0].end is None
+
+
+def test_source_span_end_is_required_even_when_eof_is_intended() -> None:
+    raw = nested_catalog()
+    raw["changes"][0]["source_spans"][0].pop("end")
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("changes[0].source_spans[0].end:")
+    assert "missing required field" in str(error.value)
+
+
+def test_infrastructure_can_resolve_a_dynamic_include_explicitly() -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure(
+                "game_include",
+                include_resolutions=[
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "operand": "spell_rev/lib/%GAME%.tph",
+                        "targets": ["spell_rev/lib/bg2ee.tph", "spell_rev/lib/iwdee.tph"],
+                    }
+                ],
+            )
+        ]
+    )
+
+    catalog = Catalog.from_dict(raw)
+
+    assert catalog.infrastructure[0].include_resolutions == (
+        IncludeResolution(
+            source="spell_rev/components/main_component.tpa",
+            operand="spell_rev/lib/%GAME%.tph",
+            targets=("spell_rev/lib/bg2ee.tph", "spell_rev/lib/iwdee.tph"),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("resolution", "expected_path"),
+    [
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "operand": "spell_rev/lib/%GAME%.tph",
+                "targets": [],
+            },
+            "infrastructure[0].include_resolutions[0].targets",
+        ),
+        (
+            {
+                "source": "spell_rev/components/main_component.tpa",
+                "operand": "spell_rev/lib/%GAME%.tph",
+                "targets": ["spell_rev/lib/%GAME%.tph"],
+            },
+            "infrastructure[0].include_resolutions[0].targets[0]",
+        ),
+    ],
+)
+def test_include_resolution_requires_concrete_targets(
+    resolution: dict[str, object], expected_path: str
+) -> None:
+    raw = minimal_catalog(
+        infrastructure_records=[
+            infrastructure("game_include", include_resolutions=[resolution])
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith(f"{expected_path}:")

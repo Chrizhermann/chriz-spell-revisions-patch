@@ -536,6 +536,21 @@ def test_resolve_span_returns_original_bytes_and_hashes_lf_normalized_bytes(
     assert resolve_span(tmp_path, span) == original_span
 
 
+def test_resolve_span_supports_an_explicit_eof_end_anchor(tmp_path: Path) -> None:
+    source = b"preamble\r\n// final\r\nPRINT ~last~\r\n"
+    path = tmp_path / "main.tpa"
+    path.write_bytes(source)
+    original_span = b"// final\r\nPRINT ~last~\r\n"
+    span = SourceSpan(
+        path="main.tpa",
+        start="// final",
+        end=None,
+        sha256=hashlib.sha256(b"// final\nPRINT ~last~\n").hexdigest(),
+    )
+
+    assert resolve_span(tmp_path, span) == original_span
+
+
 def test_anchor_hash_rejects_upstream_drift(tmp_path: Path) -> None:
     path = tmp_path / "main.tpa"
     path.write_text("// A\nCOPY ~a.spl~ ~override~\n// B\n", encoding="utf-8")
@@ -825,6 +840,8 @@ def _coverage_change(
     name_ref: str | None = "@1",
     description_ref: str | None = "@2",
     documentation_only_reason: str | None = None,
+    component: int = 0,
+    processors: list[str] | None = None,
 ) -> dict[str, object]:
     return {
         "id": change_id,
@@ -832,7 +849,7 @@ def _coverage_change(
         "display_name": change_id,
         "default": -1,
         "group": "global",
-        "component": 0,
+        "component": component,
         "games": ["all"],
         "name_ref": name_ref,
         "description_ref": description_ref,
@@ -842,20 +859,22 @@ def _coverage_change(
         "requires": [],
         "conflicts": [],
         "soft_requires": [],
-        "processors": [],
+        "processors": processors or [],
         "documentation_only_reason": documentation_only_reason,
     }
 
 
-def _coverage_span(path: str, source: bytes, start: bytes, end: bytes) -> dict[str, object]:
+def _coverage_span(
+    path: str, source: bytes, start: bytes, end: bytes | None
+) -> dict[str, object]:
     start_offset = source.index(start)
-    end_offset = source.index(end)
+    end_offset = len(source) if end is None else source.index(end)
     payload = source[start_offset:end_offset]
     normalized = payload.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     return {
         "path": path,
         "start": start.decode("utf-8"),
-        "end": end.decode("utf-8"),
+        "end": None if end is None else end.decode("utf-8"),
         "sha256": hashlib.sha256(normalized).hexdigest(),
     }
 
@@ -910,6 +929,7 @@ def test_catalog_coverage_reports_every_unowned_and_multiply_owned_source_node(
             "multiply_owned_source_node",
             "spell_rev/components/main_component.tpa:2",
         ),
+        ("unknown_source_node", "spell_rev/components/main_component.tpa:4"),
         ("unowned_source_node", "spell_rev/components/main_component.tpa:4"),
     ]
     assert result.source_node_count == 2
@@ -1030,7 +1050,10 @@ def test_catalog_coverage_never_hides_unknown_source_operands(
 
     result = audit_catalog_coverage(tmp_path, catalog)
 
-    assert [issue.code for issue in result.issues] == ["unknown_source_edge"]
+    assert [issue.code for issue in result.issues] == [
+        "unknown_source_node",
+        "unknown_source_edge",
+    ]
     assert [(edge.target, edge.classification) for edge in result.source_edges] == [
         ("odd.res", None)
     ]
@@ -1126,8 +1149,9 @@ def test_inventory_check_catalog_is_read_only_and_diagnostics_are_deterministic(
     second = capsys.readouterr()
 
     assert first == second
-    assert "catalog coverage failed: 2 issue(s)" in first.err
+    assert "catalog coverage failed: 4 issue(s)" in first.err
     assert "unowned_source_node: 2" in first.err
+    assert "unknown_source_node: 2" in first.err
     assert "spell_rev/components/main_component.tpa:1" in first.err
     assert "spell_rev/components/main_component.tpa:2" in first.err
     after = {
@@ -1136,3 +1160,458 @@ def test_inventory_check_catalog_is_read_only_and_diagnostics_are_deterministic(
         if path.is_file()
     }
     assert after == before
+
+
+def _minimal_coverage_spl() -> bytes:
+    spell = bytearray(0x72)
+    spell[:8] = b"SPL V1  "
+    struct.pack_into("<I", spell, 0x64, len(spell))
+    struct.pack_into("<I", spell, 0x6A, len(spell))
+    return bytes(spell)
+
+
+def test_eof_source_span_owns_the_final_executable_node(tmp_path: Path) -> None:
+    source = b"// final\nPRINT ~last~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "final",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// final",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+
+
+def test_nested_action_commands_expose_all_local_dependency_edges(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\n"
+        b"ACTION_IF (1) BEGIN\n"
+        b"  COPY ~spell_rev/assets/nested.txt~ ~override~\n"
+        b"  ADD_SPELL ~spell_rev/assets/deep.spl~ 2 1 ~WIZARD_DEEP~\n"
+        b"  INCLUDE ~spell_rev/lib/nested.tph~\n"
+        b"END\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    assets = tmp_path / "spell_rev/assets"
+    assets.mkdir()
+    (assets / "nested.txt").write_text("nested", encoding="utf-8")
+    (assets / "deep.spl").write_bytes(_minimal_coverage_spl())
+    library = tmp_path / "spell_rev/lib/nested.tph"
+    library.parent.mkdir()
+    library.write_text("", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "outer",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    unclassified = [
+        edge.target
+        for edge in result.source_edges
+        if edge.classification is None
+    ]
+    assert unclassified == [
+        "spell_rev/assets/nested.txt",
+        "spell_rev/assets/deep.spl",
+        "spell_rev/lib/nested.tph",
+    ]
+    assert sum(
+        issue.code == "unclassified_local_source_edge" for issue in result.issues
+    ) == 3
+
+
+def test_nested_action_try_streams_are_inventoried_recursively(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"// start\n"
+        b"DEFINE_ACTION_FUNCTION guarded_copy BEGIN\n"
+        b"  ACTION_TRY\n"
+        b"    COPY ~spell_rev/assets/nested.txt~ ~override~\n"
+        b"  WITH\n"
+        b"    DEFAULT\n"
+        b"  END\n"
+        b"END\n"
+    )
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    asset = tmp_path / "spell_rev/assets/nested.txt"
+    asset.parent.mkdir(parents=True)
+    asset.write_text("nested", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "guarded",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[
+                    {"path": "spell_rev/assets/nested.txt", "kind": "asset"}
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert result.ok
+    assert result.source_node_count == 3
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/assets/nested.txt", "owned")
+    ]
+
+
+def test_owned_unknown_node_without_operands_still_fails_coverage(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nMYSTERY_COMMAND\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "mystery",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == ["unknown_source_node"]
+
+
+def test_dynamic_include_must_be_explicitly_resolved_and_inventoried(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nINCLUDE ~spell_rev/lib/%GAME%.tph~\n"
+    target_source = b"// target\nPRINT ~loaded~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    target = tmp_path / "spell_rev/lib/bg2ee.tph"
+    target.parent.mkdir()
+    target.write_bytes(target_source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    main_span = _coverage_span(
+        "spell_rev/components/main_component.tpa", source, b"// start", None
+    )
+    unresolved = _coverage_catalog(
+        changes=[_coverage_change("main", source_spans=[main_span])]
+    )
+
+    unresolved_result = audit_catalog_coverage(tmp_path, unresolved)
+
+    assert "unresolved_dynamic_include" in {
+        issue.code for issue in unresolved_result.issues
+    }
+
+    resolved = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main", source_spans=[main_span], processors=["game_include"]
+            )
+        ],
+        infrastructure=[
+            {
+                "id": "game_include",
+                "category": "compatibility",
+                "source_spans": [
+                    _coverage_span(
+                        "spell_rev/lib/bg2ee.tph",
+                        target_source,
+                        b"// target",
+                        None,
+                    )
+                ],
+                "resources": [],
+                "consumers": ["main"],
+                "include_resolutions": [
+                    {
+                        "source": "spell_rev/components/main_component.tpa",
+                        "operand": "spell_rev/lib/%GAME%.tph",
+                        "targets": ["spell_rev/lib/bg2ee.tph"],
+                    }
+                ],
+            }
+        ],
+    )
+
+    resolved_result = audit_catalog_coverage(tmp_path, resolved)
+
+    assert resolved_result.ok
+    include_edge = next(
+        edge
+        for edge in resolved_result.source_edges
+        if edge.target == "spell_rev/lib/bg2ee.tph"
+    )
+    assert include_edge.classification == "shared"
+    assert resolved_result.source_node_count == 2
+
+
+def test_dynamic_reinclude_is_not_hidden_outside_the_include_graph(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nREINCLUDE ~spell_rev/lib/%GAME%.tph~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "unresolved_dynamic_include"
+    ]
+    assert [(edge.target, edge.classification) for edge in result.source_edges] == [
+        ("spell_rev/lib/%GAME%.tph", None)
+    ]
+
+
+def test_non_component_zero_resource_cannot_satisfy_component_zero_edge(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/assets/optional.txt~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    asset = tmp_path / "spell_rev/assets/optional.txt"
+    asset.parent.mkdir()
+    asset.write_text("asset", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    span = _coverage_span(
+        "spell_rev/components/main_component.tpa", source, b"// start", None
+    )
+    optional_owner = _coverage_change(
+        "optional",
+        component=65,
+        resources=[{"path": "spell_rev/assets/optional.txt", "kind": "asset"}],
+        documentation_only_reason="optional component fixture",
+    )
+    catalog = _coverage_catalog(
+        changes=[_coverage_change("main", source_spans=[span]), optional_owner]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert "unclassified_local_source_edge" in {
+        issue.code for issue in result.issues
+    }
+
+    catalog_with_compatibility = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "main", source_spans=[span], processors=["compatibility_asset"]
+            ),
+            optional_owner,
+        ],
+        infrastructure=[
+            {
+                "id": "compatibility_asset",
+                "category": "compatibility",
+                "source_spans": [],
+                "resources": [
+                    {"path": "spell_rev/assets/optional.txt", "kind": "asset"}
+                ],
+                "consumers": ["main"],
+            }
+        ],
+    )
+
+    compatible_result = audit_catalog_coverage(tmp_path, catalog_with_compatibility)
+
+    assert compatible_result.ok
+
+
+def test_qualified_source_path_never_uses_basename_fallback(tmp_path: Path) -> None:
+    source = b"// start\nCOPY ~spell_rev/wrong/a.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    right = tmp_path / "spell_rev/right/a.spl"
+    right.parent.mkdir(parents=True)
+    right.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "qualified",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[{"path": "spell_rev/right/a.spl", "kind": "asset"}],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    edge = next(edge for edge in result.source_edges if edge.target.endswith("a.spl"))
+    assert edge.classification is None
+    assert "unclassified_local_source_edge" in {
+        issue.code for issue in result.issues
+    }
+
+
+def test_qualified_source_path_must_match_repository_spelling_exactly(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nCOPY ~spell_rev/Right/a.spl~ ~override~\n"
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    actual = tmp_path / "spell_rev/right/a.spl"
+    actual.parent.mkdir(parents=True)
+    actual.write_bytes(_minimal_coverage_spl())
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "qualified",
+                source_spans=[
+                    _coverage_span(
+                        "spell_rev/components/main_component.tpa",
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+                resources=[{"path": "spell_rev/right/a.spl", "kind": "asset"}],
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    edge = next(edge for edge in result.source_edges if edge.target.endswith("a.spl"))
+    assert edge.classification is None
+    assert [issue.code for issue in result.issues] == [
+        "unclassified_local_source_edge"
+    ]
+
+
+def test_blank_english_change_text_is_rejected(tmp_path: Path) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~  \n ~\n@2=~~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "blank", documentation_only_reason="metadata-only fixture"
+            )
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "blank_english_reference",
+        "blank_english_reference",
+    ]
+
+
+def test_stale_and_multiply_declared_shipped_resources_fail_coverage(
+    tmp_path: Path,
+) -> None:
+    component = tmp_path / "spell_rev/components/main_component.tpa"
+    component.parent.mkdir(parents=True)
+    component.write_text("", encoding="utf-8")
+    asset = tmp_path / "spell_rev/assets/shared.txt"
+    asset.parent.mkdir()
+    asset.write_text("asset", encoding="utf-8")
+    _write_coverage_language_files(tmp_path, "@1=~Name~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "one",
+                documentation_only_reason="fixture",
+                resources=[
+                    {"path": "spell_rev/assets/shared.txt", "kind": "asset"},
+                    {"path": "spell_rev/assets/missing.txt", "kind": "asset"},
+                ],
+            ),
+            _coverage_change(
+                "two",
+                documentation_only_reason="fixture",
+                resources=[
+                    {"path": "spell_rev/assets/shared.txt", "kind": "asset"}
+                ],
+            ),
+        ]
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+
+    assert [issue.code for issue in result.issues] == [
+        "missing_shipped_resource",
+        "multiply_declared_resource",
+    ]

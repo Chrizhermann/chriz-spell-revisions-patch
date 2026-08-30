@@ -29,7 +29,11 @@ from tools.sr_config.text import TraError, load_english_tra, parse_tra
 UPSTREAM_COMMIT = "af1dedb6d211f86ad7a321d4080e46c748e8abac"
 
 
-def _catalog(*, display_name: str = "Magic | Missile <Revised>") -> Catalog:
+def _catalog(
+    *,
+    display_name: str = "Magic | Missile <Revised>",
+    span_end: str | None = "BUT_ONLY",
+) -> Catalog:
     raw: dict[str, Any] = {
         "schema_version": 1,
         "upstream": {"tag": "v4.21", "commit": UPSTREAM_COMMIT},
@@ -75,7 +79,7 @@ def _catalog(*, display_name: str = "Magic | Missile <Revised>") -> Catalog:
                     {
                         "path": "spell_rev/components/main_component.tpa",
                         "start": "COPY ~a~",
-                        "end": "BUT_ONLY",
+                        "end": span_end,
                         "sha256": "a" * 64,
                     }
                 ],
@@ -312,6 +316,16 @@ def test_docs_resolve_tra_and_escape_markdown_and_html() -> None:
     assert "Magic | Missile &lt;name&gt;" in html_region
     assert "Deals &lt;damage&gt; &amp; escapes | pipes." in html_region
     assert html_region.count('id="spell_changes"') == 1
+
+
+def test_eof_source_span_has_unambiguous_generated_provenance() -> None:
+    eof_catalog = _catalog(span_end=None)
+
+    markdown = render_markdown_catalog(eof_catalog, _texts())
+
+    assert "COPY ~a~ .. EOF" in markdown
+    assert ".. None" not in markdown
+    assert catalog_fingerprint(eof_catalog) != catalog_fingerprint(_catalog())
 
 
 def test_html_non_latin_text_is_encoded_safely_for_iso_8859_1() -> None:

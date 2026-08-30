@@ -8,9 +8,14 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .catalog import Catalog, Change, Infrastructure
-from .inventory import DEFAULT_ENTRY, DEFAULT_RESOURCE_ROOT, inventory_tree
+from .inventory import (
+    DEFAULT_ENTRY,
+    DEFAULT_RESOURCE_ROOT,
+    IncludeEdge,
+    inventory_tree_with_edges,
+)
 from .resources import scan_package_resources
-from .source import SourceError, SourceNode, resolve_span
+from .source import SourceError, SourceNode, inventory_nested, resolve_span
 from .text import load_english_tra
 
 
@@ -30,6 +35,11 @@ _RESOURCE_SUFFIXES = frozenset(
         ".vvc",
         ".wav",
     }
+)
+_SHIPPED_RESOURCE_KINDS = frozenset({"asset", "resource", "source"})
+_GENERATED_RESOURCE_KINDS = frozenset({"generated_resource"})
+_NON_OWNING_RESOURCE_KINDS = frozenset(
+    {"2da_write", "ids_write", "table_write", "tlk_write"}
 )
 
 
@@ -92,6 +102,13 @@ class _PositionedNode:
     end: int
 
 
+@dataclass(frozen=True)
+class _PreparedIncludeResolution:
+    targets: tuple[str, ...]
+    owner: _Owner
+    declaration: str
+
+
 def audit_catalog_coverage(
     root: str | Path,
     catalog: Catalog,
@@ -102,9 +119,6 @@ def audit_catalog_coverage(
     """Audit all component-zero evidence without mutating the checkout."""
 
     root_path = Path(root).resolve()
-    source_nodes = inventory_tree(root_path, entry)
-    executable_nodes = tuple(node for node in source_nodes if node.kind != "trivia")
-    scanned_resources = scan_package_resources(root_path / resource_root)
     resource_root_name = PurePosixPath(
         str(resource_root).replace("\\", "/")
     ).as_posix()
@@ -120,8 +134,33 @@ def audit_catalog_coverage(
         for index, record in enumerate(catalog.infrastructure)
     )
     owners = change_owners + infrastructure_owners
+    component_zero_owners = tuple(
+        owner
+        for owner in change_owners
+        if isinstance(owner.record, Change) and owner.record.component == 0
+    ) + infrastructure_owners
 
     _audit_change_documentation(change_owners, texts, issues)
+
+    include_resolutions = _prepare_include_resolutions(
+        root_path, infrastructure_owners, issues
+    )
+    source_nodes, include_edges = inventory_tree_with_edges(
+        root_path,
+        entry,
+        include_resolutions={
+            key: resolution.targets
+            for key, resolution in include_resolutions.items()
+        },
+    )
+    _audit_include_resolutions(include_resolutions, include_edges, issues)
+    executable_nodes = tuple(node for node in source_nodes if node.kind != "trivia")
+    nested_nodes = tuple(
+        (node, child)
+        for node in executable_nodes
+        for child in inventory_nested(node)
+    )
+    scanned_resources = scan_package_resources(root_path / resource_root)
 
     positioned = _position_nodes(source_nodes)
     node_hits: dict[tuple[str, int], list[_OwnershipHit]] = {
@@ -133,13 +172,19 @@ def audit_catalog_coverage(
     _collect_source_ownership(root_path, positioned, owners, node_hits, issues)
     _audit_source_node_ownership(positioned, node_hits, issues)
 
-    resource_owners = _resource_ownership(owners)
+    resource_owners = _resource_ownership(
+        root_path, component_zero_owners, issues
+    )
+    source_file_owners = _source_file_ownership(positioned, node_hits)
     source_edges = _audit_source_edges(
         root_path,
         executable_nodes,
+        nested_nodes,
         positioned,
         node_hits,
         resource_owners,
+        source_file_owners,
+        include_edges,
         tuple(
             f"{resource_root_name}/{resource.path}"
             for resource in scanned_resources
@@ -154,7 +199,7 @@ def audit_catalog_coverage(
     )
     return CoverageResult(
         issues=tuple(issues),
-        source_node_count=len(executable_nodes),
+        source_node_count=len(executable_nodes) + len(nested_nodes),
         source_edges=tuple(source_edges),
         binary_edges=tuple(binary_edges),
     )
@@ -180,6 +225,79 @@ def format_coverage_diagnostics(result: CoverageResult) -> str:
         for issue in result.issues
     )
     return "\n".join(lines) + "\n"
+
+
+def _prepare_include_resolutions(
+    root: Path,
+    owners: tuple[_Owner, ...],
+    issues: list[CoverageIssue],
+) -> dict[tuple[str, str], _PreparedIncludeResolution]:
+    prepared: dict[tuple[str, str], _PreparedIncludeResolution] = {}
+    for owner in owners:
+        record = owner.record
+        assert isinstance(record, Infrastructure)
+        for resolution_index, resolution in enumerate(record.include_resolutions):
+            declaration = (
+                f"{owner.location}.include_resolutions[{resolution_index}]"
+            )
+            if not _repository_file_exists_exact(root, resolution.source):
+                issues.append(
+                    CoverageIssue(
+                        "stale_include_resolution",
+                        f"{declaration}.source",
+                        f"source {resolution.source!r} does not exactly match an existing file",
+                    )
+                )
+            targets: list[str] = []
+            for target_index, target in enumerate(resolution.targets):
+                if not _repository_file_exists_exact(root, target):
+                    issues.append(
+                        CoverageIssue(
+                            "missing_include_target",
+                            f"{declaration}.targets[{target_index}]",
+                            f"target {target!r} does not exactly match an existing file",
+                        )
+                    )
+                    continue
+                targets.append(target)
+            prepared[_include_key(resolution.source, resolution.operand)] = (
+                _PreparedIncludeResolution(tuple(targets), owner, declaration)
+            )
+    return prepared
+
+
+def _audit_include_resolutions(
+    resolutions: dict[tuple[str, str], _PreparedIncludeResolution],
+    edges: tuple[IncludeEdge, ...],
+    issues: list[CoverageIssue],
+) -> None:
+    consumed: set[tuple[str, str]] = set()
+    for edge in edges:
+        if "%" not in edge.operand:
+            continue
+        key = _include_key(edge.source, edge.operand)
+        consumed.add(key)
+        if edge.resolved is None:
+            issues.append(
+                CoverageIssue(
+                    "unresolved_dynamic_include",
+                    f"{edge.source}:{edge.line}:INCLUDE",
+                    f"dynamic INCLUDE operand {edge.operand!r} has no concrete catalog resolution",
+                )
+            )
+    for key, resolution in resolutions.items():
+        if key not in consumed:
+            issues.append(
+                CoverageIssue(
+                    "stale_include_resolution",
+                    resolution.declaration,
+                    "declared dynamic INCLUDE does not occur in the component-zero closure",
+                )
+            )
+
+
+def _include_key(source: str, operand: str) -> tuple[str, str]:
+    return source.casefold(), operand.replace("\\", "/").casefold()
 
 
 def _audit_change_documentation(
@@ -234,6 +352,14 @@ def _audit_tra_reference(
                 "missing_english_reference",
                 f"{owner.location}.{field}",
                 f"{reference} is absent from the current English TRA sources",
+            )
+        )
+    elif not texts[canonical].strip():
+        issues.append(
+            CoverageIssue(
+                "blank_english_reference",
+                f"{owner.location}.{field}",
+                f"{reference} resolves to blank English text",
             )
         )
 
@@ -294,7 +420,11 @@ def _collect_source_ownership(
                 )
                 continue
             start = source.index(span.start.encode("utf-8"))
-            end = source.index(span.end.encode("utf-8"))
+            end = (
+                len(source)
+                if span.end is None
+                else source.index(span.end.encode("utf-8"))
+            )
             owned_count = 0
             for positioned_node in nodes:
                 node = positioned_node.node
@@ -336,6 +466,14 @@ def _audit_source_node_ownership(
             hits = node_hits[(node.path, positioned_node.start)]
             location = f"{node.path}:{node.line}"
             identity = f"{node.kind} command {node.command!r}"
+            if node.kind == "unknown":
+                issues.append(
+                    CoverageIssue(
+                        "unknown_source_node",
+                        location,
+                        f"{identity} needs explicit parser support or review",
+                    )
+                )
             if not hits:
                 issues.append(
                     CoverageIssue(
@@ -356,25 +494,94 @@ def _audit_source_node_ownership(
 
 
 def _resource_ownership(
+    root: Path,
     owners: tuple[_Owner, ...],
+    issues: list[CoverageIssue],
 ) -> dict[str, tuple[_OwnershipHit, ...]]:
     by_path: dict[str, list[_OwnershipHit]] = {}
     for owner in owners:
         for resource_index, resource in enumerate(owner.record.resources):
             normalized = resource.path.casefold()
             declaration = f"{owner.location}.resources[{resource_index}]"
+            if resource.kind in _NON_OWNING_RESOURCE_KINDS:
+                continue
+            if resource.kind not in (
+                _SHIPPED_RESOURCE_KINDS | _GENERATED_RESOURCE_KINDS
+            ):
+                issues.append(
+                    CoverageIssue(
+                        "unknown_resource_kind",
+                        f"{declaration}.kind",
+                        f"resource kind {resource.kind!r} has no coverage semantics",
+                    )
+                )
+                continue
+            if (
+                resource.kind in _SHIPPED_RESOURCE_KINDS
+                and not _repository_file_exists_exact(root, resource.path)
+            ):
+                issues.append(
+                    CoverageIssue(
+                        "missing_shipped_resource",
+                        declaration,
+                        f"{resource.path!r} does not exactly match an existing file",
+                    )
+                )
+                continue
             by_path.setdefault(normalized, []).append(
                 _OwnershipHit(owner, declaration)
             )
+    for path, hits in by_path.items():
+        if len(hits) > 1:
+            declarations = ", ".join(hit.declaration for hit in hits)
+            issues.append(
+                CoverageIssue(
+                    "multiply_declared_resource",
+                    hits[1].declaration,
+                    f"resource {path!r} is declared by {declarations}",
+                )
+            )
     return {path: tuple(hits) for path, hits in by_path.items()}
+
+
+def _source_file_ownership(
+    positioned: dict[str, tuple[_PositionedNode, ...]],
+    node_hits: dict[tuple[str, int], list[_OwnershipHit]],
+) -> dict[str, tuple[_OwnershipHit, ...]]:
+    result: dict[str, tuple[_OwnershipHit, ...]] = {}
+    for path, nodes in positioned.items():
+        unique: dict[tuple[str, int], _OwnershipHit] = {}
+        for positioned_node in nodes:
+            if positioned_node.node.kind == "trivia":
+                continue
+            for hit in node_hits[(path, positioned_node.start)]:
+                unique[(hit.owner.collection, hit.owner.index)] = hit
+        result[path.casefold()] = tuple(unique.values())
+    return result
+
+
+def _repository_file_exists_exact(root: Path, relative: str) -> bool:
+    current = root
+    for part in PurePosixPath(relative).parts:
+        try:
+            names = {entry.name for entry in current.iterdir()}
+        except OSError:
+            return False
+        if part not in names:
+            return False
+        current = current / part
+    return current.is_file()
 
 
 def _audit_source_edges(
     root: Path,
     executable_nodes: tuple[SourceNode, ...],
+    nested_nodes: tuple[tuple[SourceNode, SourceNode], ...],
     positioned: dict[str, tuple[_PositionedNode, ...]],
     node_hits: dict[tuple[str, int], list[_OwnershipHit]],
     resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    source_file_owners: dict[str, tuple[_OwnershipHit, ...]],
+    include_edges: tuple[IncludeEdge, ...],
     package_resources: tuple[str, ...],
     issues: list[CoverageIssue],
 ) -> list[CoveredEdge]:
@@ -383,10 +590,88 @@ def _audit_source_edges(
         for nodes in positioned.values()
         for positioned_node in nodes
     }
+    includes_by_operand: dict[tuple[str, int, str], list[IncludeEdge]] = {}
+    for edge in include_edges:
+        key = (
+            edge.source.casefold(),
+            edge.line,
+            edge.operand.replace("\\", "/").casefold(),
+        )
+        includes_by_operand.setdefault(key, []).append(edge)
+    children_by_parent: dict[int, list[SourceNode]] = {}
+    for parent, child in nested_nodes:
+        children_by_parent.setdefault(id(parent), []).append(child)
+
     result: list[CoveredEdge] = []
-    for node in executable_nodes:
-        source_hits = node_hits[(node.path, node_offsets[id(node)])]
+
+    def audit_node(
+        node: SourceNode,
+        source_hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
+        *,
+        nested: bool,
+    ) -> None:
+        if nested:
+            _audit_contextual_node_ownership(node, source_hits, issues)
         for operand_index, operand in enumerate(node.resource_operands):
+            if operand.role == "include":
+                key = (
+                    node.path.casefold(),
+                    node.line,
+                    operand.value.replace("\\", "/").casefold(),
+                )
+                matched_includes = includes_by_operand.get(key, ())
+                if matched_includes:
+                    for include_edge in matched_includes:
+                        location = (
+                            f"{node.path}:{node.line}:{node.command}.operand"
+                            f"[{operand_index}]"
+                        )
+                        if include_edge.resolved is None:
+                            result.append(
+                                CoveredEdge(
+                                    "source",
+                                    node.path,
+                                    location,
+                                    operand.value,
+                                    None,
+                                )
+                            )
+                            continue
+                        candidate_hits = (
+                            _candidate_ownership_hits(
+                                include_edge.resolved,
+                                resource_owners,
+                                source_file_owners,
+                            ),
+                        )
+                        classification = _classify_candidate_hits(
+                            tuple(source_hits), candidate_hits
+                        )
+                        target_hits = tuple(
+                            hit for hits in candidate_hits for hit in hits
+                        )
+                        result.append(
+                            CoveredEdge(
+                                "source",
+                                node.path,
+                                location,
+                                include_edge.resolved,
+                                classification,
+                            )
+                        )
+                        if classification is None:
+                            issues.append(
+                                CoverageIssue(
+                                    "unclassified_local_source_edge",
+                                    location,
+                                    _unclassified_message(
+                                        include_edge.resolved,
+                                        source_hits,
+                                        target_hits,
+                                    ),
+                                )
+                            )
+                    continue
             reference = _source_reference(
                 root,
                 node,
@@ -417,7 +702,9 @@ def _audit_source_edges(
                 target_hits = ()
             else:
                 candidate_hits = tuple(
-                    resource_owners.get(candidate.casefold(), ())
+                    _candidate_ownership_hits(
+                        candidate, resource_owners, source_file_owners
+                    )
                     for candidate in candidates
                 )
                 classification = _classify_candidate_hits(
@@ -443,7 +730,59 @@ def _audit_source_edges(
                         _unclassified_message(target, source_hits, target_hits),
                     )
                 )
+
+    for node in executable_nodes:
+        source_hits = node_hits[(node.path, node_offsets[id(node)])]
+        audit_node(node, source_hits, nested=False)
+        for child in children_by_parent.get(id(node), ()):
+            audit_node(child, source_hits, nested=True)
     return result
+
+
+def _audit_contextual_node_ownership(
+    node: SourceNode,
+    hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
+    issues: list[CoverageIssue],
+) -> None:
+    location = f"{node.path}:{node.line}"
+    identity = f"nested {node.kind} command {node.command!r}"
+    if node.kind == "unknown":
+        issues.append(
+            CoverageIssue(
+                "unknown_source_node",
+                location,
+                f"{identity} needs explicit parser support or review",
+            )
+        )
+    if not hits:
+        issues.append(
+            CoverageIssue(
+                "unowned_source_node",
+                location,
+                f"{identity} inherits no catalog owner",
+            )
+        )
+    elif len(hits) > 1:
+        declarations = ", ".join(hit.declaration for hit in hits)
+        issues.append(
+            CoverageIssue(
+                "multiply_owned_source_node",
+                location,
+                f"{identity} inherits owners {declarations}",
+            )
+        )
+
+
+def _candidate_ownership_hits(
+    candidate: str,
+    resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    source_file_owners: dict[str, tuple[_OwnershipHit, ...]],
+) -> tuple[_OwnershipHit, ...]:
+    key = candidate.casefold()
+    unique: dict[tuple[str, int], _OwnershipHit] = {}
+    for hit in resource_owners.get(key, ()) + source_file_owners.get(key, ()):
+        unique[(hit.owner.collection, hit.owner.index)] = hit
+    return tuple(unique.values())
 
 
 def _source_reference(
@@ -467,7 +806,7 @@ def _source_reference(
         and re.search(rb"(?i)\bLAF\s+CREATE_SPELL\b", node.raw) is not None
     )
     is_resource_operand = (
-        role == "source"
+        role in {"include", "source"}
         or (role == "argument" and node.command == "ADD_PROJECTILE")
         or (
             role == "argument"
@@ -499,18 +838,39 @@ def _source_reference(
     if create_spell_resource and not path.suffix:
         canonical += ".spl"
         path = PurePosixPath(canonical)
-    basename_candidates = tuple(
-        candidate
-        for candidate in package_resources
-        if PurePosixPath(candidate).name.casefold() == path.name.casefold()
+    qualified_package_path = (
+        len(path.parts) > 1
+        and canonical.casefold().startswith("spell_rev/")
     )
+    if (
+        qualified_package_path
+        and "%" not in canonical
+        and not _repository_file_exists_exact(root, canonical)
+    ):
+        return canonical, True, ()
+    bare_fallback = len(path.parts) == 1 and (
+        laf_resource or create_spell_resource
+    )
+    basename_candidates = (
+        tuple(
+            candidate
+            for candidate in package_resources
+            if PurePosixPath(candidate).name.casefold() == path.name.casefold()
+        )
+        if bare_fallback
+        else ()
+    )
+    if role == "include":
+        if "%" in canonical:
+            return canonical, None, ()
+        return canonical, True, (canonical,)
     if node.command == "APPEND":
         return canonical, False, ()
     local = (
         canonical.casefold().startswith("spell_rev/")
         or canonical.casefold() in resource_owners
-        or ("%" not in canonical and (root / path).is_file())
-        or bool(basename_candidates and (laf_resource or create_spell_resource))
+        or ("%" not in canonical and _repository_file_exists_exact(root, canonical))
+        or bool(basename_candidates)
     )
     if local:
         candidates = basename_candidates or (canonical,)

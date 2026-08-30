@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from bisect import bisect_right
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -34,8 +35,26 @@ def inventory_tree(
     return nodes
 
 
+def inventory_tree_with_edges(
+    root: str | Path,
+    entry: str | Path = DEFAULT_ENTRY,
+    *,
+    include_resolutions: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
+) -> tuple[tuple[SourceNode, ...], tuple[IncludeEdge, ...]]:
+    """Inventory a closure and retain literal and explicitly resolved edges."""
+
+    return _inventory_tree(
+        root,
+        entry,
+        include_resolutions=include_resolutions,
+    )
+
+
 def _inventory_tree(
-    root: str | Path, entry: str | Path
+    root: str | Path,
+    entry: str | Path,
+    *,
+    include_resolutions: Mapping[tuple[str, str], tuple[str, ...]] | None = None,
 ) -> tuple[tuple[SourceNode, ...], tuple[IncludeEdge, ...]]:
     """Return lossless source nodes and every discovered INCLUDE edge."""
 
@@ -44,6 +63,7 @@ def _inventory_tree(
     visited: set[str] = set()
     result: list[SourceNode] = []
     include_edges: list[IncludeEdge] = []
+    resolutions = include_resolutions or {}
 
     def visit(relative: str) -> None:
         key = relative.casefold()
@@ -61,16 +81,28 @@ def _inventory_tree(
             raise SourceError(f"{relative}: unable to read included source: {error}") from error
         for include, line in _include_occurrences(source):
             resolved = _resolve_include(include, source=relative)
-            include_edges.append(
-                IncludeEdge(
-                    source=relative,
-                    line=line,
-                    operand=include,
-                    resolved=resolved,
+            if resolved is None:
+                key = (
+                    relative.casefold(),
+                    include.replace("\\", "/").casefold(),
                 )
+                explicit_targets = resolutions.get(key, ())
+                if not explicit_targets:
+                    include_edges.append(
+                        IncludeEdge(relative, line, include, None)
+                    )
+                    continue
+                for target in explicit_targets:
+                    concrete = _repository_include_path(target, source=relative)
+                    include_edges.append(
+                        IncludeEdge(relative, line, include, concrete)
+                    )
+                    visit(concrete)
+                continue
+            include_edges.append(
+                IncludeEdge(relative, line, include, resolved)
             )
-            if resolved is not None:
-                visit(resolved)
+            visit(resolved)
 
     visit(entry_path)
     return tuple(result), tuple(include_edges)
@@ -231,7 +263,10 @@ def _include_occurrences(source: bytes) -> tuple[tuple[str, int], ...]:
     index = 0
     while index < len(tokens):
         kind, value, offset = tokens[index]
-        if kind != "identifier" or value.casefold() != "include":
+        if kind != "identifier" or value.casefold() not in {
+            "include",
+            "reinclude",
+        }:
             index += 1
             continue
         line = bisect_right(line_starts, offset)
@@ -330,6 +365,7 @@ __all__ = [
     "build_inventory_report",
     "inventory",
     "inventory_tree",
+    "inventory_tree_with_edges",
     "report_json_bytes",
     "write_inventory_report",
 ]

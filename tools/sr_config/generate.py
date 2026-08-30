@@ -565,7 +565,8 @@ def _provenance(catalog: Catalog, change: Change) -> str:
     if not change.source_spans:
         return base
     spans = "; ".join(
-        f"{span.path}: {span.start} .. {span.end} [{span.sha256}]"
+        f"{span.path}: {span.start} .. "
+        f"{span.end if span.end is not None else 'EOF'} [{span.sha256}]"
         for span in change.source_spans
     )
     return f"{base}; {spans}"
