@@ -21,7 +21,13 @@ The following arrays are required, including while empty:
   inside them. Bytes before, between, and after the roots stay inert, so later
   `setup-spell_rev.tp2` components cannot enter component-zero coverage merely
   because they share the setup file. Roots add traversal, not ownership: their
-  existing Infrastructure span remains the sole ownership declaration.
+  existing Infrastructure span remains the sole ownership declaration. One
+  literal, exact-case include of `migration.installer_source` directly inside a
+  validated root is retained as an `owned` structural edge when that source node
+  has only the declared root owner. The already traversed primary entry's many
+  fine-grained owners are not aggregated for this exact edge. Dynamic, shifted,
+  duplicated, case-drifted, outside-root, or owner-mismatched occurrences receive
+  ordinary fail-closed classification.
 
 - `dormant_resources`: package payloads that exist exactly in the repository but
   are not owned or reachable from component-zero source. Each record contains an
@@ -48,10 +54,13 @@ the override to be consumed exactly once. A runtime-owned candidate can never be
 hidden. A stale, mismatched, missing, or multiply consumed override fails
 coverage without changing any other edge.
 
-Deferred scopes may own only closed internal edge islands. A local source or binary
-edge that crosses between deferred ownership and an active change or infrastructure
-record remains unclassified and fails coverage until the deferred scope is resolved;
-dependency metadata cannot make that boundary executable.
+Deferred scopes normally own only closed internal edge islands. A local source or
+binary edge that crosses between deferred ownership and an active change or
+infrastructure record remains unclassified and fails coverage until the deferred
+scope is resolved; dependency metadata cannot make that boundary executable. Two
+narrow coverage-only exceptions are documented below: exact read-only preprocessing
+inputs and literal include path classification. Neither exception makes deferred
+behavior selectable or executable on its own.
 
 ## Resource ownership and runtime payloads
 
@@ -94,11 +103,27 @@ Exactly one primary resolution mode is required:
 The optional closed `access` field defaults to `dependency`. Dependency access
 retains the normal owner-relation checks for each resolved target. Explicit
 `read_only` access is permitted only with concrete `targets`: every target must
-exist with exact path spelling and have exactly one non-deferred component-zero
-Change or Infrastructure owner (including `kind: source` ownership). Each such
-edge is reported as `read_only`. These complete inspected/read target lists do
-not infer public processors, infrastructure consumers, change dependencies, or
-`infrastructure_requires` edges.
+exist with exact path spelling and normally have exactly one non-deferred
+component-zero Change or Infrastructure owner (including `kind: source`
+ownership). A target may instead have exactly one ownership hit when that hit is
+the explicit `resources[]` declaration of one deferred scope with kind `asset` or
+`resource`. Deferred source-span/path ownership, `source`, generated, unowned,
+multiply owned, and active-plus-deferred targets remain invalid. Each accepted
+edge is reported only as `read_only`, and the resolution owner must still be
+reciprocal with the exact source occurrence. These complete inspected/read target
+lists do not infer public processors, infrastructure consumers, change
+dependencies, or `infrastructure_requires` edges. Preprocessing may read and
+rewrite the same package bytes before installation, but this exact exception
+creates no runtime-install or selection activation for the deferred scope.
+
+A separate path-level exception applies only to literal `INCLUDE`/`REINCLUDE`.
+When the included file has deferred ownership plus exactly one distinct active
+Change or Infrastructure owner, and that active owner is the source occurrence's
+sole owner, deferred hits are ignored only for classifying that include path.
+Every node in the included file remains inventoried and must retain unique source
+span ownership, including deferred nodes. Dynamic includes, COPY/LAF/binary
+references, different or multiple active owners, and deferred-only targets do not
+receive this filtering.
 
 An external resolution may additionally list `internal_generated_owners` as
 supplemental provenance for an occurrence whose runtime lookup is primarily

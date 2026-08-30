@@ -148,6 +148,15 @@ class _PreparedBinaryResolution:
         return f"binary_edge_resolutions[{self.index}]"
 
 
+@dataclass(frozen=True)
+class _ValidatedClosureRoot:
+    index: int
+    owner: _Owner
+    path: str
+    start: int
+    end: int
+
+
 def audit_catalog_coverage(
     root: str | Path,
     catalog: Catalog,
@@ -196,7 +205,17 @@ def audit_catalog_coverage(
             for key, resolution in include_resolutions.items()
         },
     )
-    valid_closure_spans = []
+    entry_path = Path(entry)
+    if entry_path.is_absolute():
+        entry_display = entry_path.resolve().relative_to(root_path).as_posix()
+    else:
+        entry_display = PurePosixPath(
+            str(entry).replace("\\", "/")
+        ).as_posix()
+    infrastructure_by_id = {
+        owner.id.casefold(): owner for owner in infrastructure_owners
+    }
+    valid_closure_roots: list[_ValidatedClosureRoot] = []
     closure_ranges: dict[str, list[tuple[int, int, int]]] = {}
     for root_index, closure_root in enumerate(
         catalog.component_zero_closure_roots
@@ -242,10 +261,26 @@ def audit_catalog_coverage(
             )
             continue
         prior_ranges.append((resolved.start, resolved.end, root_index))
-        valid_closure_spans.append(closure_root.source_span)
+        root_owner = infrastructure_by_id.get(closure_root.owner.casefold())
+        if root_owner is None:
+            # Catalog validation owns the identifier diagnostic. Coverage must
+            # not authorize a structural edge without a concrete owner.
+            continue
+        valid_closure_roots.append(
+            _ValidatedClosureRoot(
+                root_index,
+                root_owner,
+                closure_root.source_span.path,
+                resolved.start,
+                resolved.end,
+            )
+        )
     supplemental_nodes, supplemental_edges = inventory_source_spans_with_edges(
         root_path,
-        tuple(valid_closure_spans),
+        tuple(
+            catalog.component_zero_closure_roots[root.index].source_span
+            for root in valid_closure_roots
+        ),
         include_resolutions={
             key: resolution.targets
             for key, resolution in include_resolutions.items()
@@ -254,13 +289,6 @@ def audit_catalog_coverage(
     )
     source_nodes += supplemental_nodes
     include_edges += supplemental_edges
-    entry_path = Path(entry)
-    if entry_path.is_absolute():
-        entry_display = entry_path.resolve().relative_to(root_path).as_posix()
-    else:
-        entry_display = PurePosixPath(
-            str(entry).replace("\\", "/")
-        ).as_posix()
     active_source_paths = {
         entry_display.casefold(),
         *(node.path.casefold() for node in source_nodes),
@@ -313,6 +341,9 @@ def audit_catalog_coverage(
         include_edges,
         source_resolutions,
         package_resources,
+        tuple(valid_closure_roots),
+        entry_display,
+        catalog.migration.installer_source,
         reachable_source_paths,
         issues,
     )
@@ -914,6 +945,115 @@ def _package_files(root: Path, resource_root: str) -> tuple[str, ...]:
     )
 
 
+def _owner_identity_matches(left: _Owner, right: _Owner) -> bool:
+    return left.collection == right.collection and left.index == right.index
+
+
+def _closure_entry_edge_authorizations(
+    executable_nodes: tuple[SourceNode, ...],
+    node_offsets: dict[int, int],
+    node_hits: dict[tuple[str, int], list[_OwnershipHit]],
+    includes_by_operand: dict[tuple[str, int, str], list[IncludeEdge]],
+    closure_roots: tuple[_ValidatedClosureRoot, ...],
+    primary_entry: str,
+    installer_source: str,
+) -> frozenset[tuple[int, int, int]]:
+    """Authorize one exact root-to-primary-entry occurrence per root.
+
+    The entry file is deliberately owned at finer granularity than the
+    structural INCLUDE. This exception therefore proves the source occurrence
+    directly instead of aggregating all owners of the already traversed entry.
+    """
+
+    if primary_entry != installer_source:
+        return frozenset()
+    by_root: dict[int, list[tuple[int, int, int]]] = {}
+    for node in executable_nodes:
+        start = node_offsets[id(node)]
+        end = start + len(node.raw)
+        matching_roots = tuple(
+            root
+            for root in closure_roots
+            if node.path == root.path
+            and start >= root.start
+            and end <= root.end
+        )
+        if len(matching_roots) != 1:
+            continue
+        root = matching_roots[0]
+        source_hits = node_hits[(node.path, start)]
+        if len(source_hits) != 1 or not _owner_identity_matches(
+            source_hits[0].owner, root.owner
+        ):
+            continue
+        for operand_index, operand in enumerate(node.resource_operands):
+            if operand.role != "include" or "%" in operand.value:
+                continue
+            include_key = (
+                node.path.casefold(),
+                node.line,
+                operand.value.replace("\\", "/").casefold(),
+            )
+            for edge in includes_by_operand.get(include_key, ()):
+                if (
+                    edge.source == root.path
+                    and edge.resolved == installer_source
+                ):
+                    by_root.setdefault(root.index, []).append(
+                        (id(node), operand_index, id(edge))
+                    )
+    return frozenset(
+        occurrences[0]
+        for occurrences in by_root.values()
+        if len(occurrences) == 1
+    )
+
+
+def _literal_include_path_hits(
+    operand: str,
+    source_hits: tuple[_OwnershipHit, ...] | list[_OwnershipHit],
+    target_hits: tuple[_OwnershipHit, ...],
+) -> tuple[_OwnershipHit, ...]:
+    """Remove deferred path owners only for a same-owner literal INCLUDE."""
+
+    if "%" in operand or len(source_hits) != 1:
+        return target_hits
+    source_owner = source_hits[0].owner
+    if not isinstance(source_owner.record, (Change, Infrastructure)):
+        return target_hits
+    deferred_hits = tuple(
+        hit
+        for hit in target_hits
+        if isinstance(hit.owner.record, DeferredSourceScope)
+    )
+    active_hits = tuple(
+        hit
+        for hit in target_hits
+        if isinstance(hit.owner.record, (Change, Infrastructure))
+    )
+    if (
+        not deferred_hits
+        or len(active_hits) != 1
+        or not _owner_identity_matches(source_owner, active_hits[0].owner)
+    ):
+        return target_hits
+    return active_hits
+
+
+def _is_explicit_deferred_read_only_resource(
+    target: str,
+    resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    source_file_owners: dict[str, tuple[_OwnershipHit, ...]],
+) -> bool:
+    key = target.casefold()
+    raw_hits = resource_owners.get(key, ()) + source_file_owners.get(key, ())
+    return (
+        len(raw_hits) == 1
+        and isinstance(raw_hits[0].owner.record, DeferredSourceScope)
+        and raw_hits[0].resource_kind in {"asset", "resource"}
+    )
+
+
 def _audit_source_edges(
     root: Path,
     executable_nodes: tuple[SourceNode, ...],
@@ -927,6 +1067,9 @@ def _audit_source_edges(
         tuple[str, int, str, int, str], _PreparedSourceResolution
     ],
     package_resources: tuple[str, ...],
+    closure_roots: tuple[_ValidatedClosureRoot, ...],
+    primary_entry: str,
+    installer_source: str,
     reachable_paths: set[str],
     issues: list[CoverageIssue],
 ) -> list[CoveredEdge]:
@@ -946,6 +1089,15 @@ def _audit_source_edges(
     children_by_parent: dict[int, list[SourceNode]] = {}
     for parent, child in nested_nodes:
         children_by_parent.setdefault(id(parent), []).append(child)
+    structural_entry_edges = _closure_entry_edge_authorizations(
+        executable_nodes,
+        node_offsets,
+        node_hits,
+        includes_by_operand,
+        closure_roots,
+        primary_entry,
+        installer_source,
+    )
 
     result: list[CoveredEdge] = []
     consumed_source_resolutions: Counter[
@@ -986,19 +1138,28 @@ def _audit_source_edges(
                             )
                             continue
                         reachable_paths.add(include_edge.resolved.casefold())
-                        candidate_hits = (
-                            _candidate_ownership_hits(
+                        structural_key = (
+                            id(node),
+                            operand_index,
+                            id(include_edge),
+                        )
+                        if structural_key in structural_entry_edges:
+                            classification = "owned"
+                            target_hits: tuple[_OwnershipHit, ...] = ()
+                        else:
+                            raw_target_hits = _candidate_ownership_hits(
                                 include_edge.resolved,
                                 resource_owners,
                                 source_file_owners,
-                            ),
-                        )
-                        classification = _classify_candidate_hits(
-                            tuple(source_hits), candidate_hits
-                        )
-                        target_hits = tuple(
-                            hit for hits in candidate_hits for hit in hits
-                        )
+                            )
+                            target_hits = _literal_include_path_hits(
+                                operand.value,
+                                source_hits,
+                                raw_target_hits,
+                            )
+                            classification = _classify_candidate_hits(
+                                tuple(source_hits), (target_hits,)
+                            )
                         result.append(
                             CoveredEdge(
                                 "source",
@@ -1135,15 +1296,20 @@ def _audit_source_edges(
                         elif isinstance(
                             target_hits[0].owner.record, DeferredSourceScope
                         ):
-                            classification = None
-                            issues.append(
-                                CoverageIssue(
-                                    "deferred_read_only_source_target",
-                                    location,
-                                    f"read-only target {target!r} is owned only "
-                                    "by a deferred source scope",
+                            if not _is_explicit_deferred_read_only_resource(
+                                target,
+                                resource_owners,
+                                source_file_owners,
+                            ):
+                                classification = None
+                                issues.append(
+                                    CoverageIssue(
+                                        "deferred_read_only_source_target",
+                                        location,
+                                        f"read-only target {target!r} is not a "
+                                        "sole deferred asset/resource declaration",
+                                    )
                                 )
-                            )
                         if not related:
                             classification = None
                         result.append(
