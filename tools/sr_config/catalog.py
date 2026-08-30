@@ -420,8 +420,6 @@ def _validate_catalog(catalog: Catalog) -> None:
         )
         infrastructure_ids[normalized_id] = (record.id, index)
 
-    _validate_root_group(catalog.groups)
-
     for index, record in enumerate(catalog.groups):
         if record.parent is not None and _normalize(record.parent) not in group_ids:
             raise CatalogError(
@@ -429,6 +427,7 @@ def _validate_catalog(catalog: Catalog) -> None:
             )
 
     _validate_group_cycles(catalog.groups, group_ids)
+    _validate_root_group(catalog.groups)
 
     for index, record in enumerate(catalog.changes):
         if _normalize(record.group) not in group_ids:
@@ -458,9 +457,7 @@ def _validate_catalog(catalog: Catalog) -> None:
             description="change ID",
         )
 
-    _validate_processor_consumer_reciprocity(
-        catalog, change_ids, infrastructure_ids
-    )
+    _validate_processor_consumers(catalog, infrastructure_ids)
     _validate_dependency_cycles(catalog.changes, change_ids)
 
 
@@ -604,9 +601,8 @@ def _validate_known_references(
         seen[normalized] = index
 
 
-def _validate_processor_consumer_reciprocity(
+def _validate_processor_consumers(
     catalog: Catalog,
-    change_ids: Mapping[str, tuple[str, int]],
     infrastructure_ids: Mapping[str, tuple[str, int]],
 ) -> None:
     for change_index, record in enumerate(catalog.changes):
@@ -619,20 +615,6 @@ def _validate_processor_consumer_reciprocity(
                     f"changes[{change_index}].processors[{processor_index}]: "
                     f"processor edge is not reciprocated by "
                     f"infrastructure[{infrastructure_index}].consumers"
-                )
-
-    for infrastructure_index, record in enumerate(catalog.infrastructure):
-        normalized_infrastructure = _normalize(record.id)
-        for consumer_index, consumer in enumerate(record.consumers):
-            _, change_index = change_ids[_normalize(consumer)]
-            processors = catalog.changes[change_index].processors
-            if not any(
-                _normalize(value) == normalized_infrastructure for value in processors
-            ):
-                raise CatalogError(
-                    f"infrastructure[{infrastructure_index}].consumers[{consumer_index}]: "
-                    f"consumer edge is not reciprocated by "
-                    f"changes[{change_index}].processors"
                 )
 
 

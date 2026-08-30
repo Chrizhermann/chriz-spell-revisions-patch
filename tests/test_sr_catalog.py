@@ -604,6 +604,18 @@ def test_missing_parent_groups_are_rejected(
     assert str(error.value).startswith(f"{expected_path}:")
 
 
+def test_unknown_parent_is_reported_before_missing_root() -> None:
+    raw = minimal_catalog(
+        groups=[group("orphan", parent="typo")]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("groups[0].parent:")
+    assert "unknown group ID 'typo'" in str(error.value)
+
+
 def test_group_cycle_is_rejected_deterministically() -> None:
     raw = minimal_catalog(
         groups=[
@@ -617,6 +629,21 @@ def test_group_cycle_is_rejected_deterministically() -> None:
         Catalog.from_dict(raw)
 
     assert str(error.value).startswith("groups[2].parent:")
+    assert "group cycle: a -> b -> a" in str(error.value)
+
+
+def test_rootless_group_cycle_is_reported_before_missing_root() -> None:
+    raw = minimal_catalog(
+        groups=[
+            group("a", parent="b"),
+            group("b", parent="a"),
+        ]
+    )
+
+    with pytest.raises(CatalogError) as error:
+        Catalog.from_dict(raw)
+
+    assert str(error.value).startswith("groups[1].parent:")
     assert "group cycle: a -> b -> a" in str(error.value)
 
 
@@ -690,17 +717,16 @@ def test_change_processor_edge_requires_reciprocal_infrastructure_consumer() -> 
     assert "infrastructure[0].consumers" in str(error.value)
 
 
-def test_infrastructure_consumer_requires_reciprocal_change_processor() -> None:
+def test_infrastructure_consumer_can_describe_generic_shared_substrate() -> None:
     raw = minimal_catalog(
         changes=[change("mixed.change")],
         infrastructure_records=[infrastructure("Shared", consumers=["MIXED.CHANGE"])],
     )
 
-    with pytest.raises(CatalogError) as error:
-        Catalog.from_dict(raw)
+    catalog = Catalog.from_dict(raw)
 
-    assert str(error.value).startswith("infrastructure[0].consumers[0]:")
-    assert "changes[0].processors" in str(error.value)
+    assert catalog.infrastructure[0].consumers == ("MIXED.CHANGE",)
+    assert catalog.changes[0].processors == ()
 
 
 def test_change_processor_rejects_unknown_infrastructure() -> None:
