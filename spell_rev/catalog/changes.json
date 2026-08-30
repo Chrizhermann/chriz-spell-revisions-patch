@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "tag": "v4.21",
+    "commit": "af1dedb6d211f86ad7a321d4080e46c748e8abac"
+  },
+  "migration": {
+    "complete": false,
+    "installer_source": "spell_rev/components/main_component.tpa"
+  },
+  "groups": [
+    {
+      "id": "global",
+      "setting": "sr_default",
+      "name": "All Spell Revisions changes",
+      "default": 1,
+      "parent": null
+    },
+    {
+      "id": "arcane",
+      "setting": "sr_arcane_default",
+      "name": "Arcane spells",
+      "default": -1,
+      "parent": "global"
+    },
+    {
+      "id": "arcane.level1",
+      "setting": "sr_arcane_level_1_default",
+      "name": "Arcane level 1",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level2",
+      "setting": "sr_arcane_level_2_default",
+      "name": "Arcane level 2",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level3",
+      "setting": "sr_arcane_level_3_default",
+      "name": "Arcane level 3",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level4",
+      "setting": "sr_arcane_level_4_default",
+      "name": "Arcane level 4",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level5",
+      "setting": "sr_arcane_level_5_default",
+      "name": "Arcane level 5",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level6",
+      "setting": "sr_arcane_level_6_default",
+      "name": "Arcane level 6",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level7",
+      "setting": "sr_arcane_level_7_default",
+      "name": "Arcane level 7",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level8",
+      "setting": "sr_arcane_level_8_default",
+      "name": "Arcane level 8",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "arcane.level9",
+      "setting": "sr_arcane_level_9_default",
+      "name": "Arcane level 9",
+      "default": -1,
+      "parent": "arcane"
+    },
+    {
+      "id": "divine",
+      "setting": "sr_divine_default",
+      "name": "Divine spells",
+      "default": -1,
+      "parent": "global"
+    },
+    {
+      "id": "divine.level1",
+      "setting": "sr_divine_level_1_default",
+      "name": "Divine level 1",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level2",
+      "setting": "sr_divine_level_2_default",
+      "name": "Divine level 2",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level3",
+      "setting": "sr_divine_level_3_default",
+      "name": "Divine level 3",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level4",
+      "setting": "sr_divine_level_4_default",
+      "name": "Divine level 4",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level5",
+      "setting": "sr_divine_level_5_default",
+      "name": "Divine level 5",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level6",
+      "setting": "sr_divine_level_6_default",
+      "name": "Divine level 6",
+      "default": -1,
+      "parent": "divine"
+    },
+    {
+      "id": "divine.level7",
+      "setting": "sr_divine_level_7_default",
+      "name": "Divine level 7",
+      "default": -1,
+      "parent": "divine"
+    }
+  ],
+  "changes": [],
+  "infrastructure": []
+}
