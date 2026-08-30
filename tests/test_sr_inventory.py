@@ -256,6 +256,34 @@ def test_unknown_depth_zero_statement_ends_complete_copy_operands(
     assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
 
 
+@pytest.mark.parametrize(
+    ("command", "head"),
+    [
+        ("ADD_SPELL", "ADD_SPELL ~a.spl~ ~WIZARD_A~\n"),
+        ("APPEND", "APPEND ~spell.ids~ ~1702 CLERIC_TEST~\n"),
+    ],
+)
+def test_unknown_depth_zero_statement_ends_complete_non_copy_pipeline(
+    tmp_path: Path, command: str, head: str
+) -> None:
+    path = tmp_path / f"unknown-after-{command.casefold()}.tpa"
+    path.write_text(
+        head
+        + "MYSTERY_STATEMENT ~odd~\n"
+        + "PRINT ~next action~\n",
+        encoding="utf-8",
+    )
+
+    nodes = tuple(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(node.kind, node.command) for node in nodes] == [
+        ("executable", command),
+        ("unknown", "MYSTERY_STATEMENT"),
+        ("executable", "PRINT"),
+    ]
+    assert b"".join(node.raw for node in inventory(path)) == path.read_bytes()
+
+
 def test_inventory_keeps_unless_modifier_with_append(tmp_path: Path) -> None:
     path = tmp_path / "append.tpa"
     path.write_text(

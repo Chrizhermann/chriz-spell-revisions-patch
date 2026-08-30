@@ -314,13 +314,11 @@ def inventory(path: str | Path, *, root: str | Path | None = None) -> tuple[Sour
             if open_node.pipeline_terminated and lexed.has_code:
                 finish(open_node)
                 open_node = None
-            elif candidate is not None and _starts_after_copy(
+            elif candidate is not None and _starts_after_pipeline(
                 first,
-                complete_copy=(
-                    open_node.command in _COPY_COMMANDS
-                    and _copy_operands_complete(
-                        source[open_node.start : open_node.end]
-                    )
+                complete_operands=_pipeline_operands_complete(
+                    open_node.command,
+                    source[open_node.start : open_node.end],
                 ),
             ):
                 finish(open_node)
@@ -612,21 +610,38 @@ def _statement_candidate(first: str | None) -> tuple[str, str] | None:
     return first, "unknown"
 
 
-def _starts_after_copy(
-    first: str | None, *, complete_copy: bool = False
+def _starts_after_pipeline(
+    first: str | None, *, complete_operands: bool = False
 ) -> bool:
-    if first is None or first in _PATCH_OR_COPY_CONTINUATIONS:
+    if (
+        first is None
+        or first in _PATCH_OR_COPY_CONTINUATIONS
+        or first in _PIPELINE_TERMINATORS
+    ):
         return False
     return (
-        complete_copy
+        complete_operands
         or first in _ACTION_COMMANDS
         or first.startswith(("ACTION_", "AT_"))
     )
 
 
-def _copy_operands_complete(raw: bytes) -> bool:
-    values = _copy_operand_values(raw)
-    return len(values) >= 2 and len(values) % 2 == 0
+def _pipeline_operands_complete(command: str, raw: bytes) -> bool:
+    if command in _COPY_COMMANDS:
+        values = _copy_operand_values(raw)
+        return len(values) >= 2 and len(values) % 2 == 0
+    if command not in {"ADD_SPELL", "APPEND"}:
+        return False
+    atoms = _source_atoms(_copy_prefix(raw))
+    command_index = next(
+        (
+            index
+            for index, (value, quoted) in enumerate(atoms)
+            if not quoted and value.upper() == command
+        ),
+        None,
+    )
+    return command_index is not None and len(atoms[command_index + 1 :]) >= 2
 
 
 def _else_awaits_begin(tokens: tuple[str, ...]) -> bool:
