@@ -5,7 +5,7 @@
     {"id": 2, "subject": "Task 2: Deterministic source inventory and anchor validation", "status": "completed", "blockedBy": [1]},
     {"id": 3, "subject": "Task 3: Tri-state resolver and synchronized config/docs generator", "status": "completed", "blockedBy": [1]},
     {"id": 4, "subject": "Task 4: Classify every upstream component-0 change and dependency", "status": "completed", "blockedBy": [2, 3]},
-    {"id": 5, "subject": "Task 5: Generate and test WeiDU preflight validation", "status": "in_progress", "blockedBy": [3, 4]},
+    {"id": 5, "subject": "Task 5: Generate and test WeiDU preflight validation", "status": "completed", "blockedBy": [3, 4]},
     {"id": 6, "subject": "Task 6: Freeze the legacy oracle, compile guarded component 0, and publish feature facts", "status": "pending", "blockedBy": [2, 4, 5]},
     {"id": 7, "subject": "Task 7: Generate parallel selection-aware registries and global processors", "status": "pending", "blockedBy": [6]},
     {"id": 8, "subject": "Task 8: Prove the generated path and optional-component variants before switching", "status": "pending", "blockedBy": [7]},
@@ -13,5 +13,5 @@
     {"id": 10, "subject": "Task 10: Upstream drift enforcement, packaging, and user guidance", "status": "pending", "blockedBy": [9]},
     {"id": 11, "subject": "Task 11: Independent review and final verification", "status": "pending", "blockedBy": [10]}
   ],
-  "lastUpdated": "2026-08-30T19:13:16+09:00"
+  "lastUpdated": "2026-08-30T20:11:56+09:00"
 }
