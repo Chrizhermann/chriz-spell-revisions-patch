@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 import struct
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,7 @@ from tests.ie_formats import (
     SPL_EFFECT_SIZE,
     SPL_HEADER_SIZE,
 )
-from tools.sr_config.catalog import Catalog
+from tools.sr_config.catalog import Catalog, load_catalog
 from tools.sr_config.coverage import audit_catalog_coverage
 from tools.sr_config.resources import (
     ResourceError,
@@ -19,9 +21,178 @@ from tools.sr_config.resources import (
     scan_package_resources,
     scan_resource_edges,
 )
+from tools.sr_config.source import resolve_span_offsets
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEPENDENCY_AUDIT = ROOT / "docs" / "spell-revisions-dependency-audit.md"
+ATOMIC_EVIDENCE_BEGIN = "<!-- BEGIN ATOMIC COMPOSITE EVIDENCE -->"
+ATOMIC_EVIDENCE_END = "<!-- END ATOMIC COMPOSITE EVIDENCE -->"
+SOFT_EVIDENCE_BEGIN = "<!-- BEGIN SOFT RELATION EVIDENCE -->"
+SOFT_EVIDENCE_END = "<!-- END SOFT RELATION EVIDENCE -->"
+
+
+def _marked_section(document: str, begin: str, end: str) -> str:
+    assert document.count(begin) == 1, f"expected exactly one {begin!r} marker"
+    assert document.count(end) == 1, f"expected exactly one {end!r} marker"
+    before, remainder = document.split(begin, 1)
+    section, after = remainder.split(end, 1)
+    assert end not in before
+    assert begin not in after
+    return section
+
+
+def _markdown_table(section: str, header: tuple[str, ...]) -> list[tuple[str, ...]]:
+    lines = [line for line in section.splitlines() if line.startswith("|")]
+    assert len(lines) >= 2, "expected a Markdown evidence table"
+    rows = [
+        tuple(cell.strip() for cell in line.removeprefix("|").removesuffix("|").split("|"))
+        for line in lines
+    ]
+    assert rows[0] == header
+    assert rows[1] == tuple("---" for _ in header)
+    assert all(len(row) == len(header) for row in rows[2:])
+    return rows[2:]
+
+
+def _code_cell(cell: str) -> str:
+    assert cell.startswith("`") and cell.endswith("`")
+    return cell[1:-1]
+
+
+def _source_span_evidence(span) -> str:
+    resolved = resolve_span_offsets(ROOT, span)
+    start_line = resolved.source[: resolved.start].count(b"\n") + 1
+    final_byte = max(resolved.start, resolved.end - 1)
+    end_line = resolved.source[:final_byte].count(b"\n") + 1
+    return (
+        f"`{span.path}:lines {start_line}-{end_line} "
+        f"[sha256:{span.sha256.lower()}]`"
+    )
+
+
+def test_dependency_audit_cites_every_atomic_composite_source_span() -> None:
+    catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
+    composites = {
+        change.id: change for change in catalog.changes if len(change.member_refs) > 1
+    }
+    document = DEPENDENCY_AUDIT.read_text(encoding="utf-8")
+    rows = _markdown_table(
+        _marked_section(document, ATOMIC_EVIDENCE_BEGIN, ATOMIC_EVIDENCE_END),
+        ("Public choice", "Catalog members", "Source evidence"),
+    )
+    identifiers = [_code_cell(row[0]) for row in rows]
+
+    assert Counter(identifiers) == Counter({identifier: 1 for identifier in composites})
+    for row in rows:
+        identifier = _code_cell(row[0])
+        expected = "<br>".join(
+            _source_span_evidence(span)
+            for span in composites[identifier].source_spans
+        )
+        assert row[2] == expected
+
+
+def test_dependency_audit_cites_every_soft_relation_exactly_once() -> None:
+    catalog = load_catalog(ROOT / "spell_rev/catalog/changes.json")
+    expected_pairs = {
+        (change.id, dependency)
+        for change in catalog.changes
+        for dependency in change.soft_requires
+    }
+    document = DEPENDENCY_AUDIT.read_text(encoding="utf-8")
+    rows = _markdown_table(
+        _marked_section(document, SOFT_EVIDENCE_BEGIN, SOFT_EVIDENCE_END),
+        (
+            "From",
+            "To",
+            "Physical edge count",
+            "Evidence direction",
+            "Representative source anchor",
+        ),
+    )
+    parsed: list[tuple[tuple[str, str], int, str, str, int, str]] = []
+    anchor_pattern = re.compile(
+        r"^(?P<path>spell_rev/.+):(?P<offset>0x[0-9a-f]+):(?P<field>.+)$"
+    )
+    reverse_family_pair = (
+        "divine.regenerate_light_wounds",
+        "divine.mass_regenerate",
+    )
+    for source_cell, target_cell, count_cell, direction_cell, anchor_cell in rows:
+        pair = (_code_cell(source_cell), _code_cell(target_cell))
+        assert count_cell.isdecimal() and int(count_cell) > 0
+        expected_direction = (
+            "reverse-family" if pair == reverse_family_pair else "direct"
+        )
+        assert _code_cell(direction_cell) == expected_direction
+        anchor = _code_cell(anchor_cell)
+        match = anchor_pattern.fullmatch(anchor)
+        assert match is not None, f"invalid binary source anchor for {pair}: {anchor!r}"
+        parsed.append(
+            (
+                pair,
+                int(count_cell),
+                expected_direction,
+                match.group("path"),
+                int(match.group("offset"), 16),
+                match.group("field"),
+            )
+        )
+
+    assert Counter(item[0] for item in parsed) == Counter(
+        {pair: 1 for pair in expected_pairs}
+    )
+
+    resource_index = build_resource_index(ROOT)
+    change_resource_owners = {
+        resource.path.casefold(): change.id
+        for change in catalog.changes
+        for resource in change.resources
+    }
+    scanned: dict[str, tuple] = {}
+    physical_counts: Counter[tuple[str, str]] = Counter()
+    for path_key, source_owner in change_resource_owners.items():
+        if Path(path_key).suffix not in {".cre", ".eff", ".itm", ".spl"}:
+            continue
+        source_path = ROOT / path_key
+        if not source_path.is_file():
+            continue
+        edges = scan_resource_edges(
+            source_path,
+            package_root=ROOT,
+            resource_index=resource_index,
+        )
+        scanned[path_key] = edges
+        for edge in edges:
+            target_owners = {
+                change_resource_owners[candidate.casefold()]
+                for candidate in edge.local_candidates
+                if candidate.casefold() in change_resource_owners
+            }
+            for target_owner in target_owners:
+                physical_counts[(source_owner, target_owner)] += 1
+
+    for pair, edge_count, direction, path, offset, field in parsed:
+        source_path = ROOT / path
+        assert source_path.is_file(), f"missing tracked source for {pair}: {path}"
+        matching_edges = tuple(
+            edge
+            for edge in scanned[path.casefold()]
+            if (edge.offset, edge.field) == (offset, field)
+        )
+        assert len(matching_edges) == 1, (
+            f"binary source anchor for {pair} is not present: "
+            f"{path}:0x{offset:x}:{field}"
+        )
+        physical_pair = pair if direction == "direct" else (pair[1], pair[0])
+        assert change_resource_owners[path.casefold()] == physical_pair[0]
+        assert physical_pair[1] in {
+            change_resource_owners[candidate.casefold()]
+            for candidate in matching_edges[0].local_candidates
+            if candidate.casefold() in change_resource_owners
+        }
+        assert edge_count == physical_counts[physical_pair]
 
 
 def _put_u16(data: bytearray, offset: int, value: int) -> None:
