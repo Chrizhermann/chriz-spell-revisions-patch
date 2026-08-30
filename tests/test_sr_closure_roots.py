@@ -80,4 +80,3 @@ def test_closure_root_rejects_wrong_case_path_before_span_resolution(
     )
     assert exact_issue.location == "component_zero_closure_roots[0].source_span"
     assert "does not exactly match an existing file" in exact_issue.message
-
