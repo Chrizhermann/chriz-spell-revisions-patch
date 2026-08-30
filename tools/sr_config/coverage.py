@@ -188,6 +188,22 @@ def audit_catalog_coverage(
             for key, resolution in include_resolutions.items()
         },
     )
+    entry_path = Path(entry)
+    if entry_path.is_absolute():
+        entry_display = entry_path.resolve().relative_to(root_path).as_posix()
+    else:
+        entry_display = PurePosixPath(
+            str(entry).replace("\\", "/")
+        ).as_posix()
+    active_source_paths = {
+        entry_display.casefold(),
+        *(node.path.casefold() for node in source_nodes),
+        *(
+            edge.resolved.casefold()
+            for edge in include_edges
+            if edge.resolved is not None
+        ),
+    }
     _audit_include_resolutions(include_resolutions, include_edges, issues)
     executable_nodes = tuple(node for node in source_nodes if node.kind != "trivia")
     nested_nodes = tuple(
@@ -239,6 +255,8 @@ def audit_catalog_coverage(
         catalog,
         resource_root_name,
         resource_owners,
+        source_file_owners,
+        frozenset(active_source_paths),
         reachable_source_paths,
         issues,
     )
@@ -1290,6 +1308,8 @@ def _audit_dormant_resources(
     catalog: Catalog,
     resource_root: str,
     resource_owners: dict[str, tuple[_OwnershipHit, ...]],
+    source_file_owners: dict[str, tuple[_OwnershipHit, ...]],
+    active_source_paths: frozenset[str],
     reachable_paths: set[str],
     issues: list[CoverageIssue],
 ) -> frozenset[str]:
@@ -1331,7 +1351,11 @@ def _audit_dormant_resources(
                     f"{record.path!r} is outside package root {resource_root!r}",
                 )
             )
-        claims = declared_owners.get(normalized, [])
+        claims = list(declared_owners.get(normalized, []))
+        claims.extend(
+            hit.declaration for hit in source_file_owners.get(normalized, ())
+        )
+        claims = list(dict.fromkeys(claims))
         if claims or resource_owners.get(normalized):
             declarations = ", ".join(claims) or "component-zero resource ownership"
             issues.append(
@@ -1341,12 +1365,13 @@ def _audit_dormant_resources(
                     f"{record.path!r} is claimed by {declarations}",
                 )
             )
-        if normalized in reachable_paths:
+        if normalized in reachable_paths or normalized in active_source_paths:
             issues.append(
                 CoverageIssue(
                     "reachable_dormant_resource",
                     f"{declaration}.path",
-                    f"{record.path!r} is reachable from component-zero source",
+                    f"{record.path!r} is in or reachable from the component-zero "
+                    "source inventory",
                 )
             )
     return dormant_paths

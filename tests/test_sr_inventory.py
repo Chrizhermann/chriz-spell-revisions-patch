@@ -1591,6 +1591,93 @@ def test_dormant_payload_outside_package_root_is_stale(tmp_path: Path) -> None:
     assert "stale_dormant_resource" in {issue.code for issue in result.issues}
 
 
+def test_component_entry_cannot_be_declared_dormant_while_source_owned(
+    tmp_path: Path,
+) -> None:
+    source = b"// start\nPRINT ~active~\n"
+    component_path = "spell_rev/components/main_component.tpa"
+    component = tmp_path / component_path
+    component.parent.mkdir(parents=True)
+    component.write_bytes(source)
+    _write_coverage_language_files(tmp_path, "@1=~Active~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "active",
+                source_spans=[
+                    _coverage_span(
+                        component_path,
+                        source,
+                        b"// start",
+                        None,
+                    )
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": component_path,
+                "reason": "Invalid overlap with the active entry.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+    issue_codes = {issue.code for issue in result.issues}
+
+    assert "claimed_dormant_resource" in issue_codes
+    assert "reachable_dormant_resource" in issue_codes
+
+
+def test_included_source_cannot_be_dormant_while_owned_by_a_source_span(
+    tmp_path: Path,
+) -> None:
+    component_source = b"// entry\nINCLUDE ~spell_rev/lib/helper.tpa~\n"
+    helper_source = b"// helper\nPRINT ~active~\n"
+    component_path = "spell_rev/components/main_component.tpa"
+    helper_path = "spell_rev/lib/helper.tpa"
+    component = tmp_path / component_path
+    component.parent.mkdir(parents=True)
+    component.write_bytes(component_source)
+    helper = tmp_path / helper_path
+    helper.parent.mkdir(parents=True)
+    helper.write_bytes(helper_source)
+    _write_coverage_language_files(tmp_path, "@1=~Active~\n@2=~Description~\n")
+    catalog = _coverage_catalog(
+        changes=[
+            _coverage_change(
+                "active",
+                source_spans=[
+                    _coverage_span(
+                        component_path,
+                        component_source,
+                        b"// entry",
+                        None,
+                    ),
+                    _coverage_span(
+                        helper_path,
+                        helper_source,
+                        b"// helper",
+                        None,
+                    ),
+                ],
+            )
+        ],
+        dormant_resources=[
+            {
+                "path": helper_path,
+                "reason": "Invalid overlap with active included source.",
+            }
+        ],
+    )
+
+    result = audit_catalog_coverage(tmp_path, catalog)
+    issue_codes = {issue.code for issue in result.issues}
+
+    assert "claimed_dormant_resource" in issue_codes
+    assert "reachable_dormant_resource" in issue_codes
+
+
 def test_directory_copy_makes_every_dormant_descendant_source_reachable(
     tmp_path: Path,
 ) -> None:
