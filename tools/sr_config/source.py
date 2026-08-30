@@ -1006,7 +1006,15 @@ def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
     if command == "LAF":
         generated_output = _create_spell_output(raw)
         if generated_output is not None:
-            return (ResourceOperand("generated_output", generated_output),)
+            output_index, output_value = generated_output
+            if output_index < len(quoted) and quoted[output_index] == output_value:
+                return tuple(
+                    ResourceOperand(
+                        "generated_output" if index == output_index else "argument",
+                        value,
+                    )
+                    for index, value in enumerate(quoted)
+                )
     if command in _CALL_COMMANDS:
         return tuple(ResourceOperand("argument", value) for value in quoted)
     if command in _BLOCK_COMMANDS:
@@ -1020,8 +1028,8 @@ def _resource_operands(command: str, raw: bytes) -> tuple[ResourceOperand, ...]:
     return tuple(ResourceOperand("argument", value) for value in quoted)
 
 
-def _create_spell_output(raw: bytes) -> str | None:
-    """Return only CREATE_SPELL's exact ``STR_VAR spell`` output operand."""
+def _create_spell_output(raw: bytes) -> tuple[int, str] | None:
+    """Return CREATE_SPELL's exact output ordinal and value."""
 
     atoms = _source_atoms(raw)
     if len(atoms) < 5 or tuple(
@@ -1032,7 +1040,7 @@ def _create_spell_output(raw: bytes) -> str | None:
         ("STR_VAR", False),
     ):
         return None
-    matches: list[str] = []
+    matches: list[tuple[int, str]] = []
     index = 3
     while index < len(atoms):
         value, quoted = atoms[index]
@@ -1040,7 +1048,12 @@ def _create_spell_output(raw: bytes) -> str | None:
             break
         if not quoted and value.casefold() == "spell=":
             if index + 1 < len(atoms) and atoms[index + 1][1]:
-                matches.append(atoms[index + 1][0])
+                matches.append(
+                    (
+                        sum(1 for _, is_quoted in atoms[: index + 1] if is_quoted),
+                        atoms[index + 1][0],
+                    )
+                )
                 index += 2
                 continue
         if not quoted and value.casefold() == "spell":
@@ -1049,11 +1062,16 @@ def _create_spell_output(raw: bytes) -> str | None:
                 and atoms[index + 1] == ("=", False)
                 and atoms[index + 2][1]
             ):
-                matches.append(atoms[index + 2][0])
+                matches.append(
+                    (
+                        sum(1 for _, is_quoted in atoms[: index + 2] if is_quoted),
+                        atoms[index + 2][0],
+                    )
+                )
                 index += 3
                 continue
         index += 1
-    if len(matches) != 1 or not matches[0]:
+    if len(matches) != 1 or not matches[0][1]:
         return None
     return matches[0]
 

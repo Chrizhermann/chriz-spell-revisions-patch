@@ -4282,3 +4282,22 @@ def test_create_spell_comment_cannot_synthesize_a_generated_output(
     assert [(operand.role, operand.value) for operand in node.resource_operands] == [
         ("argument", "ordinary-value")
     ]
+
+
+def test_create_spell_preserves_non_output_str_var_arguments(
+    tmp_path: Path,
+) -> None:
+    source = (
+        b"LAF CREATE_SPELL STR_VAR spell=~made~ "
+        b"template=~spell_rev/shared/base.spl~ label=~description~ END\n"
+    )
+    path = tmp_path / "create-spell.tpa"
+    path.write_bytes(source)
+
+    node = next(node for node in inventory(path) if node.kind != "trivia")
+
+    assert [(operand.role, operand.value) for operand in node.resource_operands] == [
+        ("generated_output", "made"),
+        ("argument", "spell_rev/shared/base.spl"),
+        ("argument", "description"),
+    ]
