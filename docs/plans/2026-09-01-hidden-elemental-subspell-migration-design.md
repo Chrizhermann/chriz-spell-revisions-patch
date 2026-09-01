@@ -33,9 +33,8 @@ The implementation must:
 
 ### 2.1 Historical standalone fix
 
-The historical source was inspected read-only at:
-
-`C:\src\private\chriz-bg-modpack\extras\snapshot\mods\SR_SUBSPELL_FIX\SR_SUBSPELL_FIX.tp2`
+The historical standalone `SR_SUBSPELL_FIX` source was inspected read-only in the private
+modpack snapshot; no code or assets were copied from that repository.
 
 It records the original diagnosis and removes these hardcoded resources from joinable NPCs:
 
@@ -253,7 +252,7 @@ In scope:
 
 Out of scope:
 
-- modifying `C:\src\private\chriz-bg-modpack` or copying its standalone implementation;
+- modifying the private modpack repository or copying its standalone implementation;
 - patching the roughly 170 historically reported non-joinable CREs;
 - modifying `HIDESPL.2DA`, the selector SPL, or selector 2DA as part of component 60;
 - cleaning unrelated hidden spells;
