@@ -1,0 +1,9 @@
+{
+  "planPath": "docs/plans/2026-09-02-hidden-elemental-parent-migration-implementation.md",
+  "tasks": [
+    {"id": 1, "subject": "Lock corrected parent migration with failing tests", "status": "pending"},
+    {"id": 2, "subject": "Implement semantic CRE and BCS migration", "status": "pending", "blockedBy": [1]},
+    {"id": 3, "subject": "Correct docs and rerun acceptance", "status": "pending", "blockedBy": [2]}
+  ],
+  "lastUpdated": "2026-09-02T00:00:00+09:00"
+}
