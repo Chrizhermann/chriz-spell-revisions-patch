@@ -1,0 +1,36 @@
+// File-level --nogame harness for the hidden-elemental parent migration.
+// argv[0] = input CRE; argv[1] = output CRE; argv[2] = patch tph;
+// argv[3..6] = verified child resrefs; argv[7] = parent; argv[8] = parent level.
+
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~apply hidden elemental migration once~ DESIGNATED 0
+INCLUDE ~%argv[2]%~
+ACTION_CLEAR_ARRAY sr_elemental_cleanup_children
+ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_cleanup_children BEGIN
+  ~%argv[3]%~ => ~~
+  ~%argv[4]%~ => ~~
+  ~%argv[5]%~ => ~~
+  ~%argv[6]%~ => ~~
+END
+OUTER_SPRINT sr_elemental_parent_resref ~%argv[7]%~
+OUTER_SET sr_elemental_parent_level = %argv[8]%
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF SR_MIGRATE_HIDDEN_ELEMENTAL_SUBSPELLS END
+
+BEGIN ~apply hidden elemental migration twice~ DESIGNATED 1
+INCLUDE ~%argv[2]%~
+ACTION_CLEAR_ARRAY sr_elemental_cleanup_children
+ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_cleanup_children BEGIN
+  ~%argv[3]%~ => ~~
+  ~%argv[4]%~ => ~~
+  ~%argv[5]%~ => ~~
+  ~%argv[6]%~ => ~~
+END
+OUTER_SPRINT sr_elemental_parent_resref ~%argv[7]%~
+OUTER_SET sr_elemental_parent_level = %argv[8]%
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF SR_MIGRATE_HIDDEN_ELEMENTAL_SUBSPELLS END
+  LPF SR_MIGRATE_HIDDEN_ELEMENTAL_SUBSPELLS END

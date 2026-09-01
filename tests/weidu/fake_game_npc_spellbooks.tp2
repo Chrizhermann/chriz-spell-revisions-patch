@@ -1,0 +1,38 @@
+// Test-only tp2: mirrors component 60's production sequence inside a synthetic
+// fake game. Never install this in a real game.
+
+BACKUP ~weidu_external/backup/srcb_test_npc_spellbooks~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~test: update NPC spellbooks (first pass)~ DESIGNATED 0
+COMPILE ~spell_rev/tests/NEERASCR.BAF~
+COMPILE ~spell_rev/tests/CTRLBCS.BAF~
+INCLUDE ~spell_rev/lib/joinable_npcs.tpa~
+LAM ~JOINABLE_NPC_ARRAYS~
+INCLUDE ~spell_rev/components/fix_arcane_spellbooks.tpa~
+ACTION_IF FILE_EXISTS ~spell_rev/lib/hidden_elemental_subspells.tpa~ BEGIN
+  INCLUDE ~spell_rev/lib/hidden_elemental_subspells.tpa~
+END
+
+BEGIN ~test: update NPC spellbooks (repeat pass)~ DESIGNATED 1
+COMPILE ~spell_rev/tests/NEERASCR.BAF~
+COMPILE ~spell_rev/tests/CTRLBCS.BAF~
+INCLUDE ~spell_rev/lib/joinable_npcs.tpa~
+LAM ~JOINABLE_NPC_ARRAYS~
+INCLUDE ~spell_rev/components/fix_arcane_spellbooks.tpa~
+ACTION_IF FILE_EXISTS ~spell_rev/lib/hidden_elemental_subspells.tpa~ BEGIN
+  INCLUDE ~spell_rev/lib/hidden_elemental_subspells.tpa~
+END
+
+
+BEGIN ~test: update NPC spellbooks twice in one WeiDU process~ DESIGNATED 2
+COMPILE ~spell_rev/tests/NEERASCR.BAF~
+COMPILE ~spell_rev/tests/CTRLBCS.BAF~
+INCLUDE ~spell_rev/lib/joinable_npcs.tpa~
+LAM ~JOINABLE_NPC_ARRAYS~
+INCLUDE ~spell_rev/components/fix_arcane_spellbooks.tpa~
+ACTION_IF FILE_EXISTS ~spell_rev/lib/hidden_elemental_subspells.tpa~ BEGIN
+  INCLUDE ~spell_rev/lib/hidden_elemental_subspells.tpa~
+  INCLUDE ~spell_rev/lib/hidden_elemental_subspells.tpa~
+END

@@ -4,7 +4,7 @@ README ~spell_rev/readme-spell_rev.html~
 //MODDER
 ASK_EVERY_COMPONENT
 
-VERSION ~v4.21-chriz.1~
+VERSION ~v4.21-chriz.2~
 
 ALWAYS
   OUTER_PATCH ~~ BEGIN
@@ -195,6 +195,9 @@ ACTION_IF NOT MOD_IS_INSTALLED ~Divine_Remix~ ~1000~ BEGIN
 END
 
 INCLUDE ~spell_rev/components/fix_arcane_spellbooks.tpa~
+
+// Replace SR-hidden child grants only after every NPC spellbook/script assignment.
+INCLUDE ~spell_rev/lib/hidden_elemental_subspells.tpa~
 
 //\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\\\
 ////\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\//\\

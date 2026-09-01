@@ -1,0 +1,12 @@
+IF
+  Global("SRCB_NEERA_GRANT","LOCALS",0)
+THEN
+  RESPONSE #100
+    AddSpecialAbility("spwi319")
+    AddSpecialAbility("spwi320")
+    AddSpecialAbility("spwi512")
+    AddSpecialAbility("spwi517")
+    AddSpecialAbility("ZZLEGIT")
+    AddSpecialAbility("ZZHIDDN")
+    SetGlobal("SRCB_NEERA_GRANT","LOCALS",1)
+END

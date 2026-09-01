@@ -7,6 +7,15 @@ uninstalling anything (the never-uninstall rule for the main EET install).
 Fresh installs don't need these — install the fork's `spell_rev/` itself instead; its
 `lib/*.tpa` produce the same end state.
 
+## NPC elemental-spell migration is component-owned
+
+The hidden elemental-protection child-to-parent migration has no replacement tail mini-mod. It belongs
+at the end of Spell Revisions component 60, after all NPC additions and class/kit/spellbook
+or script assignments. Future full installs using this fork do not need the old standalone
+`SR_SUBSPELL_FIX`; an existing frozen WeiDU stack should keep its already-installed copy until a
+validated rebuild. It also patches matching runtime grants in scripts referenced by joinable NPC
+resources. Component 60 cannot rewrite NPC creatures already embedded in a save.
+
 ## SRCB_PROT_REFRESH
 
 **Fix: Protection from Magic Energy / Protection from the Elements / Protection from Energy

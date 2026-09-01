@@ -31,8 +31,8 @@ referenced by joinable-NPC CRE slots so exact `AddSpecialAbility(child)` actions
 - Modify: `spell_rev/lib/hidden_elemental_subspells.tpa`
 
 1. Resolve and validate the parent wizard level.
-2. For valid joinable CREs, count child known/memorized grants, remove them, add the parent once
-   to known spells and with matching memorized multiplicity.
+2. For valid joinable CREs, replace child memorized rows in place, remove child known rows, and
+   add the parent once to known spells when it is not already present.
 3. Collect effective script slots from joinable CREs and replace exact child
    `AddSpecialAbility` calls with the parent.
 4. Run focused tests until green, then run the complete suite.
@@ -48,5 +48,5 @@ referenced by joinable-NPC CRE slots so exact `AddSpecialAbility(child)` actions
 1. Remove all removal-only / no-parent-grant claims.
 2. Record the natural Beregost Neera runtime injector and parent replacement behavior.
 3. Reinstall the candidate in the isolated EET clone and verify effective CRE and BCS outputs.
-4. Run the short natural-recruitment acceptance; then execute the already-authorized release
-   sequence only on a pass.
+4. Record that the maintainer explicitly waived natural recruitment and selector casting after
+   the disposable static/install acceptance passed, then execute the authorized release sequence.

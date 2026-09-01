@@ -1,0 +1,349 @@
+// Component 60 migration for SR's hidden elemental-protection implementation spells.
+//
+// Do not freeze the legacy SPWI319/SPWI320/SPWI512/SPWI517 slots here. ADD_SPELL may
+// relocate the public container and its children. A spell is replaced only when it is:
+//   1. one of the four elemental-protection semantic SPELL.IDS identities,
+//   2. offered by the effective container's opcode-214 selector table, and
+//   3. marked hidden in the effective HIDESPL.2DA.
+// Proven child grants in joinable NPC CREs and their scripts become the public
+// parent. Missing or inconsistent semantic data therefore fails closed.
+
+DEFINE_PATCH_FUNCTION SR_FIND_2DA_COLUMN
+  STR_VAR desired_header = ~~
+  RET total_columns data_column
+BEGIN
+  COUNT_2DA_COLS total_columns
+  SET data_column = "-1"
+  PATCH_IF (total_columns >= 2) BEGIN
+    SET sr_header_columns = total_columns - 1
+    READ_2DA_ENTRIES_NOW sr_header_view sr_header_columns
+    PATCH_IF (sr_header_view >= 1) BEGIN
+      // A two-column header has the same width as the "2DA V1.0" signature,
+      // so search the whole filtered view rather than assuming header row 0.
+      FOR (sr_header_row = 0; sr_header_row < sr_header_view; ++sr_header_row) BEGIN
+        FOR (sr_column = 0; sr_column < sr_header_columns; ++sr_column) BEGIN
+          READ_2DA_ENTRY_FORMER sr_header_view sr_header_row sr_column sr_header_token
+          PATCH_IF (~%sr_header_token%~ STR_EQ ~%desired_header%~) BEGIN
+            PATCH_IF (data_column < 0) BEGIN
+              // Data rows include the unlabelled row-name column.
+              SET data_column = sr_column + 1
+            END ELSE BEGIN
+              // Duplicate semantic headers are ambiguous: fail closed.
+              SET data_column = "-2"
+            END
+          END
+        END
+      END
+    END
+  END
+END
+
+DEFINE_PATCH_MACRO SR_RECORD_SELECTOR_EFFECT BEGIN
+  SET sr_effect = sr_effect_offset + sr_effect_index * 0x30
+  READ_SHORT sr_effect sr_opcode
+  PATCH_IF (sr_opcode = 214) BEGIN
+    READ_ASCII (sr_effect + 0x14) sr_selector (8) NULL
+    TO_UPPER sr_selector
+    PATCH_IF ((~%sr_selector%~ STRING_COMPARE_CASE ~~) != 0) BEGIN
+      TEXT_SPRINT $sr_elemental_selector_tables(~%sr_selector%~) ~1~
+    END
+  END
+END
+
+INCLUDE ~spell_rev/lib/hidden_elemental_subspells_patch.tph~
+
+ACTION_CLEAR_ARRAY sr_elemental_semantic_children
+ACTION_CLEAR_ARRAY sr_elemental_selector_tables
+ACTION_CLEAR_ARRAY sr_elemental_selector_children
+ACTION_CLEAR_ARRAY sr_elemental_selector_rows
+ACTION_CLEAR_ARRAY sr_elemental_selector_invalid
+ACTION_CLEAR_ARRAY sr_elemental_hidden_children
+ACTION_CLEAR_ARRAY sr_elemental_hidden_seen
+ACTION_CLEAR_ARRAY sr_elemental_hidden_duplicates
+ACTION_CLEAR_ARRAY sr_elemental_hidespl_invalid
+ACTION_CLEAR_ARRAY sr_elemental_cleanup_children
+ACTION_CLEAR_ARRAY sr_elemental_child_symbols
+ACTION_CLEAR_ARRAY sr_elemental_joinable_scripts
+OUTER_SET sr_elemental_semantic_count = 0
+OUTER_SET sr_elemental_selector_table_count = 0
+OUTER_SET sr_elemental_selector_count = 0
+OUTER_SET sr_elemental_hidden_count = 0
+OUTER_SET sr_elemental_parent_valid = 0
+OUTER_SET sr_elemental_parent_level = 0
+
+ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_child_symbols BEGIN
+  ~WIZARD_PROTECTION_FROM_FIRE~        => ~~
+  ~WIZARD_PROTECTION_FROM_COLD~        => ~~
+  ~WIZARD_PROTECTION_FROM_ELECTRICITY~ => ~~
+  ~WIZARD_PROTECTION_FROM_ACID~        => ~~
+END
+
+// Resolve the intended implementation children semantically.
+ACTION_PHP_EACH sr_elemental_child_symbols AS sr_child_symbol => ~~ BEGIN
+  OUTER_SET sr_spell_number = IDS_OF_SYMBOL (~spell~ ~%sr_child_symbol%~)
+  ACTION_IF (sr_spell_number >= 0) BEGIN
+    LAF RES_NUM_OF_SPELL_NAME
+      STR_VAR spell_name = EVAL ~%sr_child_symbol%~
+      RET sr_child_resref = spell_res
+    END
+    OUTER_TEXT_SPRINT sr_child_resref ~%sr_child_resref%~
+    ACTION_TO_UPPER sr_child_resref
+    ACTION_IF FILE_EXISTS_IN_GAME ~%sr_child_resref%.spl~
+              AND NOT VARIABLE_IS_SET $sr_elemental_semantic_children(~%sr_child_resref%~) BEGIN
+      ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_semantic_children BEGIN
+        ~%sr_child_resref%~ => ~%sr_child_symbol%~
+      END
+      OUTER_SET sr_elemental_semantic_count += 1
+    END
+  END
+END
+
+ACTION_IF (sr_elemental_semantic_count < 4) BEGIN
+  WARN ~Component 60: resolved only %sr_elemental_semantic_count% of 4 hidden elemental-protection child identities; unresolved identities are excluded from migration.~
+END
+
+// Resolve and inspect the effective public container.
+OUTER_TEXT_SPRINT sr_elemental_parent_resref ~~
+OUTER_SET sr_parent_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_PROTECTION_FROM_ELEMENTAL_ENERGY~)
+ACTION_IF (sr_parent_number >= 0) BEGIN
+  LAF RES_NUM_OF_SPELL_NAME
+    STR_VAR spell_name = ~WIZARD_PROTECTION_FROM_ELEMENTAL_ENERGY~
+    RET sr_elemental_parent_resref = spell_res
+  END
+  OUTER_TEXT_SPRINT sr_elemental_parent_resref ~%sr_elemental_parent_resref%~
+  ACTION_TO_UPPER sr_elemental_parent_resref
+END
+
+ACTION_IF ((~%sr_elemental_parent_resref%~ STRING_COMPARE_CASE ~~) != 0)
+          AND FILE_EXISTS_IN_GAME ~%sr_elemental_parent_resref%.spl~ BEGIN
+  COPY_EXISTING ~%sr_elemental_parent_resref%.spl~ ~override~
+    PATCH_IF (SOURCE_SIZE >= 0x72) BEGIN
+      READ_ASCII 0 sr_parent_signature (8)
+      READ_SHORT 0x1c sr_parent_spell_type
+      READ_LONG 0x34 sr_elemental_parent_level
+      READ_LONG 0x64 sr_ability_offset
+      READ_SHORT 0x68 sr_ability_count
+      READ_LONG 0x6a sr_effect_offset
+      SET sr_ability_end = sr_ability_offset + sr_ability_count * 0x28
+      PATCH_IF (~%sr_parent_signature%~ STRING_EQUAL_CASE ~SPL V1  ~)
+            AND (sr_parent_spell_type = 1)
+            AND (sr_elemental_parent_level >= 1)
+            AND (sr_elemental_parent_level <= 9)
+            AND (sr_ability_count > 0)
+            AND (sr_ability_offset >= 0x72)
+            AND (sr_ability_end <= SOURCE_SIZE)
+            AND (sr_effect_offset >= sr_ability_end)
+            AND (sr_effect_offset <= SOURCE_SIZE)
+            AND (((SOURCE_SIZE - sr_effect_offset) MODULO 0x30) = 0) BEGIN
+        SET sr_elemental_parent_valid = 1
+        SET sr_effect_count = (SOURCE_SIZE - sr_effect_offset) / 0x30
+        SET sr_parent_slices_valid = 1
+        FOR (sr_ability_index = 0;
+             (sr_ability_index < sr_ability_count) AND (sr_parent_slices_valid = 1);
+             ++sr_ability_index) BEGIN
+          SET sr_ability = sr_ability_offset + sr_ability_index * 0x28
+          READ_SHORT (sr_ability + 0x1e) sr_ability_effect_count
+          READ_SHORT (sr_ability + 0x20) sr_ability_first_effect
+          PATCH_IF (sr_ability_first_effect + sr_ability_effect_count > sr_effect_count) BEGIN
+            SET sr_parent_slices_valid = 0
+          END
+        END
+        PATCH_IF (sr_parent_slices_valid = 1) BEGIN
+          FOR (sr_ability_index = 0; sr_ability_index < sr_ability_count; ++sr_ability_index) BEGIN
+            SET sr_ability = sr_ability_offset + sr_ability_index * 0x28
+            READ_SHORT (sr_ability + 0x1e) sr_ability_effect_count
+            READ_SHORT (sr_ability + 0x20) sr_ability_first_effect
+            FOR (sr_effect_index = sr_ability_first_effect;
+                 sr_effect_index < sr_ability_first_effect + sr_ability_effect_count;
+                 ++sr_effect_index) BEGIN
+              LAUNCH_PATCH_MACRO SR_RECORD_SELECTOR_EFFECT
+            END
+          END
+        END
+      END
+    END
+  BUT_ONLY
+END
+
+// A valid container has one effective selector table (duplicate references to the
+// same table collapse in the associative array). Multiple distinct tables are
+// ambiguous and therefore leave the selector-child set empty.
+ACTION_PHP_EACH sr_elemental_selector_tables AS sr_selector => ~~ BEGIN
+  OUTER_SET sr_elemental_selector_table_count += 1
+END
+
+ACTION_IF (sr_elemental_selector_table_count = 1) BEGIN
+  OUTER_SET sr_selector_table_valid = 0
+  ACTION_PHP_EACH sr_elemental_selector_tables AS sr_selector => ~~ BEGIN
+    ACTION_IF FILE_EXISTS_IN_GAME ~%sr_selector%.2da~ BEGIN
+      COPY_EXISTING ~%sr_selector%.2da~ ~override~
+        LPF SR_FIND_2DA_COLUMN
+          STR_VAR desired_header = ~ResRef~
+          RET sr_selector_columns = total_columns sr_selector_resref_column = data_column
+        END
+        LPF SR_FIND_2DA_COLUMN
+          STR_VAR desired_header = ~Type~
+          RET sr_selector_type_column = data_column
+        END
+        PATCH_IF (sr_selector_resref_column >= 0) AND (sr_selector_type_column >= 0) BEGIN
+          SET sr_selector_table_valid = 1
+          READ_2DA_ENTRIES_NOW sr_selector_rows sr_selector_columns
+          FOR (sr_row = 0; sr_row < sr_selector_rows; ++sr_row) BEGIN
+            READ_2DA_ENTRY_FORMER sr_selector_rows sr_row sr_selector_resref_column sr_candidate
+            READ_2DA_ENTRY_FORMER sr_selector_rows sr_row sr_selector_type_column sr_candidate_type
+            TO_UPPER sr_candidate
+            PATCH_IF NOT (IS_AN_INT ~%sr_candidate_type%~) BEGIN
+              SET sr_selector_table_valid = 0
+              TEXT_SPRINT $sr_elemental_selector_invalid(~invalid~) ~1~
+            END
+            PATCH_IF (IS_AN_INT ~%sr_candidate_type%~) BEGIN
+              PATCH_IF (sr_candidate_type = 3)
+                    AND ((~%sr_candidate%~ STRING_COMPARE_CASE ~~) != 0)
+                    AND ((~%sr_candidate%~ STRING_COMPARE_CASE ~*~) != 0)
+                    AND ((~%sr_candidate%~ STRING_COMPARE_CASE ~****~) != 0) BEGIN
+                TEXT_SPRINT $sr_elemental_selector_rows(~%sr_candidate%~) ~1~
+              END
+            END
+          END
+        END
+      BUT_ONLY
+    END
+  END
+  ACTION_IF (sr_selector_table_valid = 1) BEGIN
+    ACTION_IF NOT VARIABLE_IS_SET $sr_elemental_selector_invalid(~invalid~) BEGIN
+      ACTION_PHP_EACH sr_elemental_selector_rows AS sr_candidate => ~~ BEGIN
+        ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_selector_children BEGIN
+          ~%sr_candidate%~ => ~1~
+        END
+        OUTER_SET sr_elemental_selector_count += 1
+      END
+    END
+  END
+END
+
+// Validate the active engine layout before trusting HIDESPL. EE uses four total
+// columns and an IS_HIDDEN header. Classic BG2 uses the two-column TobEx shape
+// only when TobEx is actually present.
+OUTER_SET sr_hidespl_expected_columns = 0
+ACTION_IF GAME_IS ~bgee bg2ee eet~ BEGIN
+  OUTER_SET sr_hidespl_expected_columns = 4
+END ELSE ACTION_IF (ENGINE_IS ~soa tob~) AND FILE_EXISTS ~tobex_ini/tobexcore.ini~ BEGIN
+  OUTER_SET sr_hidespl_expected_columns = 2
+END
+OUTER_SET sr_hidespl_table_valid = 0
+ACTION_IF (sr_hidespl_expected_columns > 0) AND FILE_EXISTS_IN_GAME ~HIDESPL.2da~ BEGIN
+  COPY_EXISTING ~HIDESPL.2da~ ~override~
+    LPF SR_FIND_2DA_COLUMN
+      STR_VAR desired_header = ~IS_HIDDEN~
+      RET sr_hidespl_columns = total_columns sr_hidespl_hidden_column = data_column
+    END
+    PATCH_IF (sr_hidespl_hidden_column < 0)
+          AND (sr_hidespl_expected_columns = 2)
+          AND (sr_hidespl_columns = 2) BEGIN
+      SET sr_hidespl_hidden_column = 1
+    END
+    PATCH_IF (sr_hidespl_columns = sr_hidespl_expected_columns)
+          AND (sr_hidespl_hidden_column >= 0) BEGIN
+      SET sr_hidespl_table_valid = 1
+      READ_2DA_ENTRIES_NOW sr_hidespl_rows sr_hidespl_columns
+      FOR (sr_row = 0; sr_row < sr_hidespl_rows; ++sr_row) BEGIN
+        READ_2DA_ENTRY_FORMER sr_hidespl_rows sr_row 0 sr_hidden_resref
+        READ_2DA_ENTRY_FORMER sr_hidespl_rows sr_row sr_hidespl_hidden_column sr_hidden_flag
+        TO_UPPER sr_hidden_resref
+        PATCH_IF NOT (IS_AN_INT ~%sr_hidden_flag%~) BEGIN
+          SET sr_hidespl_table_valid = 0
+          TEXT_SPRINT $sr_elemental_hidespl_invalid(~invalid~) ~1~
+        END
+        PATCH_IF (IS_AN_INT ~%sr_hidden_flag%~) BEGIN
+          PATCH_IF (sr_hidden_flag = 0) OR (sr_hidden_flag = 1) BEGIN
+            PATCH_IF ((~%sr_hidden_resref%~ STRING_COMPARE_CASE ~~) != 0)
+                  AND ((~%sr_hidden_resref%~ STRING_COMPARE_CASE ~*~) != 0)
+                  AND ((~%sr_hidden_resref%~ STRING_COMPARE_CASE ~****~) != 0) BEGIN
+              PATCH_IF VARIABLE_IS_SET $sr_elemental_hidden_seen(~%sr_hidden_resref%~) BEGIN
+                TEXT_SPRINT $sr_elemental_hidden_duplicates(~%sr_hidden_resref%~) ~1~
+              END ELSE BEGIN
+                TEXT_SPRINT $sr_elemental_hidden_seen(~%sr_hidden_resref%~) ~%sr_hidden_flag%~
+              END
+            END
+          END
+          PATCH_IF NOT ((sr_hidden_flag = 0) OR (sr_hidden_flag = 1)) BEGIN
+            SET sr_hidespl_table_valid = 0
+            TEXT_SPRINT $sr_elemental_hidespl_invalid(~invalid~) ~1~
+          END
+        END
+      END
+    END
+  BUT_ONLY
+END
+
+ACTION_IF (sr_hidespl_table_valid = 1) BEGIN
+  ACTION_IF NOT VARIABLE_IS_SET $sr_elemental_hidespl_invalid(~invalid~) BEGIN
+    ACTION_PHP_EACH sr_elemental_hidden_seen AS sr_hidden_resref => sr_hidden_flag BEGIN
+      ACTION_IF (sr_hidden_flag = 1)
+                AND NOT VARIABLE_IS_SET $sr_elemental_hidden_duplicates(~%sr_hidden_resref%~) BEGIN
+        ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_hidden_children BEGIN
+          ~%sr_hidden_resref%~ => ~1~
+        END
+        OUTER_SET sr_elemental_hidden_count += 1
+      END
+    END
+  END
+END
+ACTION_IF (sr_hidespl_table_valid != 1) BEGIN
+  ACTION_CLEAR_ARRAY sr_elemental_hidden_seen
+  ACTION_CLEAR_ARRAY sr_elemental_hidden_duplicates
+END
+ACTION_IF VARIABLE_IS_SET $sr_elemental_hidespl_invalid(~invalid~) BEGIN
+  ACTION_CLEAR_ARRAY sr_elemental_hidden_seen
+  ACTION_CLEAR_ARRAY sr_elemental_hidden_duplicates
+END
+
+// Candidate-by-candidate intersection. Inconsistent entries are skipped rather
+// than guessed from a historical slot number.
+OUTER_SET sr_elemental_cleanup_count = 0
+ACTION_PHP_EACH sr_elemental_semantic_children AS sr_child_resref => sr_child_symbol BEGIN
+  ACTION_IF VARIABLE_IS_SET $sr_elemental_selector_children(~%sr_child_resref%~)
+            AND VARIABLE_IS_SET $sr_elemental_hidden_children(~%sr_child_resref%~) BEGIN
+    ACTION_DEFINE_ASSOCIATIVE_ARRAY sr_elemental_cleanup_children BEGIN
+      ~%sr_child_resref%~ => ~%sr_child_symbol%~
+    END
+    OUTER_SET sr_elemental_cleanup_count += 1
+  END
+END
+
+ACTION_IF (sr_elemental_cleanup_count > 0) AND (sr_elemental_parent_valid = 1) BEGIN
+  PRINT ~Component 60: replacing hidden elemental-protection subspell grants with the public parent for joinable NPCs.~
+  ACTION_PHP_EACH JOINABLE_NPC_ARRAY AS cre => dv BEGIN
+    COPY_EXISTING ~%cre%~ ~override~
+      PATCH_IF (SOURCE_SIZE >= 0x270) BEGIN
+        READ_ASCII 0 sr_cre_signature (8)
+        PATCH_IF (~%sr_cre_signature%~ STRING_EQUAL_CASE ~CRE V1.0~) BEGIN
+          FOR (sr_script_offset = 0x248; sr_script_offset <= 0x268; sr_script_offset += 0x08) BEGIN
+            READ_ASCII sr_script_offset sr_script_resref (8) NULL
+            TO_UPPER sr_script_resref
+            PATCH_IF ((~%sr_script_resref%~ STRING_COMPARE_CASE ~~) != 0)
+                  AND ((~%sr_script_resref%~ STRING_COMPARE_CASE ~NONE~) != 0) BEGIN
+              TEXT_SPRINT $sr_elemental_joinable_scripts(~%sr_script_resref%~) ~1~
+            END
+          END
+        END
+      END
+      LPF SR_MIGRATE_HIDDEN_ELEMENTAL_SUBSPELLS END
+    BUT_ONLY
+  END
+  ACTION_PHP_EACH sr_elemental_joinable_scripts AS sr_script_resref => ~~ BEGIN
+    ACTION_IF FILE_EXISTS_IN_GAME ~%sr_script_resref%.bcs~ BEGIN
+      COPY_EXISTING ~%sr_script_resref%.bcs~ ~override~
+        DECOMPILE_AND_PATCH BEGIN
+          PHP_EACH sr_elemental_cleanup_children AS sr_child_resref => sr_child_symbol BEGIN
+            REPLACE_TEXTUALLY CASE_INSENSITIVE EXACT_MATCH
+              ~AddSpecialAbility("%sr_child_resref%")~
+              ~AddSpecialAbility("%sr_elemental_parent_resref%")~
+          END
+        END
+      BUT_ONLY
+    END
+  END
+END ELSE BEGIN
+  WARN ~Component 60: hidden elemental-protection subspell identities or their public parent could not be verified from the effective container and HIDESPL; migration skipped (semantic %sr_elemental_semantic_count%, parent valid %sr_elemental_parent_valid%, selector tables %sr_elemental_selector_table_count%, selector rows %sr_elemental_selector_count%, hidden rows %sr_elemental_hidden_count%).~
+END

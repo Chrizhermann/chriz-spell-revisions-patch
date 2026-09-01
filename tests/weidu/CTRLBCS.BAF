@@ -1,0 +1,10 @@
+IF
+  Global("SRCB_CONTROL_GRANT","LOCALS",0)
+THEN
+  RESPONSE #100
+    AddSpecialAbility("SPWI319")
+    AddSpecialAbility("SPWI320")
+    AddSpecialAbility("SPWI512")
+    AddSpecialAbility("SPWI517")
+    SetGlobal("SRCB_CONTROL_GRANT","LOCALS",1)
+END

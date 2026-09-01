@@ -1,7 +1,7 @@
 # Design: Spell Revisions fork setup + "Protection from … refresh strips the caster" fix
 
 Date: 2026-08-22
-Status: implemented (see "Verification"); in-game confirmation pending
+Status: implemented and accepted for v4.21-chriz.2; automated verification complete
 
 ## 1. Goal
 
@@ -110,11 +110,15 @@ uninstall restores bytes. Active saves: SPLs are read at cast time, so no consol
 - `--parse-check` on every new tp2/tpa.
 
 ## 6. Verification status
-- Static/WeiDU: see `tests/` run log in the commit message.
-- In-game (to do, needs the live client): Mage casts PfME on self, then on a fighter → both
-  keep the icon; recast on the fighter → still one instance (effect list via EEex console).
+- Static/WeiDU: included in the 57-test WeiDU 249 release suite; byte-exact construction,
+  live-patch transformation/restoration, semantic resource resolution, controls, and idempotency
+  passed.
+- In-game: no additional refresh smoke test was requested for this release. The maintainer noted
+  that ordinary recipient refresh behavior was already working and explicitly declined the
+  redundant representative-spell sequence; no new live acceptance is claimed here.
 
 ## 7. Out of scope (candidates for later fork work)
-- Migrate the modpack's existing SR fixes here: `SR_SUBSPELL_FIX` (hidden Prot.-from-element
-  subspells left in NPC spellbooks) and the `spwi910` Imprisonment/Death Ward rework.
+- `SR_SUBSPELL_FIX` was completed as a follow-up in
+  [`2026-09-01-hidden-elemental-subspell-migration-design.md`](2026-09-01-hidden-elemental-subspell-migration-design.md).
+  The `spwi910` Imprisonment/Death Ward rework remains out of scope.
 - The SR "wishlist" (cherry-pick/revert/re-tune) from `chriz-bg-rebalance/docs/00-project-scope.md`.

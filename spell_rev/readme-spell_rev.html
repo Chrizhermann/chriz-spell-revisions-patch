@@ -119,7 +119,7 @@ COPY ~spell_rev\spwi5##\scrl6w.itm~     ~override~
   </p>
   <p>
     <strong>Update Spellbooks of Joinable <acronym title="Non-Player Characters">NPCs</acronym></strong> (<em>requires the main component be installed</em>)
-    <br />This component will patch all joinable <acronym title="Non-Player Characters">NPCs</acronym> in the game (including mod <acronym title="Non-Player Characters">NPCs</acronym>) who are divine casters, updating their spellbooks by removing spells that should no longer be available to them and adding the new ones they should get. Without this component, <acronym title="Non-Player Characters">NPCs</acronym> gain access to their new spells only upon their first level-up after joining the party, and the only in-game way to remove the spells they should no longer have is to CLUA in the item "ADSCROLL" and use it on the character. If installed in the middle of a game, this component will only affect <acronym title="Non-Player Characters">NPCs</acronym> who have yet to be met.
+    <br />This component patches all joinable <acronym title="Non-Player Characters">NPCs</acronym> in the game (including mod <acronym title="Non-Player Characters">NPCs</acronym>), updating divine and arcane spellbooks and replacing Spell Revisions' hidden elemental-protection implementation-spell grants with Protection from Elemental Energy in both creature spellbooks and referenced NPC scripts. Install it after every component that adds an NPC or changes an NPC's class, kit, spellbook, or scripts. Without this component, <acronym title="Non-Player Characters">NPCs</acronym> gain access to their new spells only upon their first level-up after joining the party, and the only in-game way to remove the spells they should no longer have is to CLUA in the item "ADSCROLL" and use it on the character. If installed in the middle of a game, this component will only affect <acronym title="Non-Player Characters">NPCs</acronym> who have yet to be met; it does not rewrite creatures already embedded in a save.
   </p>
 </div>
 
@@ -449,7 +449,7 @@ COPY ~spell_rev\spwi5##\scrl6w.itm~     ~override~
 
 <h2>Credits and Copyright Information</h2>
 <div class="section">
-  <p>This mod may not be sold, published, compiled or redistributed in any form without the consent of its author. Spell Revisions is ©2008-2015 Marco Montagnoli.</p>
+  <p>This mod may not be sold, published, compiled or redistributed in any form without the consent of its author. Spell Revisions is &copy;2008-2015 Marco Montagnoli.</p>
 </div>
 
 

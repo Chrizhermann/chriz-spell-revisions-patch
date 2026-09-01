@@ -19,9 +19,9 @@ fixes here are written so they can be submitted as upstream pull requests
 
 - `master` = upstream `master` + the commits listed below. Sync: `git fetch upstream && git merge upstream/master`.
   A weekly GitHub Action (`.github/workflows/check-upstream.yml`) opens an `upstream-sync` issue when upstream moves.
-- Fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them, and mirrored as
-  **tail-installable mini-mods** in `live-patch/` for games where Spell Revisions is already installed
-  (no uninstall needed).
+- Fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them. Fixes that can
+  safely retrofit effective resources are mirrored as **tail-installable mini-mods** in
+  `live-patch/`; installer-order migrations stay in their owning Spell Revisions component.
 - `spell_rev/setup-spell_rev.tp2` carries `VERSION ~v4.21-chriz.N~` so `WeiDU.log` shows which build an install came from.
 - `tests/` drive a real `weidu.exe` against synthetic fixtures (`python -m pytest tests`; set `WEIDU=` to a WeiDU ≥ 249 binary). No live game is touched.
 
@@ -30,6 +30,7 @@ fixes here are written so they can be submitted as upstream pull requests
 | # | Change | Kind | Source | Live patch |
 |---|---|---|---|---|
 | 1 | **Protection from Magic Energy / Protection from the Elements / Protection from Energy** strip the *caster's* buff instead of refreshing the *recipient's* (the EE "refresh, non-stacking" opcode 321 was inserted with effect target 1 = Self; creature-targeted spells need target 2 = Projectile target). Casting any of them on an ally removed it from the caster, and re-casting on the same ally never replaced the old instance. | bug fix | `spell_rev/lib/refresh_non_stacking.tpa` → `MAKE_REFRESHING_DIRECT` derives the target from the ability's target type | `live-patch/SRCB_PROT_REFRESH` |
+| 2 | **Joinable NPCs can retain or receive SR's hidden Protection from Fire / Cold / Electricity / Acid implementation spells** even though SR repurposes them as choices behind Protection from Elemental Energy. | bug fix / migration | Component 60 resolves the effective container and replaces only proven hidden child grants—both CRE spellbook entries and exact `AddSpecialAbility` calls in joinable-NPC scripts—with the public parent spell | None — integrated into late component 60 |
 
 Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `docs/upstream-reports/`.
 
@@ -38,6 +39,12 @@ Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `
 Same as upstream (below): copy `spell_rev/` into the game directory and run it with WeiDU.
 For an **existing** install, don't reinstall Spell Revisions mid-stack — append the relevant
 `live-patch/` mini-mod at the tail instead (see `live-patch/README.md`).
+
+Install component 60, **Update Spellbooks of Joinable NPCs**, after every mod component that
+adds an NPC or changes an NPC's class, kit, spellbook, or scripts. On future full installs this
+makes the old standalone `SR_SUBSPELL_FIX` unnecessary. Do not uninstall an already-installed
+copy from a frozen WeiDU stack merely to replace it; leave that stack untouched until a validated
+rebuild. Component 60 patches game CRE and BCS resources, not NPCs already embedded in a save.
 
 ---
 

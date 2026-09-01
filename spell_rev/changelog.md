@@ -1,5 +1,29 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.2 (2026-09-02).
+
+1. Fixed Protection from Magic Energy, Protection from the Elements, and Protection from Energy
+   refresh behavior on creature targets. Their non-stacking effect now removes the previous
+   instance from the recipient instead of stripping the caster's own protection. The same fix is
+   available as the tail-installable `SRCB_PROT_REFRESH` mini-mod for existing EE installs.
+2. Component 60 now replaces Spell Revisions' hidden Protection from Fire, Cold, Electricity,
+   and Acid implementation-spell grants with Protection from Elemental Energy. Targets are
+   derived from the effective parent container, its type-3 selector choices, HIDESPL, and
+   semantic SPELL.IDS identities; no legacy spell slots are hard-coded.
+3. The migration covers both joinable-NPC known/memorized spell entries and exact
+   `AddSpecialAbility` grants in scripts referenced by joinable NPCs. This fixes the natural
+   Beregost Neera path, whose join-XP script otherwise reintroduced Protection from Fire after
+   clean CRE resources had been installed.
+4. Synthetic and `--nogame` regressions cover affected and unaffected NPCs and scripts,
+   relocated/reordered resources, safe failure, repeated execution, and public
+   install/uninstall restoration.
+
+Release verification: all 57 automated tests passed with WeiDU 249. Disposable EET static/install
+acceptance confirmed the parent replacement in `NEERA6.CRE`, `NEERA7.CRE`, and Neera's effective
+join-XP script while preserving the active WeiDU component set and unrelated patched resources.
+Natural in-game recruitment and selector casting were not rerun; the maintainer explicitly waived
+that final runtime smoke test after reviewing the static acceptance evidence.
+
 ## Version: 4.21.
 
 1. [Fix bg1 ee strings](https://github.com/Gibberlings3/SpellRevisions/pull/153): patch by aigleborgne, with help of jmerry over at the G3 forums, to fix wrong strings being displayed in bg1 ee. Thanks to them both.

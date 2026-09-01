@@ -1,8 +1,8 @@
 # Design: Migrate hidden elemental-protection subspell grants into component 60
 
 Date: 2026-09-01
-Status: implementation correction in progress; **unreleased**
-Release gate: automated synthetic coverage plus disposable live acceptance; no release or GitHub mutation is authorized by this design
+Status: accepted for v4.21-chriz.2 release on 2026-09-02; natural runtime smoke test explicitly waived
+Release decision: automated coverage and disposable EET static/install acceptance passed; the maintainer explicitly waived natural recruitment and selector casting and separately authorized release publication
 
 ## 1. Goal
 
@@ -63,7 +63,7 @@ The standalone fix is useful provenance, not implementation to transplant. It:
 The preserved narrative's broader claim that none of the children remains learnable is not used
 as evidence here: current v4.21 source still copies `SCRL5T`, whose learn-spell effect references
 `SPWI512`. That apparent stale-scroll inconsistency is outside this migration; the three-way
-effective-resource proof below is authoritative for NPC cleanup.
+effective-resource proof below is authoritative for NPC migration.
 
 ### 2.2 Current Spell Revisions source
 
@@ -103,11 +103,11 @@ There are two ordering requirements:
 1. **Inter-mod order:** users and mod-manager manifests place component 60 after all NPC and
    class/kit assignment components. SR cannot reliably infer that the external stack is
    complete, so documentation is part of the release gate.
-2. **Intra-component order:** the new cleanup call is the final spellbook transformation in
+2. **Intra-component order:** the new migration call is the final spellbook transformation in
    component 60, after `fix_divine_spellbooks.tpa` and `fix_arcane_spellbooks.tpa`. Future
-   component-60 work must not reintroduce a child after cleanup.
+   component-60 work must not reintroduce a child after migration.
 
-The cleanup is deliberately not mage-class-gated. A joinable resource may have been
+The migration is deliberately not mage-class-gated. A joinable resource may have been
 reclassified by a kit or NPC mod while retaining a stale wizard spellbook. Joinable identity
 and the three-way semantic proof below are the safety boundaries.
 
@@ -145,7 +145,7 @@ column. Collect the `ResRef` values from rows whose `Type` is `3` (spell choice)
 Do not assume `DVWI426.2DA`, its current row labels, row order, or current child resrefs. If
 the container is absent, malformed, has no selector table, names multiple incompatible tables,
 or the selected table cannot be validated, selector evidence is unavailable and the entire
-cleanup is a warned no-op.
+migration is a warned no-op.
 
 ### 4.3 Effective hidden set
 
@@ -158,9 +158,9 @@ Classic-engine installations without an active HIDESPL mechanism therefore take 
 no-op path. The implementation must not infer hidden status from SR's shipped patch table
 alone, because another component may have changed the effective HIDESPL state.
 
-### 4.4 Exact removal set
+### 4.4 Exact migration set
 
-The only resources eligible for removal are:
+The only resources eligible for replacement are:
 
 ```text
 R = S ∩ C ∩ H
@@ -187,18 +187,22 @@ in that array:
 1. open the effective CRE with `COPY_EXISTING` and validate the CRE header sufficiently for
    WeiDU's spellbook operations;
 2. record whether each resref in **R** occurs in known or memorized entries;
-3. remove all matching child entries, add the resolved parent once to the known list when any
-   child was known, and add one parent memorization for each removed child memorization;
-4. use the parent SPL header's effective wizard level for the replacement records;
-5. collect the effective script slots referenced by joinable-NPC CREs and, in those BCS files,
+3. replace every matching memorized resref in place, preserving its table, flags, and
+   multiplicity; remove matching known children and add the resolved parent once when any child
+   grant existed and the parent was not already known;
+4. use the parent SPL header's effective wizard level when a new known entry is required, while
+   preserving an already-existing parent entry;
+5. collect all five effective script slots referenced by joinable-NPC CREs and, in those BCS files,
    replace each exact `AddSpecialAbility("<child>")` action with
    `AddSpecialAbility("<parent>")`;
 6. let WeiDU maintain spellbook counts, memorization-info references, and later CRE offsets;
 7. publish with `BUT_ONLY` so unaffected resources do not materialize or change bytes.
 
-Identity is the spell resref only. A remnant known-spell entry can carry a stale or incorrect
-stored level, so level and class metadata must not prevent migration. The replacement uses the
-effective parent SPL level instead of inheriting stale child metadata.
+Identity is the spell resref only. A remnant entry can carry stale or incorrect stored level
+metadata, so level and class metadata must not prevent migration. Known-list insertion uses the
+effective parent level. Memorized rows are rewritten in place so an NPC retains exactly the
+same prepared-slot count and state rather than losing a grant merely because the parent belongs
+to a different effective level.
 
 The implementation must clear its working arrays at each invocation. Applying it twice in one
 WeiDU process, reinstalling component 60, or running against an already-clean CRE must produce
@@ -225,9 +229,9 @@ failure is established.
 | Fixture sanity | The generated CREs are valid and contain the declared known/memorized rows, including a child with a deliberately stale stored level. The container fixture has opcode 214 and a valid selector 2DA. |
 | `--nogame` affected CRE | Replace every candidate in known and memorized lists with the effective parent while preserving unrelated spells, scripts, items, effects, and other header data. |
 | `--nogame` idempotency | Run the production CRE patch twice; second output is byte-identical to first. Empty removal set and already-clean CRE are byte-identical no-ops. |
-| Synthetic normal state | Joinable `NEERA6.CRE` and `NEERA7.CRE` lose all four proven children and gain the effective parent with the required known/memorized multiplicity. An unaffected joinable NPC is byte-identical. A non-joinable CRE containing the same remnants is byte-identical. |
+| Synthetic normal state | Joinable `NEERA6.CRE` and `NEERA7.CRE` replace all four proven children with the effective parent at the required known/memorized multiplicity. An unaffected joinable NPC is byte-identical. A non-joinable CRE containing the same remnants is byte-identical. |
 | Synthetic runtime grant | A script referenced by a joinable Neera CRE replaces `AddSpecialAbility("<child>")` with the parent while retaining unrelated actions byte-semantically; an unrelated script remains byte-identical. |
-| Synthetic effective drift | Relocate the container symbol, point opcode 214 at a renamed selector table, and relocate child symbols. Remove the relocated child in all three sets; preserve a hidden old slot not selected and a selected child whose HIDESPL flag is off. |
+| Synthetic effective drift | Relocate the container symbol, point opcode 214 at a renamed selector table, and relocate child symbols. Replace the relocated child in all three sets; preserve a hidden old slot not selected and a selected child whose HIDESPL flag is off. |
 | Synthetic fail-closed cases | Missing container symbol/SPL, malformed opcode-214 structure, missing or malformed selector 2DA, and missing or malformed HIDESPL each leave all CRE bytes unchanged and emit the expected warning. |
 | Repeated action execution | Invoke the production action twice in one fake-game component and compare its override tree byte-for-byte with a one-invocation game. This also catches stale WeiDU arrays. |
 | Public install/uninstall | One affected CRE begins BIFF-only and one begins in override. Install component 60, assert the explicit publication allowlist and unchanged KEY/BIFF/TLK; uninstall, assert the BIFF-only publication disappears and the pre-existing override bytes return exactly. |
@@ -241,7 +245,7 @@ The synthetic KEY/BIFF writer needs resource types `CRE=1009` and `2DA=1012`. Do
 
 In scope:
 
-- source-owned cleanup in SR component 60;
+- source-owned migration in SR component 60;
 - known and memorized spell lists of install-time joinable-NPC CRE resources;
 - semantic/effective resolution of the four elemental children;
 - documentation that component 60 is a final NPC/class-assignment step; and
@@ -266,10 +270,11 @@ Most importantly, CRE resources are snapshotted into saves when an NPC joins. Pa
 `override/*.CRE` does not rewrite an already-joined party member's embedded CRE. This migration
 prevents the problem for unjoined/future recruits; it is not save surgery.
 
-## 8. Unreleased release gate
+## 8. Release evidence
 
-The change remains **unreleased** until every automated item and the disposable live acceptance
-below is complete. Passing WeiDU/pytest fixtures is necessary evidence, not in-game acceptance.
+Automated and disposable EET static/install evidence were completed before release. Natural
+in-game recruitment and selector casting remain explicitly untested; after reviewing the static
+evidence, the maintainer waived that final runtime smoke test and authorized release.
 
 ### 8.1 Automated gate
 
@@ -277,35 +282,30 @@ below is complete. Passing WeiDU/pytest fixtures is necessary evidence, not in-g
 - [x] New TP2/TPA files and the changed component source pass WeiDU 249 parse checks.
 - [x] Normal, drift, fail-closed, unaffected, non-joinable, repeated-execution, and
       install/uninstall tests pass.
-- [x] `python -m pytest tests` passes in full with no unexpected warnings or generated repository
-      state.
-- [x] Component 60 calls cleanup after both existing spellbook fixers.
-- [x] README/install-order guidance and fork release notes identify the migration as unreleased
-      and state the late-order requirement.
-- [x] The separate modpack repository and every real game directory remain untouched.
+- [x] `python -m pytest tests` passes in full: 57 tests passed with WeiDU 249 and no generated
+      repository state.
+- [x] Component 60 calls the migration after both existing spellbook fixers.
+- [x] README/install-order guidance and fork release notes state the late-order requirement.
+- [x] The separate modpack repository and active game/modpack directories remain untouched; only
+      the named disposable EET clone and its isolated profile were used.
 
-### 8.2 Remaining disposable live acceptance
+### 8.2 Disposable EET acceptance
 
-Use a disposable BG2EE or EET test installation, never the user's active game, and ensure the
-game and loader are closed for every WeiDU operation.
+The corrected production TPA/TPH were installed in the disposable EET clone with the game and
+loader closed for every WeiDU operation.
 
-1. Install the candidate SR main component, all intended NPC additions and class/kit assignments,
-   then component 60 last.
-2. Record the effective `SPELL.IDS` mappings, container SPL opcode-214 table, selector choices,
-   HIDESPL rows, and the actual candidate set **R**.
-3. Inspect each available unjoined Neera resource corresponding to the historical `NEERA6` /
-   `NEERA7` cases. The direct child entries must be absent from known and memorized tables; the
-   parent must replace them and unrelated legitimate spells must remain.
-4. Inspect at least one unaffected joinable NPC and confirm its spellbook matches the expected
-   pre-component state except for SR's already-established component-60 behavior.
-5. From a fresh or pre-recruit state, recruit Beregost Neera through the natural area/script path.
-   None of the four implementation children may appear independently, and Protection from
-   Elemental Energy must appear where the join/XP script previously granted Protection from Fire.
-6. Cast the parent from the affected NPC and confirm the selector still presents the four intended
-   elements and each choice applies normally.
-7. Record that an already-joined control is intentionally unchanged by resource patching; do not
-   misreport that save-baked limitation as a failed install-time cleanup.
+1. `NEERA6.CRE` retained 19 known and 11 memorized entries; `SPWI422` replaced `SPWI319` one for
+   one in both tables, and all four hidden children were absent.
+2. `NEERA7.CRE` retained 25 known and 14 memorized entries; `SPWI422` replaced the known
+   `SPWI319`, and all four hidden children were absent.
+3. `NEERA_.BCS` contained exactly one `AddSpecialAbility("SPWI422")` action and no hidden-child
+   grant, proving the natural Beregost Neera join-XP injector was migrated.
+4. The acceptance wrapper's backup set contained exactly those two CREs and that script. All 447
+   active WeiDU component tuples were identical before and after, and `chitin.key`, `dialog.tlk`,
+   `SPWI606`, `SPWI702`, and `SPWI803` matched the safety snapshot byte-for-byte.
+5. No save was created or changed. Natural recruitment and selector casting were not rerun and
+   are not claimed as passing runtime acceptance.
 
-Only after this evidence is recorded should packaging, commit, push, tag, release, or an upstream
-submission be considered, and each still requires separate user authorization. The source version
-marker may identify this unreleased candidate without implying that the release gate passed.
+After this evidence was recorded, the maintainer explicitly waived the remaining runtime smoke
+test and authorized commit, merge, push, annotated tag, GitHub Latest publication, verification,
+and cleanup. An upstream submission remains out of scope.

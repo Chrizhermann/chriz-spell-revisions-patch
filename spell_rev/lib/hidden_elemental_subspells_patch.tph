@@ -1,0 +1,112 @@
+// File-level CRE transformer shared by component 60 and the --nogame tests.
+// The caller supplies the verified child set plus sr_elemental_parent_resref and
+// sr_elemental_parent_level. Every hidden child entry becomes the public parent.
+
+DEFINE_PATCH_FUNCTION SR_MIGRATE_HIDDEN_ELEMENTAL_SUBSPELLS
+  RET removed_any
+BEGIN
+  SET removed_any = 0
+  SET sr_cre_valid = 0
+  PATCH_IF (SOURCE_SIZE > 0x2d3) BEGIN
+    READ_ASCII 0 sr_cre_signature (8)
+    READ_BYTE 0x33 sr_effect_version
+    READ_LONG 0x2a0 sr_known_offset
+    READ_LONG 0x2a4 sr_known_count
+    READ_LONG 0x2a8 sr_memorization_info_offset
+    READ_LONG 0x2ac sr_memorization_info_count
+    READ_LONG 0x2b0 sr_memorized_offset
+    READ_LONG 0x2b4 sr_memorized_count
+    READ_LONG 0x2b8 sr_slots_offset
+    READ_LONG 0x2bc sr_items_offset
+    READ_LONG 0x2c0 sr_items_count
+    READ_LONG 0x2c4 sr_effects_offset
+    READ_LONG 0x2c8 sr_effects_count
+    SET sr_effect_stride = 0
+    PATCH_IF (sr_effect_version = 0) BEGIN
+      SET sr_effect_stride = 0x30
+    END ELSE PATCH_IF (sr_effect_version = 1) BEGIN
+      SET sr_effect_stride = 0x108
+    END
+    PATCH_IF (~%sr_cre_signature%~ STRING_EQUAL_CASE ~CRE V1.0~)
+          AND (sr_effect_stride > 0)
+          AND (sr_known_offset >= 0x2d4)
+          AND (sr_known_offset + sr_known_count * 0x0c <= SOURCE_SIZE)
+          AND (sr_memorization_info_offset >= 0x2d4)
+          AND (sr_memorization_info_offset + sr_memorization_info_count * 0x10 <= SOURCE_SIZE)
+          AND (sr_memorized_offset >= 0x2d4)
+          AND (sr_memorized_offset + sr_memorized_count * 0x0c <= SOURCE_SIZE)
+          AND (sr_slots_offset >= 0x2d4)
+          AND (sr_slots_offset + 0x50 <= SOURCE_SIZE)
+          AND (sr_items_offset >= 0x2d4)
+          AND (sr_items_offset + sr_items_count * 0x14 <= SOURCE_SIZE)
+          AND (sr_effects_offset >= 0x2d4)
+          AND (sr_effects_offset + sr_effects_count * sr_effect_stride <= SOURCE_SIZE) BEGIN
+      SET sr_cre_valid = 1
+      FOR (sr_info_index = 0;
+           (sr_info_index < sr_memorization_info_count) AND (sr_cre_valid = 1);
+           ++sr_info_index) BEGIN
+        SET sr_info = sr_memorization_info_offset + sr_info_index * 0x10
+        READ_LONG (sr_info + 0x08) sr_info_first_memorized
+        READ_LONG (sr_info + 0x0c) sr_info_memorized_count
+        PATCH_IF (sr_info_first_memorized + sr_info_memorized_count > sr_memorized_count) BEGIN
+          SET sr_cre_valid = 0
+        END
+      END
+    END
+  END
+  PATCH_IF (sr_cre_valid = 1) BEGIN
+    SET sr_has_parent_known = 0
+    SET sr_has_any_child = 0
+    READ_LONG 0x2a0 sr_known_offset
+    READ_LONG 0x2a4 sr_known_count
+    READ_LONG 0x2b0 sr_memorized_offset
+    READ_LONG 0x2b4 sr_memorized_count
+    FOR (sr_spell_index = 0;
+         (sr_spell_index < sr_known_count) AND (sr_has_parent_known = 0);
+         ++sr_spell_index) BEGIN
+      READ_ASCII (sr_known_offset + sr_spell_index * 0x0c) sr_cre_spell (8) NULL
+      PATCH_IF (~%sr_cre_spell%~ STRING_EQUAL_CASE ~%sr_elemental_parent_resref%~) BEGIN
+        SET sr_has_parent_known = 1
+      END
+    END
+
+    // Re-read offsets for each child because REMOVE_KNOWN_SPELL compacts the
+    // following spellbook tables.
+    PHP_EACH sr_elemental_cleanup_children AS sr_child_resref => sr_child_symbol BEGIN
+      SET sr_has_known_child = 0
+      READ_LONG 0x2a0 sr_known_offset
+      READ_LONG 0x2a4 sr_known_count
+      READ_LONG 0x2b0 sr_memorized_offset
+      READ_LONG 0x2b4 sr_memorized_count
+      FOR (sr_spell_index = 0;
+           (sr_spell_index < sr_known_count) AND (sr_has_known_child = 0);
+           ++sr_spell_index) BEGIN
+        READ_ASCII (sr_known_offset + sr_spell_index * 0x0c) sr_cre_spell (8) NULL
+        PATCH_IF (~%sr_cre_spell%~ STRING_EQUAL_CASE ~%sr_child_resref%~) BEGIN
+          SET sr_has_known_child = 1
+        END
+      END
+      PATCH_IF (sr_has_known_child = 1) BEGIN
+        SET sr_has_any_child = 1
+      END
+      FOR (sr_spell_index = 0; sr_spell_index < sr_memorized_count; ++sr_spell_index) BEGIN
+        READ_ASCII (sr_memorized_offset + sr_spell_index * 0x0c) sr_cre_spell (8) NULL
+        PATCH_IF (~%sr_cre_spell%~ STRING_EQUAL_CASE ~%sr_child_resref%~) BEGIN
+          SET sr_has_any_child = 1
+          // Preserve the memorization table, slot, flags, and multiplicity exactly.
+          WRITE_ASCIIE (sr_memorized_offset + sr_spell_index * 0x0c) ~%sr_elemental_parent_resref%~ #8
+        END
+      END
+      PATCH_IF (sr_has_known_child = 1) BEGIN
+        REMOVE_KNOWN_SPELL ~%sr_child_resref%~
+      END
+    END
+
+    PATCH_IF (sr_has_any_child = 1) BEGIN
+      SET removed_any = 1
+      PATCH_IF (sr_has_parent_known = 0) BEGIN
+        ADD_KNOWN_SPELL ~%sr_elemental_parent_resref%~ (sr_elemental_parent_level - 1) ~wizard~
+      END
+    END
+  END
+END
