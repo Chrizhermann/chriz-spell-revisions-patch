@@ -1,5 +1,11 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.3 (2026-09-04).
+
+Packaging-only successor to v4.21-chriz.2. The gameplay code and component menu are
+unchanged. The Windows release archive now includes WeiDU 249 x64 as
+`Setup-spell_rev.exe` for a conventional double-click installation.
+
 ## Fork version: v4.21-chriz.2 (2026-09-02).
 
 1. Fixed Protection from Magic Energy, Protection from the Elements, and Protection from Energy
