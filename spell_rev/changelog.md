@@ -1,5 +1,22 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.4 (2026-09-07).
+
+1. Added the standalone `SRCB_RR_COMPAT` compatibility component, installed after
+   both Spell Revisions and Rogue Rebalancing. It restores the intended Chaos in
+   five RR v4.92 spellbooks and three AI scripts, including their forced-cast
+   opening sequences, while preserving memorized copy counts and spell-slot caps.
+2. Selina's Spell Turning self-recast guard now recognizes SR's Spell Deflection
+   state. Her availability check, cast identifier, targeting, and tactics are unchanged.
+3. Both Windows downloads include WeiDU 249 x64. The full archive includes the
+   separately installed compatibility component; the smaller compatibility-only
+   archive can be appended to an existing SR/RR install without reinstalling SR.
+
+Validation: 71 automated tests with real WeiDU, authentic RR/SR installer checks in
+both orders, and a successful user-reported in-game spellbook/casting smoke test.
+Full hostile-encounter testing and a wider SCS compatibility audit remain deferred.
+The main SR component menu and spell gameplay are unchanged from v4.21-chriz.3.
+
 ## Fork version: v4.21-chriz.3 (2026-09-04).
 
 Packaging-only successor to v4.21-chriz.2. The gameplay code and component menu are

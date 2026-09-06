@@ -1,11 +1,14 @@
 # Live-install tail patches
 
-WeiDU mini-mods that retrofit this fork's fixes onto an **already-installed** upstream Spell
-Revisions, so they can be appended at the tail of a live install's WeiDU stack without
-uninstalling anything (the never-uninstall rule for the main EET install).
+WeiDU mini-mods that patch final effective resources at the tail of an install. Some retrofit
+this fork's fixes onto an **already-installed** upstream Spell Revisions; others provide
+cross-mod compatibility that can only run after all owning mods have installed their resources.
+They can be appended without uninstalling the main Spell Revisions component (the
+never-uninstall rule for the main EET install).
 
-Fresh installs don't need these — install the fork's `spell_rev/` itself instead; its
-`lib/*.tpa` produce the same end state.
+Fresh installs do not need the retrofit patches when they install this fork's `spell_rev/`
+itself. They **do** need any applicable cross-mod tail patch, notably `SRCB_RR_COMPAT` when
+Rogue Rebalancing is present.
 
 ## NPC elemental-spell migration is component-owned
 
@@ -51,3 +54,42 @@ Verified with `python -m pytest tests` (WeiDU 249): byte-exact against an expect
 idempotent, caster-only spells and foreign opcode-321 effects untouched, public
 install/uninstall round-trips a synthetic game byte-exactly, and the component refuses to
 install without Spell Revisions.
+
+## SRCB_RR_COMPAT
+
+**Rogue Rebalancing compatibility: Chaos spellbooks/scripts and Selina's Spell Deflection
+guard.** Install this component after both Spell Revisions and Rogue Rebalancing, regardless of
+which of those two was installed first. It requires SR's main component (`spell_rev` #0) and
+RR's **Chosen of Cyric** (#11) and/or **Shadow Thief Improvements** (#12).
+
+RR's five affected CRE files have the original physical `SPWI508` spellbook entry baked into
+them. SR turns that slot into Waves of Fatigue and relocates Chaos. The patch resolves both
+identities from the final `SPELL.IDS`, moves each audited known/memorized entry to the final
+level-seven Chaos resource, and preserves its copy count and both levels' spell-slot counters.
+It also normalizes all Chaos
+references in `RR#SELI`, `RR#ARAN2`, and `RR#STM01`, covering both possible compile orders.
+Finally, it changes only Selina's self-recast status check from Spell Turning to Spell
+Deflection; her availability check and cast action still use the spell's original identifier.
+
+Copy the `SRCB_RR_COMPAT` folder and `Setup-SRCB_RR_COMPAT.exe` from either release
+archive into the game directory. When using a source checkout, create the setup
+executable there as a copy of WeiDU v249 instead. Double-click it or run:
+
+```
+./setup-SRCB_RR_COMPAT.exe --force-install-list 0 --language 0 --use-lang en_US --no-exit-pause
+```
+
+The component deliberately fails if a present RR resource no longer has either the exact
+audited v4.92 shape or the already-fixed shape. That avoids silently rewriting a future RR
+version whose tactics may have changed. Blindness, Deafness, Bigby's Clenched Fist, Infravision,
+and a wider SCS compatibility sample are outside this component.
+
+Install before first entering/spawning the affected encounters. The patch does not edit save
+files, so a creature whose spellbook is already embedded in a save is not retroactively
+rewritten. Uninstall restores the prior game resources. Automated coverage uses real WeiDU with
+synthetic CREs matching all five audited copy counts and compiled BCS fixtures: both SR/RR
+orders converge byte-exactly, a second pass is idempotent, each RR prerequisite scopes its own
+resources, malformed shapes fail closed, and public install/uninstall round-trips cleanly.
+A quick in-game spellbook/casting smoke test was reported successful by the user
+on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install. Full hostile-encounter behavior,
+including the recast guard in combat, and a wider SCS audit have not been tested.

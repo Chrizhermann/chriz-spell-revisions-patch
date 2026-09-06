@@ -1,0 +1,21 @@
+// SRCB_RR_COMPAT — late compatibility for Rogue Rebalancing and Spell Revisions.
+// Install after both mods, irrespective of their relative order.
+
+BACKUP ~weidu_external/backup/SRCB_RR_COMPAT~
+AUTHOR ~Chriz (Spell Revisions — Chriz Balance Patch,
+https://github.com/Chrizhermann/chriz-spell-revisions-patch)~
+VERSION ~v4.21-chriz.4~
+
+BEGIN ~Rogue Rebalancing compatibility: Chaos spellbooks/scripts and Selina's Spell Deflection guard~
+DESIGNATED 0
+LABEL ~SRCB_RR_COMPAT-rr-spell-semantics~
+REQUIRE_PREDICATE (MOD_IS_INSTALLED ~spell_rev/setup-spell_rev.tp2~ 0)
+    ~This component requires Spell Revisions (main component) to be installed.~
+REQUIRE_PREDICATE
+    ((MOD_IS_INSTALLED ~rr/setup-rr.tp2~ 11) OR
+     (MOD_IS_INSTALLED ~rr/setup-rr.tp2~ 12))
+    ~This component requires Rogue Rebalancing's Chosen of Cyric or Shadow Thief Improvements component.~
+
+INCLUDE ~SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa~
+
+LAF srcb_rr_apply_spell_semantics END

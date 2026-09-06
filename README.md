@@ -19,9 +19,10 @@ fixes here are written so they can be submitted as upstream pull requests
 
 - `master` = upstream `master` + the commits listed below. Sync: `git fetch upstream && git merge upstream/master`.
   A weekly GitHub Action (`.github/workflows/check-upstream.yml`) opens an `upstream-sync` issue when upstream moves.
-- Fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them. Fixes that can
-  safely retrofit effective resources are mirrored as **tail-installable mini-mods** in
-  `live-patch/`; installer-order migrations stay in their owning Spell Revisions component.
+- Spell Revisions fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them.
+  Fixes that can safely retrofit effective resources are mirrored as **tail-installable
+  mini-mods** in `live-patch/`. Compatibility that inherently depends on another mod's final
+  resources lives only there and must be installed after both mods.
 - `spell_rev/setup-spell_rev.tp2` carries `VERSION ~v4.21-chriz.N~` so `WeiDU.log` shows which build an install came from.
 - `tests/` drive a real `weidu.exe` against synthetic fixtures (`python -m pytest tests`; set `WEIDU=` to a WeiDU ≥ 249 binary). No live game is touched.
 
@@ -31,14 +32,22 @@ fixes here are written so they can be submitted as upstream pull requests
 |---|---|---|---|---|
 | 1 | **Protection from Magic Energy / Protection from the Elements / Protection from Energy** strip the *caster's* buff instead of refreshing the *recipient's* (the EE "refresh, non-stacking" opcode 321 was inserted with effect target 1 = Self; creature-targeted spells need target 2 = Projectile target). Casting any of them on an ally removed it from the caster, and re-casting on the same ally never replaced the old instance. | bug fix | `spell_rev/lib/refresh_non_stacking.tpa` → `MAKE_REFRESHING_DIRECT` derives the target from the ability's target type | `live-patch/SRCB_PROT_REFRESH` |
 | 2 | **Joinable NPCs can retain or receive SR's hidden Protection from Fire / Cold / Electricity / Acid implementation spells** even though SR repurposes them as choices behind Protection from Elemental Energy. | bug fix / migration | Component 60 resolves the effective container and replaces only proven hidden child grants—both CRE spellbook entries and exact `AddSpecialAbility` calls in joinable-NPC scripts—with the public parent spell | None — integrated into late component 60 |
+| 3 | **Rogue Rebalancing mages can cast Waves of Fatigue when their AI intends Chaos**, or fail to recognize/memorize SR's relocated Chaos; Selina can also recast Spell Turning immediately because SR's replacement uses the Spell Deflection state. | cross-mod compatibility | Exact RR v4.92 CRE/BCS shapes, resolved from final `SPELL.IDS`; deferred tactical redirects are deliberately untouched | `live-patch/SRCB_RR_COMPAT` — install after SR and RR |
 
 Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `docs/upstream-reports/`.
 
 ## Installation
 
+The [latest release](https://github.com/Chrizhermann/chriz-spell-revisions-patch/releases/latest)
+provides a full Windows archive and a smaller `SRCB_RR_COMPAT`-only archive, both
+with WeiDU 249 x64 installers. The full archive includes the compatibility folder
+and its separate installer; running `Setup-spell_rev.exe` does not install it.
+
 Same as upstream (below): copy `spell_rev/` into the game directory and run it with WeiDU.
 For an **existing** install, don't reinstall Spell Revisions mid-stack — append the relevant
-`live-patch/` mini-mod at the tail instead (see `live-patch/README.md`).
+`live-patch/` mini-mod at the tail instead (see `live-patch/README.md`). A fresh install that
+includes Rogue Rebalancing should still install `SRCB_RR_COMPAT` after both SR and RR; installing
+SR before RR remains the preferred base order.
 
 Install component 60, **Update Spellbooks of Joinable NPCs**, after every mod component that
 adds an NPC or changes an NPC's class, kit, spellbook, or scripts. On future full installs this

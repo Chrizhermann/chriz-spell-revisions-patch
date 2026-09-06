@@ -1,0 +1,11 @@
+// Synthetic-game harness for applying the production RR compatibility action twice.
+// argv[0] = path to live-patch/SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa
+
+BACKUP ~weidu_external/backup/SRCB_RR_COMPAT_TEST~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~apply RR spell-semantics compatibility twice~ DESIGNATED 0
+INCLUDE ~%argv[0]%~
+LAF srcb_rr_apply_spell_semantics END
+LAF srcb_rr_apply_spell_semantics END
