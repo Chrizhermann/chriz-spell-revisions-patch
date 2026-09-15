@@ -1,5 +1,22 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.5 (2026-09-16).
+
+1. Added optional, mutually exclusive Lightning Bolt behaviors: classic bouncing
+   wizard spell (80), or non-bouncing wizard spell and direct lightning wands with
+   dedicated traps unchanged (81). Skipping both preserves Spell Revisions.
+2. Both alternatives restore path damage, a Spell save for half, and Mirror Image
+   bypass for the wizard spell. Later saving-throw adjustments, other spell effects,
+   and SCS casting features are retained. Non-bouncing uses its own projectile and
+   clones supported projectile protections without replacing the trap projectile.
+3. Preserved all v4.21-chriz.4 fixes, including the separate SR/RR compatibility
+   package. Full and standalone Windows downloads include WeiDU 249 x64 installers.
+
+Validation: 110 tests passed with real WeiDU, including 39 Lightning regressions.
+The restored Lightning implementation matches the already rehearsed September 8
+snapshot. New runtime casting acceptance is deferred to the combined CEBG install;
+this release does not claim an in-game cast test or automatically patch existing saves.
+
 ## Fork version: v4.21-chriz.4 (2026-09-07).
 
 1. Added the standalone `SRCB_RR_COMPAT` compatibility component, installed after

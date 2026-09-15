@@ -1,0 +1,20 @@
+BACKUP ~weidu_external/backup/SRCB_CLASSIC_LIGHTNING~
+AUTHOR ~Chriz (https://github.com/Chrizhermann/chriz-spell-revisions-patch)~
+VERSION ~v4.21-chriz.5~
+
+BEGIN ~Restore classic bouncing Lightning Bolt (with friendly fire)~ DESIGNATED 0
+SUBCOMPONENT ~Lightning Bolt behavior (skip for Spell Revisions)~
+LABEL ~SRCB_CLASSIC_LIGHTNING-classic-bolt~
+REQUIRE_PREDICATE (GAME_IS ~bgee bg2ee eet~) ~This component requires BG:EE or BG2:EE (including EET).~
+REQUIRE_PREDICATE (MOD_IS_INSTALLED ~spell_rev/setup-spell_rev.tp2~ 0) ~This component requires Spell Revisions.~
+
+INCLUDE ~SRCB_CLASSIC_LIGHTNING/lib/classic_lightning_bolt.tpa~
+LAF srcb_restore_classic_lightning_bolt END
+
+BEGIN ~Non-bouncing Lightning Bolt and wands (traps retain bouncing)~ DESIGNATED 1
+SUBCOMPONENT ~Lightning Bolt behavior (skip for Spell Revisions)~
+LABEL ~SRCB_CLASSIC_LIGHTNING-nonbouncing-bolt~
+REQUIRE_PREDICATE (GAME_IS ~bgee bg2ee eet~) ~This component requires BG:EE or BG2:EE (including EET).~
+REQUIRE_PREDICATE (MOD_IS_INSTALLED ~spell_rev/setup-spell_rev.tp2~ 0) ~This component requires Spell Revisions.~
+INCLUDE ~SRCB_CLASSIC_LIGHTNING/lib/classic_lightning_bolt.tpa~
+LAF srcb_restore_classic_lightning_bolt INT_VAR non_bouncing = 1 END

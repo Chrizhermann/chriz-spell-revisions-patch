@@ -4,7 +4,7 @@ README ~spell_rev/readme-spell_rev.html~
 //MODDER
 ASK_EVERY_COMPONENT
 
-VERSION ~v4.21-chriz.4~
+VERSION ~v4.21-chriz.5~
 
 ALWAYS
   OUTER_PATCH ~~ BEGIN
@@ -217,3 +217,22 @@ DESIGNATED 70
 LABEL "dv-spell_rev-revised_saving_throws"
 REQUIRE_PREDICATE (ENGINE_IS ~soa tob bg2ee eet~) @8996
 INCLUDE ~spell_rev/components/saving_throw_tables.tpa~
+
+// Optional classic spell behavior; install after other spell changes.
+BEGIN ~Restore classic bouncing Lightning Bolt (with friendly fire)~
+DESIGNATED 80
+SUBCOMPONENT ~Lightning Bolt behavior (skip for Spell Revisions)~
+LABEL ~srcb-spell_rev-classic_lightning_bolt~
+REQUIRE_PREDICATE (GAME_IS ~bgee bg2ee eet~) ~This component requires BG:EE or BG2:EE (including EET).~
+REQUIRE_COMPONENT ~setup-spell_rev.tp2~ 0 @8999
+INCLUDE ~spell_rev/lib/classic_lightning_bolt.tpa~
+LAF srcb_restore_classic_lightning_bolt END
+
+BEGIN ~Non-bouncing Lightning Bolt and wands (traps retain bouncing)~
+DESIGNATED 81
+SUBCOMPONENT ~Lightning Bolt behavior (skip for Spell Revisions)~
+LABEL ~srcb-spell_rev-nonbouncing_lightning_bolt~
+REQUIRE_PREDICATE (GAME_IS ~bgee bg2ee eet~) ~This component requires BG:EE or BG2:EE (including EET).~
+REQUIRE_COMPONENT ~setup-spell_rev.tp2~ 0 @8999
+INCLUDE ~spell_rev/lib/classic_lightning_bolt.tpa~
+LAF srcb_restore_classic_lightning_bolt INT_VAR non_bouncing = 1 END

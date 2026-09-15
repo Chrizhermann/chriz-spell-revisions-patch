@@ -1,0 +1,12 @@
+// Disposable --nogame harness. argv: input SPL, output SPL, production library,
+// classic projectile number (one-based), SR projectile number (one-based).
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~apply classic Lightning Bolt restoration~ DESIGNATED 0
+INCLUDE ~%argv[2]%~
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF srcb_classic_lightning_bolt
+    INT_VAR classic_projectile = "%argv[3]%" sr_projectile = "%argv[4]%"
+  END

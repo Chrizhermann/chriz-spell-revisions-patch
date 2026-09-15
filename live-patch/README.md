@@ -10,6 +10,16 @@ Fresh installs do not need the retrofit patches when they install this fork's `s
 itself. They **do** need any applicable cross-mod tail patch, notably `SRCB_RR_COMPAT` when
 Rogue Rebalancing is present.
 
+## SRCB_CLASSIC_LIGHTNING (optional)
+
+For an existing installation, the optional `SRCB_CLASSIC_LIGHTNING` mini-mod offers
+classic bouncing (component 0, main-fork component 80) or non-bouncing spell/wands
+with dedicated traps unchanged (component 1, main-fork component 81). Install one
+alternative, not both the source and tail versions. The release includes its own
+WeiDU executable. See [its detailed comparison and limitations](SRCB_CLASSIC_LIGHTNING/README.md).
+Applying a mini-mod is not an automatic CEBG hotpatch and does not authorize changing a
+running game; close the game and preserve a backup before any installation.
+
 ## NPC elemental-spell migration is component-owned
 
 The hidden elemental-protection child-to-parent migration has no replacement tail mini-mod. It belongs

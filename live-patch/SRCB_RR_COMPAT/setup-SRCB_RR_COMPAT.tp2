@@ -4,7 +4,7 @@
 BACKUP ~weidu_external/backup/SRCB_RR_COMPAT~
 AUTHOR ~Chriz (Spell Revisions — Chriz Balance Patch,
 https://github.com/Chrizhermann/chriz-spell-revisions-patch)~
-VERSION ~v4.21-chriz.4~
+VERSION ~v4.21-chriz.5~
 
 BEGIN ~Rogue Rebalancing compatibility: Chaos spellbooks/scripts and Selina's Spell Deflection guard~
 DESIGNATED 0

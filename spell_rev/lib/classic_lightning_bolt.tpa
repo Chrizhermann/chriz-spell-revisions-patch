@@ -1,0 +1,329 @@
+// Optional classic Lightning Bolt. Keep this file identical to the tail mini-mod's copy.
+// Transform SR's two damage packets instead of replacing the whole SPL: later mods'
+// protections, saving-throw scaling, and SCS casting features must survive.
+DEFINE_PATCH_FUNCTION srcb_classic_lightning_bolt
+  INT_VAR classic_projectile = 40 sr_projectile = 241 alternate_projectile = 0
+BEGIN
+  PATCH_IF BUFFER_LENGTH < 0x72 BEGIN
+    PATCH_FAIL ~Classic Lightning Bolt: truncated SPL.~
+  END
+  READ_ASCII 0 lb_signature (8)
+  PATCH_IF NOT (~%lb_signature%~ STRING_EQUAL ~SPL V1  ~) BEGIN
+    PATCH_FAIL ~Classic Lightning Bolt: expected SPL V1.~
+  END
+  READ_LONG 0x64 lb_abilities
+  READ_SHORT 0x68 lb_count
+  READ_LONG 0x6a lb_effects
+  READ_SHORT 0x6e lb_cast_first
+  READ_SHORT 0x70 lb_cast_count
+  PATCH_IF lb_count = 0 OR lb_abilities < 0x72 OR
+           lb_abilities + lb_count * 0x28 > lb_effects OR
+           lb_effects > BUFFER_LENGTH OR (BUFFER_LENGTH - lb_effects) MODULO 0x30 != 0 BEGIN
+    PATCH_FAIL ~Classic Lightning Bolt: invalid SPL tables.~
+  END
+  SET lb_total = (BUFFER_LENGTH - lb_effects) / 0x30
+  PATCH_IF lb_cast_first + lb_cast_count > lb_total BEGIN
+    PATCH_FAIL ~Classic Lightning Bolt: invalid casting features.~
+  END
+
+  // Preflight all abilities before changing any bytes. Reject unfamiliar spell rewrites.
+  FOR (lb_a = 0; lb_a < lb_count; ++lb_a) BEGIN
+    SET lb_h = lb_abilities + lb_a * 0x28
+    READ_SHORT (lb_h + 0x20) lb_first
+    READ_SHORT (lb_h + 0x1e) lb_nfx
+    READ_SHORT (lb_h + 0x26) lb_projectile
+    READ_SHORT (lb_h + 0x10) lb_level
+    SET lb_dice = (lb_level < 5 ? 5 : (lb_level > 10 ? 10 : lb_level))
+    PATCH_IF BYTE_AT (lb_h + 0x0c) != 1 OR lb_first + lb_nfx > lb_total OR
+             (lb_projectile != sr_projectile AND lb_projectile != classic_projectile AND lb_projectile != alternate_projectile) BEGIN
+      PATCH_FAIL ~Classic Lightning Bolt: unsupported ability target, projectile, or effect table.~
+    END
+    PATCH_IF lb_cast_count > 0 AND lb_first < lb_cast_first + lb_cast_count AND lb_cast_first < lb_first + lb_nfx BEGIN
+      PATCH_FAIL ~Classic Lightning Bolt: overlapping casting/ability effects.~
+    END
+    FOR (lb_b = 0; lb_b < lb_a; ++lb_b) BEGIN
+      READ_SHORT (lb_abilities + lb_b * 0x28 + 0x20) lb_other_first
+      READ_SHORT (lb_abilities + lb_b * 0x28 + 0x1e) lb_other_count
+      PATCH_IF lb_first < lb_other_first + lb_other_count AND lb_other_first < lb_first + lb_nfx BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: shared ability effects are unsupported.~
+      END
+    END
+    SET lb_damage_count = 0
+    FOR (lb_e = 0; lb_e < lb_nfx; ++lb_e) BEGIN
+      SET lb_fx = lb_effects + (lb_first + lb_e) * 0x30
+      PATCH_IF SHORT_AT lb_fx = 12 BEGIN
+        PATCH_IF lb_damage_count = 0 BEGIN SET lb_one = lb_fx END
+        ELSE BEGIN SET lb_two = lb_fx END
+        SET lb_damage_count += 1
+        PATCH_IF BYTE_AT (lb_fx + 2) != 2 OR LONG_AT (lb_fx + 4) != 0 OR
+                 LONG_AT (lb_fx + 8) != 0x40000 OR BYTE_AT (lb_fx + 0x0c) != 1 OR
+                 LONG_AT (lb_fx + 0x0e) != 0 OR BYTE_AT (lb_fx + 0x12) != 100 OR
+                 BYTE_AT (lb_fx + 0x13) != 0 OR LONG_AT (lb_fx + 0x20) != 6 BEGIN
+          PATCH_FAIL ~Classic Lightning Bolt: unsupported damage delivery.~
+        END
+      END
+    END
+    PATCH_IF lb_projectile = sr_projectile BEGIN
+      PATCH_IF lb_damage_count != 2 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: expected SR's two damage effects.~
+      END
+      READ_LONG (lb_one + 0x24) lb_save_one
+      READ_LONG (lb_two + 0x24) lb_save_two
+      PATCH_IF (lb_save_one BAND 0x1f) != 0 OR (lb_save_two BAND 0x1f) != 2 OR
+               (lb_save_one BAND 0xffffffe0) != (lb_save_two BAND 0xffffffe0) OR
+               LONG_AT (lb_one + 0x1c) != (lb_dice + 1) / 2 OR
+               LONG_AT (lb_two + 0x1c) != lb_dice / 2 OR
+               LONG_AT (lb_one + 0x2c) != 0 OR LONG_AT (lb_two + 0x2c) != 0 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: unrecognized SR damage/save structure.~
+      END
+      // Both halves must have the same delivery and resource metadata.
+      PATCH_FOR_EACH lb_byte IN 3 13 20 21 22 23 24 25 26 27 BEGIN
+        PATCH_IF BYTE_AT (lb_one + lb_byte) != BYTE_AT (lb_two + lb_byte) BEGIN
+          PATCH_FAIL ~Classic Lightning Bolt: damage packets have different metadata.~
+        END
+      END
+    END ELSE BEGIN
+      PATCH_IF lb_damage_count != 1 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: unrecognized existing classic bolt.~
+      END
+      PATCH_IF LONG_AT (lb_one + 0x1c) != lb_dice OR
+               (LONG_AT (lb_one + 0x24) BAND 0x100001f) != 0x1000001 OR
+               LONG_AT (lb_one + 0x2c) != 0x100 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: unrecognized existing classic damage.~
+      END
+    END
+  END
+
+  FOR (lb_a = 0; lb_a < lb_count; ++lb_a) BEGIN
+    SET lb_h = lb_abilities + lb_a * 0x28
+    READ_SHORT (lb_h + 0x26) lb_projectile
+    PATCH_IF lb_projectile = sr_projectile BEGIN
+      READ_SHORT (lb_h + 0x20) lb_first
+      READ_SHORT (lb_h + 0x1e) lb_nfx
+      READ_SHORT (lb_h + 0x10) lb_level
+      SET lb_dice = (lb_level < 5 ? 5 : (lb_level > 10 ? 10 : lb_level))
+      SET lb_found = 0
+      FOR (lb_e = 0; lb_e < lb_nfx; ++lb_e) BEGIN
+        SET lb_fx = lb_effects + (lb_first + lb_e) * 0x30
+        PATCH_IF SHORT_AT lb_fx = 12 BEGIN
+          PATCH_IF lb_found = 0 BEGIN SET lb_one = lb_fx END
+          ELSE BEGIN
+            SET lb_two = lb_fx
+            SET lb_remove_index = lb_first + lb_e
+          END
+          SET lb_found += 1
+        END
+      END
+      READ_LONG (lb_two + 0x28) lb_bonus
+      READ_LONG (lb_two + 0x24) lb_save
+      WRITE_LONG (lb_one + 0x1c) lb_dice
+      WRITE_LONG (lb_one + 0x24) ((lb_save BAND 0xffffffe0) BOR 0x1000001)
+      WRITE_LONG (lb_one + 0x28) (lb_bonus + 4) // remove SR's -4, retain later adjustments
+      WRITE_LONG (lb_one + 0x2c) 0x100 // roll all dice once, then halve on a save
+      WRITE_SHORT (lb_h + 0x26) classic_projectile
+      WRITE_SHORT (lb_h + 0x0e) (lb_dice * 10) // vanilla per-level range, capped at 100
+      WRITE_SHORT (lb_h + 0x1e) (lb_nfx - 1)
+      DELETE_BYTES lb_two 0x30
+      // Relocate every slice, including casting features stored AFTER abilities.
+      FOR (lb_b = 0; lb_b < lb_count; ++lb_b) BEGIN
+        SET lb_index_field = lb_abilities + lb_b * 0x28 + 0x20
+        READ_SHORT lb_index_field lb_index
+        PATCH_IF lb_index > lb_remove_index BEGIN WRITE_SHORT lb_index_field (lb_index - 1) END
+      END
+      READ_SHORT 0x6e lb_cast_first
+      PATCH_IF lb_cast_first > lb_remove_index BEGIN WRITE_SHORT 0x6e (lb_cast_first - 1) END
+    END
+  END
+END
+
+// Angel's Tweaks Anthology 2530 documents both externalized projectile layouts.
+// Apply the same narrow field changes to OUR COPY, never the shared trap projectile.
+// Reference: https://github.com/Gibberlings3/Tweaks-Anthology/blob/v18/cdtweaks/lib/comp_2530.tpa
+DEFINE_PATCH_FUNCTION srcb_nonbouncing_projectile BEGIN
+  PATCH_IF BUFFER_LENGTH < 0x300 BEGIN
+    PATCH_FAIL ~Non-bouncing Lightning Bolt: truncated area projectile.~
+  END
+  READ_ASCII 0 lb_pro_signature (8)
+  PATCH_IF NOT (~%lb_pro_signature%~ STRING_EQUAL ~PRO V1.0~) OR SHORT_AT 8 != 3 BEGIN
+    PATCH_FAIL ~Non-bouncing Lightning Bolt: expected PRO V1.0 area projectile.~
+  END
+  PATCH_IF SHORT_AT 0x21a != 0 BEGIN
+    WRITE_SHORT 0x21a 0 // EE 2.6+: suppress the bouncing child projectile
+  END ELSE BEGIN
+    WRITE_LONG 0x2c (THIS BAND 0xfffffffe)
+    WRITE_SHORT 0x200 (THIS BAND 0xffef)
+    WRITE_SHORT 0x214 0
+  END
+END
+
+DEFINE_ACTION_FUNCTION srcb_restore_classic_lightning_bolt
+  INT_VAR non_bouncing = 0
+BEGIN
+  ACTION_IF MOD_IS_INSTALLED ~cdtweaks/setup-cdtweaks.tp2~ 2530 BEGIN
+    FAIL ~Lightning Bolt options require the shared original projectile: Tweaks Anthology 2530 changes trap bolts globally. Omit it from a new installation to use these options.~
+  END
+  ACTION_IF IDS_OF_SYMBOL (~spell~ ~WIZARD_LIGHTNING_BOLT~) < 0 BEGIN
+    FAIL ~Classic Lightning Bolt: WIZARD_LIGHTNING_BOLT is missing from SPELL.IDS.~
+  END
+  LAF RES_NUM_OF_SPELL_NAME STR_VAR spell_name = ~WIZARD_LIGHTNING_BOLT~ RET spell_res END
+  OUTER_SET lb_classic = IDS_OF_SYMBOL (~projectl~ ~LIGHTB~) + 1
+  OUTER_SET lb_sr = IDS_OF_SYMBOL (~projectl~ ~NEWBOLT1~) + 1
+  ACTION_IF lb_classic <= 0 OR lb_sr <= 0 OR lb_classic = lb_sr BEGIN
+    FAIL ~Classic Lightning Bolt: required projectiles are missing from PROJECTL.IDS.~
+  END
+  OUTER_SET lb_alternate = 0
+  ACTION_IF non_bouncing BEGIN
+    ACTION_IF NOT FILE_EXISTS_IN_GAME ~lightb.pro~ BEGIN
+      FAIL ~Non-bouncing Lightning Bolt requires the Enhanced Edition externalized LIGHTB.PRO.~
+    END
+    ACTION_IF FILE_EXISTS_IN_GAME ~srcblbn.pro~ OR IDS_OF_SYMBOL (~projectl~ ~SRCBLBN~) >= 0 BEGIN
+      FAIL ~Non-bouncing Lightning Bolt: SRCBLBN is already in use. Remove the previous option through WeiDU before changing variants.~
+    END
+    // An external EFF cannot contain two projectile protections. Reject unknown
+    // externalized protections rather than silently letting our new ID bypass them.
+    COPY_EXISTING_REGEXP GLOB ~^.+\.eff$~ ~override~
+      PATCH_IF BUFFER_LENGTH >= 0x110 BEGIN
+        READ_ASCII 0 lb_eff_signature (8)
+        PATCH_IF ~%lb_eff_signature%~ STRING_EQUAL ~EFF V2.0~ BEGIN
+          PATCH_IF (LONG_AT 0x10 = 83 OR LONG_AT 0x10 = 197) AND LONG_AT 0x20 = lb_classic - 1 BEGIN
+            PATCH_FAIL ~Non-bouncing Lightning Bolt: %SOURCE_FILE% has an external projectile protection that needs a compatibility adapter.~
+          END
+        END
+      END
+    BUT_ONLY IF_EXISTS
+    // One publication path per basename keeps WeiDU's uninstall backup unambiguous.
+    COPY_EXISTING ~lightb.pro~ ~override/srcblbn.pro~
+      LPF srcb_nonbouncing_projectile END
+    ADD_PROJECTILE ~override/srcblbn.pro~
+    OUTER_SET lb_alternate = IDS_OF_SYMBOL (~projectl~ ~SRCBLBN~) + 1
+    ACTION_IF lb_alternate <= 0 BEGIN FAIL ~Non-bouncing Lightning Bolt: projectile registration failed.~ END
+  END
+  OUTER_SPRINT lb_description ~Lightning Bolt
+(Evocation)
+
+Level: 3
+Range: Long
+Duration: Instant
+Casting Time: 3
+Area of Effect: Path of bolt
+Saving Throw: Spell for half
+
+The caster releases a bolt of electricity that strikes every creature in its path, including allies and the caster. The bolt bounces off walls and can hit a creature again after bouncing. Each hit inflicts 1d6 electrical damage per caster level, up to 10d6. A successful saving throw vs. spell halves the damage, rounded down. Mirror Image does not absorb this damage. Other spell protections and electrical resistance still apply.~
+  ACTION_IF non_bouncing BEGIN
+    OUTER_SPRINT lb_description ~Lightning Bolt
+(Evocation)
+
+Level: 3
+Range: Long
+Duration: Instant
+Casting Time: 3
+Area of Effect: Path of bolt
+Saving Throw: Spell for half
+
+The caster releases a bolt of electricity that travels in a straight line, striking creatures in its path, including allies. It does not bounce off walls or creatures, and the caster is briefly protected during release. Each hit inflicts 1d6 electrical damage per caster level, up to 10d6. A successful saving throw vs. spell halves the damage, rounded down. Mirror Image does not absorb this damage. Other spell protections and electrical resistance still apply.~
+  END
+  COPY_EXISTING ~%spell_res%.spl~ ~override~
+    LPF srcb_classic_lightning_bolt INT_VAR classic_projectile = lb_classic sr_projectile = lb_sr alternate_projectile = lb_alternate END
+    PATCH_IF non_bouncing BEGIN
+      READ_LONG 0x64 lb_spell_abilities
+      READ_SHORT 0x68 lb_spell_count
+      FOR (lb_i = 0; lb_i < lb_spell_count; ++lb_i) BEGIN
+        WRITE_SHORT (lb_spell_abilities + lb_i * 0x28 + 0x26) lb_alternate
+      END
+      LPF ADD_SPELL_CFEFFECT INT_VAR opcode = 83 target = 1 parameter2 = (lb_alternate - 1) duration = 2 END
+    END
+    SAY UNIDENTIFIED_DESC ~%lb_description%~
+  BUT_ONLY
+
+  // Find scrolls by what they teach; SR/EET may relocate resources.
+  COPY_EXISTING_REGEXP GLOB ~^.+\.itm$~ ~override~
+    PATCH_IF BUFFER_LENGTH >= 0x72 BEGIN
+      PATCH_IF SHORT_AT 0x1c = 11 BEGIN
+        READ_LONG 0x64 lb_itm_abilities
+        READ_SHORT 0x68 lb_itm_count
+        READ_LONG 0x6a lb_itm_effects
+        SET lb_teaches = 0
+        SET lb_itm_valid = lb_itm_abilities >= 0x72 AND
+          lb_itm_abilities + lb_itm_count * 0x38 <= lb_itm_effects AND lb_itm_effects <= BUFFER_LENGTH
+        PATCH_IF lb_itm_valid BEGIN
+          FOR (lb_i = 0; lb_i < lb_itm_count; ++lb_i) BEGIN
+            READ_SHORT (lb_itm_abilities + lb_i * 0x38 + 0x1e) lb_itm_nfx
+            READ_SHORT (lb_itm_abilities + lb_i * 0x38 + 0x20) lb_itm_first
+            PATCH_IF lb_itm_effects + (lb_itm_first + lb_itm_nfx) * 0x30 > BUFFER_LENGTH BEGIN
+              SET lb_itm_valid = 0
+            END ELSE BEGIN
+              FOR (lb_j = 0; lb_j < lb_itm_nfx; ++lb_j) BEGIN
+                SET lb_itm_fx = lb_itm_effects + (lb_itm_first + lb_j) * 0x30
+                PATCH_IF SHORT_AT lb_itm_fx = 147 BEGIN
+                  READ_ASCII (lb_itm_fx + 0x14) lb_learn (8) NULL
+                  PATCH_IF ~%lb_learn%~ STRING_EQUAL_CASE ~%spell_res%~ BEGIN SET lb_teaches = 1 END
+                END
+              END
+            END
+          END
+        END
+        PATCH_IF lb_itm_valid AND lb_teaches BEGIN SAY IDENTIFIED_DESC ~%lb_description%~ END
+      END
+    END
+  BUT_ONLY
+
+  ACTION_IF non_bouncing BEGIN
+    // Direct-damage wand abilities only. Spell-casting wands already follow the SPL.
+    // Do not touch trap SPLs, wand charges, number of selected targets, or dummy items.
+    COPY_EXISTING_REGEXP GLOB ~^.+\.itm$~ ~override~
+      PATCH_IF BUFFER_LENGTH >= 0x72 BEGIN
+        PATCH_IF SHORT_AT 0x1c = 35 BEGIN
+          READ_LONG 0x64 lb_wand_headers
+          READ_SHORT 0x68 lb_wand_count
+          SET lb_wand_changed = 0
+          PATCH_IF lb_wand_headers >= 0x72 AND lb_wand_headers + lb_wand_count * 0x38 <= BUFFER_LENGTH BEGIN
+            FOR (lb_i = 0; lb_i < lb_wand_count; ++lb_i) BEGIN
+              SET lb_wand_h = lb_wand_headers + lb_i * 0x38
+              PATCH_IF SHORT_AT (lb_wand_h + 0x2a) = lb_classic BEGIN
+                READ_LONG 0x6a lb_wand_effects
+                READ_SHORT (lb_wand_h + 0x1e) lb_wand_nfx
+                READ_SHORT (lb_wand_h + 0x20) lb_wand_first
+                SET lb_electrical = 0
+                PATCH_IF lb_wand_effects >= lb_wand_headers + lb_wand_count * 0x38 AND
+                         lb_wand_effects + (lb_wand_first + lb_wand_nfx) * 0x30 <= BUFFER_LENGTH BEGIN
+                  FOR (lb_j = 0; lb_j < lb_wand_nfx; ++lb_j) BEGIN
+                    SET lb_wand_fx = lb_wand_effects + (lb_wand_first + lb_j) * 0x30
+                    PATCH_IF SHORT_AT lb_wand_fx = 12 AND (LONG_AT (lb_wand_fx + 8) BAND 0xffff0000) = 0x40000 BEGIN
+                      PATCH_IF LONG_AT (lb_wand_fx + 4) > 0 OR (LONG_AT (lb_wand_fx + 0x1c) > 0 AND LONG_AT (lb_wand_fx + 0x20) > 0) BEGIN
+                        SET lb_electrical = 1
+                      END
+                    END
+                  END
+                END
+                PATCH_IF lb_electrical BEGIN
+                  WRITE_SHORT (lb_wand_h + 0x2a) lb_alternate
+                  LPF ADD_ITEM_EFFECT INT_VAR header = (lb_i + 1) type = 99 opcode = 83 target = 1 parameter2 = (lb_alternate - 1) duration = 2 END
+                  SET lb_wand_changed = 1
+                END
+              END
+            END
+          END
+          PATCH_IF lb_wand_changed BEGIN
+            READ_STRREF 0x54 lb_wand_description
+            // Remove the vanilla rebound claim; retain item statistics and custom text.
+            INNER_PATCH_SAVE lb_wand_description ~%lb_wand_description%~ BEGIN
+              REPLACE_TEXTUALLY EXACT_MATCH ~Each bolt will continue through its target and proceed to "rebound" until expended.~ ~Each bolt continues through its target without bouncing.~
+            END
+            SAY IDENTIFIED_DESC ~%lb_wand_description%
+
+Lightning Bolt behavior: Bolts from this wand travel in a straight line and do not bounce off walls or creatures. They can hit allies along their path. The wielder is briefly protected during release. The wand's damage, saving throws, number of targets, and charges are unchanged.~
+          END
+        END
+      END
+    BUT_ONLY
+    // Preserve the original protection, and add the same protection for the new ID.
+    // This includes equipped item effects (e.g. lightning reflection), creature
+    // effects, and both casting and ability effects in spells.
+    COPY_EXISTING_REGEXP GLOB ~^.+\.itm$~ ~override~
+                              ~^.+\.spl$~ ~override~
+                              ~^.+\.cre$~ ~override~
+      LPF CLONE_EFFECT INT_VAR silent = 1 match_opcode = 83 match_parameter2 = (lb_classic - 1) parameter2 = (lb_alternate - 1) END
+      LPF CLONE_EFFECT INT_VAR silent = 1 match_opcode = 197 match_parameter2 = (lb_classic - 1) parameter2 = (lb_alternate - 1) END
+    BUT_ONLY IF_EXISTS
+  END
+END

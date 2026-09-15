@@ -36,12 +36,27 @@ fixes here are written so they can be submitted as upstream pull requests
 
 Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `docs/upstream-reports/`.
 
+### Lightning Bolt options (v4.21-chriz.5)
+
+- **Spell Revisions:** skip components 80 and 81 to retain the single-target spell.
+- **Classic bouncing (80):** restore the wizard spell's path damage, wall bouncing,
+  friendly fire, Spell save for half, and Mirror Image bypass. Wands are unchanged.
+- **Non-bouncing spell and wands (81):** restore the same wizard damage rules without
+  bouncing; direct lightning wands also stop bouncing, while dedicated traps retain it.
+
+Choose at most one alternative, after other spell modifications. Neither alternative
+can be combined with Tweaks Anthology 2530, which changes the shared trap projectile.
+CEBG selects classic bouncing by default; the standalone mod keeps this an optional choice.
+See [the detailed comparison](live-patch/SRCB_CLASSIC_LIGHTNING/README.md) for compatibility,
+limitations and the separate tail mini-mod. The existing SR/RR compatibility above is retained.
+
 ## Installation
 
 The [latest release](https://github.com/Chrizhermann/chriz-spell-revisions-patch/releases/latest)
-provides a full Windows archive and a smaller `SRCB_RR_COMPAT`-only archive, both
-with WeiDU 249 x64 installers. The full archive includes the compatibility folder
-and its separate installer; running `Setup-spell_rev.exe` does not install it.
+provides a full Windows archive and smaller `SRCB_RR_COMPAT`-only and
+`SRCB_CLASSIC_LIGHTNING`-only archives, all with WeiDU 249 x64 installers. The full
+archive includes both extra folders and their separate installers; running
+`Setup-spell_rev.exe` does not install the SR/RR compatibility component.
 
 Same as upstream (below): copy `spell_rev/` into the game directory and run it with WeiDU.
 For an **existing** install, don't reinstall Spell Revisions mid-stack — append the relevant

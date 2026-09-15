@@ -1,6 +1,6 @@
 # Rogue Rebalancing / Spell Revisions compatibility
 
-Version: v4.21-chriz.4
+Version: v4.21-chriz.5 (compatibility behavior unchanged from v4.21-chriz.4)
 
 Restores the intended Chaos in the spellbooks and scripts of five Rogue
 Rebalancing v4.92 mages, and corrects Selina's Spell Turning self-recast check for

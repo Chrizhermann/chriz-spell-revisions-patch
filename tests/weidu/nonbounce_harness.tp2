@@ -1,0 +1,9 @@
+// Disposable --nogame harness: input PRO, output PRO, production library.
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~remove bounces from a private projectile~ DESIGNATED 0
+INCLUDE ~%argv[2]%~
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF srcb_nonbouncing_projectile END
