@@ -13,7 +13,7 @@ authorized by this receipt. The current RR/SR AI compatibility work remains sepa
 and unchanged.
 
 Source handover:
-[C:\Users\chris\.codex\worktrees\a947\chriz-bg-rebalance\docs\handovers\2026-09-06-sr-death-ward-vorpal.md](<C:/Users/chris/.codex/worktrees/a947/chriz-bg-rebalance/docs/handovers/2026-09-06-sr-death-ward-vorpal.md>).
+[chriz-bg-rebalance: docs/handovers/2026-09-06-sr-death-ward-vorpal.md](https://github.com/Chrizhermann/chriz-bg-rebalance/blob/main/docs/handovers/2026-09-06-sr-death-ward-vorpal.md).
 The original research below is retained locally so the follow-up does not depend on
 that worktree remaining available. It reports an inspected SR v4.19 / SCS v35.21
 installation; it is not a fresh verification of this repository's current fork or
