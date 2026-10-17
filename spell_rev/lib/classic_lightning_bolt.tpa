@@ -116,11 +116,12 @@ BEGIN
         END
       END
     END ELSE BEGIN
+      // An already classic tier is left byte-identical, so one classic packet suffices to
+      // establish the result. Several are not ambiguous here: no record is chosen or
+      // changed, and the first application itself keeps a foreign classic-shaped rider
+      // beside the packet it converts, which a repeat must accept as a no-op.
       PATCH_IF lb_classic_count = 0 BEGIN
         PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) uses the classic projectile without a recognizable classic bolt: no %lb_dice%d6 electrical packet with save vs spell for half and Mirror Image bypass.~
-      END
-      PATCH_IF lb_classic_count > 1 BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) has ambiguous classic damage: %lb_classic_count% indistinguishable %lb_dice%d6 electrical packets match the bolt.~
       END
     END
   END

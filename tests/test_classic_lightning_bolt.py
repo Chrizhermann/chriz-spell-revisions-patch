@@ -135,6 +135,7 @@ def test_real_sr_source_becomes_classic_bolt(tmp_path: Path, library: Path) -> N
     for old, new in zip(before.abilities, after.abilities, strict=True):
         assert _masked(new.raw, (0x0E, 2), (0x1E, 4), (0x26, 2)) == _masked(old.raw, (0x0E, 2), (0x1E, 4), (0x26, 2))
         assert new.effects[0].delivery_key() == old.effects[0].delivery_key()
+    assert _apply(tmp_path, patched, library) == patched
 
 
 def test_preserves_downstream_penalties_foreign_effects_and_casting_hooks(tmp_path: Path) -> None:
@@ -235,6 +236,8 @@ def _with_last_ability(effects_for, *, projectile: int | None = None) -> bytes:
         ("saved-half-wrong-dice", "found 1 and 0"),
         ("halves-with-different-metadata", "different metadata"),
         ("halves-with-different-save-flags", "different save flags"),
+        # A classic-shaped packet does not make an SR-projectile tier count as converted.
+        ("classic-shaped-rider-without-saved-half", "found 1 and 0"),
     ],
 )
 def test_unrecognized_or_inconsistent_sr_bolt_fails_without_output(tmp_path: Path, variant: str, fragment: str) -> None:
@@ -249,6 +252,8 @@ def test_unrecognized_or_inconsistent_sr_bolt_fails_without_output(tmp_path: Pat
             return unsaved, dataclasses.replace(saved, resource="OTHERRES")
         if variant == "halves-with-different-save-flags":
             return unsaved, dataclasses.replace(saved, save_type=saved.save_type | MIRROR_IMAGE_BYPASS)
+        if variant == "classic-shaped-rider-without-saved-half":
+            return unsaved, _classic_shaped_rider(10)
         return unsaved, saved
 
     data = _with_last_ability(effects_for, projectile=99 if variant == "wrong-projectile" else None)
@@ -262,6 +267,8 @@ def test_unrecognized_or_inconsistent_sr_bolt_fails_without_output(tmp_path: Pat
         ("duplicated-unsaved-half", "2 unsaved 5d6 and 1 breath-save 5d6"),
         ("two-indistinguishable-pairs", "2 unsaved 5d6 and 2 breath-save 5d6"),
         ("duplicated-saved-half-before-pair", "1 unsaved 5d6 and 2 breath-save 5d6"),
+        # A conversion is due, so a classic-shaped rider does not relax the pair checks.
+        ("duplicated-saved-half-beside-classic-shaped-rider", "1 unsaved 5d6 and 2 breath-save 5d6"),
     ],
 )
 def test_ambiguous_sr_damage_pairs_fail_without_output(tmp_path: Path, variant: str, fragment: str) -> None:
@@ -270,6 +277,8 @@ def test_ambiguous_sr_damage_pairs_fail_without_output(tmp_path: Path, variant: 
             return unsaved, saved, unsaved
         if variant == "two-indistinguishable-pairs":
             return unsaved, saved, FIRE_RIDER, unsaved, saved
+        if variant == "duplicated-saved-half-beside-classic-shaped-rider":
+            return unsaved, _classic_shaped_rider(10), saved, saved
         return saved, unsaved, saved
 
     _assert_rejected(tmp_path, _with_last_ability(effects_for), "input.spl ability 6 (level 10)", "ambiguous", fragment)
@@ -294,7 +303,8 @@ def _layout_spell(
     """Downstream SR spell whose tiers follow `layout`; returns input and expected slices.
 
     Layout tokens: "unsaved"/"saved" are SR's halves, "foreign" a non-damage effect,
-    any other token the named rider. Expected slices are the exact output records.
+    any other token the named rider. A rider may be a builder called with the tier's
+    level and SR halves. Expected slices are the exact output records.
     """
     source = ie_formats.SplFile.from_bytes(_downstream_spell())
     original = ie_formats.SplFile.from_bytes(SOURCE.read_bytes())
@@ -302,7 +312,9 @@ def _layout_spell(
     for template, ability in zip((*original.abilities, original.abilities[-1]), source.abilities, strict=True):
         unsaved, saved = template.effects
         saved = dataclasses.replace(saved, save_bonus=saved_bonus)
-        records = {"unsaved": unsaved, "saved": saved, "foreign": FOREIGN_NON_DAMAGE, **riders}
+        records = {"unsaved": unsaved, "saved": saved, "foreign": FOREIGN_NON_DAMAGE}
+        for token, rider in riders.items():
+            records[token] = rider(ability.required_level, unsaved, saved) if callable(rider) else rider
         abilities.append(dataclasses.replace(ability, effects=tuple(records[token] for token in layout)))
         classic = _classic_from(unsaved, saved, ability.required_level)
         expected.append([
@@ -313,7 +325,16 @@ def _layout_spell(
 
 def _assert_converted(source: bytes, patched: bytes, expected: list[list[bytes]], *, bonus: int, riders) -> None:
     _assert_classic(patched, bonus=bonus, foreign_damage=tuple(riders))
+    _assert_layout(source, patched, expected)
+
+
+def _assert_layout(source: bytes, patched: bytes, expected: list[list[bytes]], *, projectile: int = 40) -> None:
+    """Exact output records per tier; everything outside the owned fields is unchanged."""
     before, after = map(ie_formats.SplFile.from_bytes, (source, patched))
+    expected_range = {1: 50, 6: 60, 7: 70, 8: 80, 9: 90, 10: 100, 24: 100}
+    for ability in after.abilities:
+        assert ability.projectile == projectile
+        assert _u16(ability.raw, 0x0E) == expected_range[ability.required_level]
     # Only the casting-feature index may move (when that slice follows the abilities).
     assert _masked(after.header_raw, (0x6E, 2)) == _masked(before.header_raw, (0x6E, 2))
     if _u16(source, 0x6E) == 0:
@@ -396,14 +417,18 @@ def test_partly_converted_spell_converts_only_remaining_sr_tiers(tmp_path: Path)
     _assert_converted(mixed, patched, expected, bonus=-2, riders=(FIRE_RIDER,))
 
 
-def test_already_classic_bolt_with_two_classic_packets_is_ambiguous(tmp_path: Path) -> None:
+def test_already_classic_bolt_with_two_classic_packets_is_unchanged(tmp_path: Path) -> None:
+    """Formerly rejected as ambiguous. Nothing is converted in a classic tier, so two
+    byte-identical classic packets need no choice; the spell is left byte-exact."""
     classic = ie_formats.SplFile.from_bytes(_apply(tmp_path, SOURCE.read_bytes()))
     last = classic.abilities[-1]
     damage = next(e for e in last.effects if e.opcode == 12)
     data = dataclasses.replace(
         classic, abilities=(*classic.abilities[:-1], dataclasses.replace(last, effects=(*last.effects, FIRE_RIDER, damage)))
     ).to_bytes()
-    _assert_rejected(tmp_path, data, "input.spl ability 6 (level 10)", "ambiguous classic damage", "2 indistinguishable 10d6")
+    once = _apply(tmp_path, data)
+    assert once == data
+    assert _apply(tmp_path, once) == data
 
 
 def test_already_classic_projectile_without_classic_packet_fails(tmp_path: Path) -> None:
@@ -411,22 +436,76 @@ def test_already_classic_projectile_without_classic_packet_fails(tmp_path: Path)
     _assert_rejected(tmp_path, data, "input.spl ability 6 (level 10)", "without a recognizable classic bolt")
 
 
-def test_classic_shaped_electrical_rider_on_sr_bolt_is_preserved_but_not_reidentifiable(tmp_path: Path) -> None:
-    """Documented limit: such a rider is foreign on SR input, so it survives; the result
-    then holds two indistinguishable classic packets, and a repeat application stops."""
-    def classic_shaped(level: int) -> ie_formats.SplEffect:
-        return ie_formats.SplEffect(**_ELECTRICAL, dice_number=_dice_for(level),
-                                    save_type=MIRROR_IMAGE_BYPASS | SAVE_VS_SPELL, special=SAVE_FOR_HALF)
+def _classic_shaped_rider(level: int, *_halves: ie_formats.SplEffect) -> ie_formats.SplEffect:
+    """A foreign electrical packet that already has the converted classic packet's shape."""
+    return ie_formats.SplEffect(**_ELECTRICAL, dice_number=_dice_for(level),
+                                save_type=MIRROR_IMAGE_BYPASS | SAVE_VS_SPELL, special=SAVE_FOR_HALF)
 
+
+@pytest.mark.parametrize("library", [LIVE_LIB, FORK_LIB], ids=["tail", "fork"])
+def test_classic_shaped_electrical_rider_on_sr_bolt_survives_and_repeat_is_byte_exact(tmp_path: Path, library: Path) -> None:
+    """Review finding: the rider is foreign on SR input, so the first run keeps it and the
+    tier then holds two classic-shaped packets. The repeat must be a byte-exact no-op."""
     source = ie_formats.SplFile.from_bytes(SOURCE.read_bytes())
     data = dataclasses.replace(source, abilities=tuple(
-        dataclasses.replace(a, effects=(*a.effects, classic_shaped(a.required_level))) for a in source.abilities
+        dataclasses.replace(a, effects=(*a.effects, _classic_shaped_rider(a.required_level))) for a in source.abilities
     )).to_bytes()
-    patched = ie_formats.SplFile.from_bytes(_apply(tmp_path, data))
-    for ability in patched.abilities:
-        assert ability.effects[-1].to_bytes() == classic_shaped(ability.required_level).to_bytes()
-        assert len(ability.effects) == 2
-    _assert_rejected(tmp_path, patched.to_bytes(), "input.spl ability 1 (level 1)", "ambiguous classic damage")
+    once = _apply(tmp_path, data, library)
+    for old, new in zip(source.abilities, ie_formats.SplFile.from_bytes(once).abilities, strict=True):
+        assert [e.to_bytes() for e in new.effects] == [
+            _classic_from(*old.effects, old.required_level).to_bytes(),
+            _classic_shaped_rider(old.required_level).to_bytes(),
+        ]
+    assert _apply(tmp_path, once, library) == once
+
+
+def _same_as_result(level: int, unsaved: ie_formats.SplEffect, saved: ie_formats.SplEffect) -> ie_formats.SplEffect:
+    """A foreign packet byte-identical to the one the conversion produces."""
+    return _classic_from(unsaved, saved, level)
+
+
+@pytest.mark.parametrize("casting_after", [False, True], ids=["casting-first", "casting-after-abilities"])
+@pytest.mark.parametrize(
+    "layout",
+    [
+        ("foreign", "unsaved", "fire", "saved", "foreign"),
+        ("classic", "foreign", "unsaved", "fire", "saved"),
+        ("foreign", "saved", "classic", "unsaved", "fire"),
+        ("unsaved", "foreign", "saved", "fire", "classic"),
+        ("same", "foreign", "saved", "fire", "unsaved"),
+        ("unsaved", "classic", "saved", "same", "foreign", "fire"),
+    ],
+    ids=["without-rider", "rider-first", "rider-between-saved-first", "rider-last", "rider-identical-to-result", "two-riders"],
+)
+def test_classic_shaped_rider_variations_convert_once_then_repeat_byte_exact(
+    tmp_path: Path, layout: tuple[str, ...], casting_after: bool
+) -> None:
+    riders = {"fire": FIRE_RIDER, "classic": _classic_shaped_rider, "same": _same_as_result}
+    source, expected = _layout_spell(layout, riders)
+    if casting_after:
+        source = _casting_after_abilities(source)
+    patched = _apply(tmp_path, source)
+    # Exact records per tier: the pair becomes one packet in the unsaved half's place,
+    # and every rider and unrelated effect is retained byte-identically in order.
+    _assert_layout(source, patched, expected)
+    if "same" not in layout:  # a byte-identical rider cannot be told apart by bytes
+        levels = [a.required_level for a in ie_formats.SplFile.from_bytes(source).abilities]
+        foreign = (FIRE_RIDER, *(_classic_shaped_rider(level) for level in levels))
+        _assert_classic(patched, bonus=-2, foreign_damage=foreign)
+    assert _apply(tmp_path, patched) == patched
+
+
+def test_partly_converted_tier_with_two_classic_packets_still_converts_remaining_sr_tiers(tmp_path: Path) -> None:
+    layout = ("foreign", "unsaved", "classic", "fire", "saved")
+    source, expected = _layout_spell(layout, {"fire": FIRE_RIDER, "classic": _classic_shaped_rider})
+    converted = _apply(tmp_path, source)
+    pending = ie_formats.SplFile.from_bytes(source)
+    first = ie_formats.SplFile.from_bytes(converted).abilities[0]
+    mixed = dataclasses.replace(pending, abilities=(first, *pending.abilities[1:])).to_bytes()
+    patched = _apply(tmp_path, mixed)
+    _assert_layout(mixed, patched, expected)
+    assert patched == converted
+    assert _apply(tmp_path, patched) == patched
 
 
 def _scroll_for(resref: str, *, item_type: int = 11, learn: bool = True) -> bytes:

@@ -83,8 +83,10 @@ Only scrolls with a learn effect for the resolved spell receive the new descript
 
 Installation fails, naming the spell tier, when the wizard projectile is unexpected, when a
 tier lacks one of SR's two halves, or when the halves disagree in save flags or metadata.
-It also fails when several effects match the same half, or an already classic tier holds
-several matching classic damage effects, because the bolt's own damage is then ambiguous.
+It also fails when several effects match the same half, because the bolt's own damage is
+then ambiguous. An already classic tier is left unchanged when it holds at least one
+classic damage effect; a foreign effect of the same shape, kept beside the converted
+damage, therefore does not stop a repeat application. A classic tier without one fails.
 
 The non-bouncing option keeps the old projectile identity for traps and clones existing
 immunity/reflection effects for its new projectile in item, spell and creature resources.
@@ -113,7 +115,7 @@ weidu.exe SRCB_CLASSIC_LIGHTNING/setup-SRCB_CLASSIC_LIGHTNING.tp2 --force-uninst
 
 ## Verification
 
-The 72 Lightning Bolt tests pass with WeiDU 249, alongside the retained SR/RR
+The 88 Lightning Bolt tests pass with WeiDU 249, alongside the retained SR/RR
 compatibility coverage. They run real WeiDU
 against actual SR source spells and disposable synthetic games. They
 check damage/save semantics, Mirror Image bypass, preservation of foreign effects, foreign
