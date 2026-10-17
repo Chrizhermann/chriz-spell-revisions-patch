@@ -17,6 +17,8 @@ import pytest
 
 from tests import ie_formats, weidu_env
 from tests.test_classic_lightning_bolt import (
+    ELECTRICAL_RIDERS,
+    FIRE_RIDER,
     FORK_LIB,
     LIVE_DIR,
     LIVE_LIB,
@@ -350,6 +352,45 @@ def test_nonbounce_option_routes_spell_and_wands_but_preserves_traps_and_uninsta
     assert game.override_tree() == before
     assert (game.root / "chitin.key").read_bytes() == key
     assert game.bif_path.read_bytes() == bif
+
+
+@pytest.mark.parametrize(("installer", "component"), [(LIVE_RELATIVE, 0), (LIVE_RELATIVE, 1), (FORK_RELATIVE, 81)])
+def test_public_install_preserves_foreign_damage_riders_and_uninstalls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, installer: str, component: int
+) -> None:
+    game, resref, classic, _ = _fake_game(tmp_path, monkeypatch)
+    riders = (FIRE_RIDER, ELECTRICAL_RIDERS["delayed"])
+    spell = ie_formats.SplFile.from_bytes((game.override / f"{resref}.SPL").read_bytes())
+    abilities = []
+    for ability in spell.abilities:
+        damage = [e for e in ability.effects if e.opcode == 12]
+        others = [e for e in ability.effects if e.opcode != 12]
+        # Saved half first, foreign damage between the halves and at the end.
+        abilities.append(dataclasses.replace(ability, effects=(
+            others[0], damage[1], riders[0], damage[0], *others[1:], riders[1],
+        )))
+    source = dataclasses.replace(spell, abilities=tuple(abilities)).to_bytes()
+    (game.override / f"{resref}.SPL").write_bytes(source)
+    before = game.override_tree()
+    game.append_weidu_log(SR_LOG)
+    assert_installed(game.install(installer, component))
+    after = game.override_tree()
+    projectile = classic
+    if component != 0:
+        projectile = ie_formats.IdsFile.from_text(after["PROJECTL.IDS"].decode("ascii")).value("SRCBLBN") + 1
+    _assert_classic(after[f"{resref}.SPL"], projectile=projectile, bonus=-2, foreign_damage=riders)
+    patched = ie_formats.SplFile.from_bytes(after[f"{resref}.SPL"])
+    foreign = {rider.to_bytes() for rider in riders}
+
+    def not_owned(effects: tuple[ie_formats.SplEffect, ...]) -> list[bytes]:
+        return [e.to_bytes() for e in effects if e.opcode != 12 or e.to_bytes() in foreign]
+
+    for old, new in zip(abilities, patched.abilities, strict=True):
+        assert not_owned(new.effects) == not_owned(old.effects)
+        assert len(new.effects) == len(old.effects) - 1
+    process = game.uninstall(installer, component)
+    assert "SUCCESSFULLY REMOVED" in transcript(process) or "Uninstalled" in transcript(process)
+    assert game.override_tree() == before
 
 
 @pytest.mark.parametrize(("installer", "component"), [(LIVE_RELATIVE, 1), (FORK_RELATIVE, 81)])
