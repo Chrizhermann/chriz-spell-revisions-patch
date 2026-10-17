@@ -10,7 +10,8 @@
 
 // Regexp alternation of every SPELL.IDS symbol for one spell number. The script
 // decompiler prints the last of several same-number symbols, so a reference can
-// appear under any of them.
+// appear under any of them. IDS values may be decimal or hexadecimal (0x...),
+// as the engine and WeiDU read both.
 DEFINE_ACTION_FUNCTION srcb_rr_spell_symbols
     INT_VAR number = 0
     RET symbols
@@ -18,7 +19,7 @@ BEGIN
     OUTER_TEXT_SPRINT symbols ~~
     COPY_EXISTING ~spell.ids~ ~override~
         REPLACE_EVALUATE CASE_INSENSITIVE
-            ~^[ %TAB%]*\([0-9]+\)[ %TAB%]+\([A-Za-z0-9_#]+\)~
+            ~^[ %TAB%]*\(0[xX][0-9A-Fa-f]+\|[0-9]+\)[ %TAB%]+\([A-Za-z0-9_#]+\)~
         BEGIN
             PATCH_IF (MATCH1 = number) BEGIN
                 PATCH_IF (~%symbols%~ STRING_EQUAL ~~) BEGIN
@@ -102,6 +103,26 @@ BEGIN
     PATCH_IF (srcb_in_row != copies) BEGIN
         PATCH_FAIL
             ~SRCB_RR_COMPAT: %resource_name%.CRE has %source_spell% prepared outside its level-5 wizard row (%srcb_in_row% of %copies% copies there); those copies cannot be attributed to RR's Chaos.~
+    END
+
+    // An empty row's first index means nothing to the engine and may point
+    // between another row's records. Copies placed there would join that row
+    // and push its last record out of it, so the level-7 row starts after it.
+    READ_LONG (srcb_target_row + 0x08) srcb_target_first
+    READ_LONG (srcb_target_row + 0x0c) srcb_target_count
+    PATCH_IF (srcb_target_count = 0) BEGIN
+        SET srcb_start = srcb_target_first
+        FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
+            READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x08) srcb_row_first
+            READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x0c) srcb_row_count
+            PATCH_IF (srcb_row_count > 0) AND (srcb_row_first < srcb_start)
+                  AND (srcb_start < srcb_row_first + srcb_row_count) BEGIN
+                SET srcb_start = srcb_row_first + srcb_row_count
+            END
+        END
+        PATCH_IF (srcb_start != srcb_target_first) BEGIN
+            WRITE_LONG (srcb_target_row + 0x08) srcb_start
+        END
     END
 
     FOR (srcb_moved = 0; srcb_moved < copies; ++srcb_moved) BEGIN

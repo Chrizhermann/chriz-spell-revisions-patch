@@ -896,3 +896,91 @@ def test_spell_turning_alias_printed_by_the_decompiler_is_recognized(tmp_path: P
     assert "Spell(Myself,WIZARD_GREATER_DEFLECTION)" in text, text
     assert text.count("!CheckStatGT(Myself,0,WIZARD_SPELL_DEFLECTION)") == 1, text
     assert "!CheckStatGT(Myself,0,WIZARD_SPELL_TURNING)" not in text
+
+
+def _set_row_first(data: bytes, row: int, first: int) -> bytes:
+    info_offset = struct.unpack_from("<I", data, 0x2A8)[0]
+    patched = bytearray(data)
+    _put_u32(patched, info_offset + row * 0x10 + 8, first)
+    return bytes(patched)
+
+
+def _records(data: bytes) -> list[tuple[str, int]]:
+    offset, count = struct.unpack_from("<II", data, 0x2B0)
+    return [(_resref(data, offset + i * 0x0C), struct.unpack_from("<I", data, offset + i * 0x0C + 8)[0])
+            for i in range(count)]
+
+
+def _assert_rows_disjoint(data: bytes) -> None:
+    info_offset, info_count = struct.unpack_from("<II", data, 0x2A8)
+    used: list[int] = []
+    for index in range(info_count):
+        first, count = struct.unpack_from("<II", data, info_offset + index * 0x10 + 8)
+        used.extend(range(first, first + count))
+    assert len(used) == len(set(used))
+
+
+def _install_twice(game: FakeGame):
+    """The production action applied twice in one transaction (see the harness)."""
+    _mark_dependencies(game)
+    shutil.copy2(HARNESS, game.root / HARNESS.name)
+    (game.root / "SRCB_RR_COMPAT" / "lib").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(LIBRARY, game.root / "SRCB_RR_COMPAT" / "lib" / LIBRARY.name)
+    return run_weidu(
+        [HARNESS.name, "--game", str(game.root), "--force-install-list", "0",
+         "--args", "SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa", "--language", "0",
+         "--use-lang", "en_US", "--no-exit-pause", "--quick-log"],
+        cwd=game.root,
+    )
+
+
+@pytest.mark.parametrize(
+    ("case", "rows", "target_first"),
+    (
+        # Review finding 2026-10-17: an empty level-7 row whose first index points
+        # between level 5's records.
+        ("inside-level-5", [(4, 1, 3, 3, [("ZZW4", 1), (OLD_RESREF, 1), ("ZZW4B", 1)]), (6, 1, 1, 0, [])], 1),
+        ("inside-level-5-old-last", [(4, 1, 3, 3, [("ZZW4", 1), ("ZZW4B", 1), (OLD_RESREF, 0)]), (6, 1, 1, 0, [])], 1),
+        ("inside-another-level", [(2, 1, 3, 3, [("ZZW2", 1), ("ZZW2B", 1), ("ZZW2C", 1)]),
+                                  (4, 1, 1, 1, [(OLD_RESREF, 1)]), (6, 1, 1, 0, [])], 1),
+        ("at-level-5-start", [(4, 1, 2, 2, [(OLD_RESREF, 1), ("ZZW4", 1)]), (6, 1, 1, 0, [])], 0),
+    ),
+)
+def test_empty_level_seven_row_pointing_into_another_row(
+    tmp_path: Path, case: str, rows: list[Row], target_first: int
+) -> None:
+    target_row = next(index for index, row in enumerate(rows) if row[:2] == (6, 1))
+    before = _set_row_first(_build_cre([(OLD_RESREF, 4, 1)], rows), target_row, target_first)
+    results = []
+    for name, install in (("once", _install_public), ("twice", _install_twice)):
+        game, _ = _make_game(tmp_path / name, rr_after_sr=False, cres={"RR#SELI": before})
+        assert_installed(install(game))
+        after = _cre_after(game, "RR#SELI")
+        assert after is not None
+        _assert_only_spellbook_changed(before, after)
+        _assert_rows_disjoint(after)
+        assert _rows(after) == _migrated_rows(rows)
+        assert Counter(_records(after)) == Counter(
+            (FINAL_RESREF if spell == OLD_RESREF else spell, flags) for spell, flags in _records(before)
+        )
+        results.append(after)
+    assert results[0] == results[1]
+
+
+HEX_SPELL_IDS = """IDS V1.0
+0x9cc WIZARD_WAVES_OF_FATIGUE
+0xA8D WIZARD_SPELL_TURNING
+0xa97 WIZARD_CHAOS
+0xa97 WIZARD_SPHERE_OF_CHAOS
+"""
+
+
+@pytest.mark.parametrize("rr_after_sr", (False, True))
+def test_hexadecimal_spell_ids_are_read(tmp_path: Path, rr_after_sr: bool) -> None:
+    # Review finding 2026-10-17: the engine reads hexadecimal IDS values too.
+    game, ids_root = _make_game(
+        tmp_path, rr_after_sr=rr_after_sr, current_spell_ids=HEX_SPELL_IDS,
+        compile_spell_ids=HEX_SPELL_IDS if rr_after_sr else VANILLA_SPELL_IDS,
+    )
+    assert_installed(_install_public(game))
+    _assert_final_resources(game, ids_root)

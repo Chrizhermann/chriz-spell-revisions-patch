@@ -120,6 +120,23 @@ neither, Chaos Shield, IDS aliases for the old slot and for Spell Turning, and
 Selina's guard identified among enemy and other-spell checks. 17 of them fail
 against the previous library.
 
+Independent review, same day (Codex source review), two more cases:
+
+- **Empty level-seven row.** An empty memorization row's first index means
+  nothing to the engine and may point between another row's records. Moving a
+  copy there put it into that row and pushed the row's last record out of it.
+  The level-seven row now starts after the row its index points into before the
+  first copy moves; a row whose index already sits on a boundary is unchanged.
+- **Hexadecimal IDS values.** `SPELL.IDS` lines such as `0x9cc
+  WIZARD_WAVES_OF_FATIGUE` are read as the engine reads them, so the symbol
+  alternation no longer fails with "no readable symbol".
+
+`tests/test_rr_compat.py` now has 37 tests: four empty-row layouts (inside the
+level-five row with the old slot in the middle or last, inside another level's
+row, and on a boundary as a control), each also applied twice and compared
+byte for byte, and hexadecimal IDS in both install orders. Five of the six fail
+against the previous library; the boundary control passes on both.
+
 Limits: synthetic fixtures only; no new authentic-install or in-game check. A
 Waves of Fatigue reference that another mod added to these RR scripts before
 this component, in a script without any Chaos reference, cannot be told apart
