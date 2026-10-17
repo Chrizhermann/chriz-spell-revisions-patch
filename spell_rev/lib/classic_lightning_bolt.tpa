@@ -1,15 +1,58 @@
 // Optional classic Lightning Bolt. Keep this file identical to the tail mini-mod's copy.
 // Transform SR's two damage packets instead of replacing the whole SPL: later mods'
-// protections, saving-throw scaling, and SCS casting features must survive.
+// protections, saving-throw scaling, extra damage, and SCS casting features must survive.
+
+// Find the bolt's own electrical packets in one ability slice by meaning. Candidates
+// are opcode 12 electrical damage (param2 0x40000) with the bolt's direct delivery:
+// target 2, param1 0, instant timing, no duration, probability 100/0, d6 dice.
+// SR's unsaved half: no save, (dice+1)/2 d6. SR's saved half: save vs breath, dice/2 d6.
+// A classic packet: dice d6, save vs spell for half (special 0x100), Mirror Image bypass.
+// Every other damage record, including electrical riders matching none of these
+// shapes, belongs to someone else and is left byte-identical by the caller.
+DEFINE_PATCH_FUNCTION srcb_lb_owned_packets
+  INT_VAR lb_fx_base = 0 lb_slice_first = 0 lb_slice_count = 0 lb_dice = 0
+  RET lb_unsaved_count lb_unsaved lb_saved_count lb_saved lb_classic_count lb_classic_fx
+BEGIN
+  SET lb_unsaved_count = 0
+  SET lb_unsaved = 0
+  SET lb_saved_count = 0
+  SET lb_saved = 0
+  SET lb_classic_count = 0
+  SET lb_classic_fx = 0
+  FOR (lb_e = 0; lb_e < lb_slice_count; ++lb_e) BEGIN
+    SET lb_fx = lb_fx_base + (lb_slice_first + lb_e) * 0x30
+    PATCH_IF SHORT_AT lb_fx = 12 AND LONG_AT (lb_fx + 8) = 0x40000 AND
+             BYTE_AT (lb_fx + 2) = 2 AND LONG_AT (lb_fx + 4) = 0 AND BYTE_AT (lb_fx + 0x0c) = 1 AND
+             LONG_AT (lb_fx + 0x0e) = 0 AND BYTE_AT (lb_fx + 0x12) = 100 AND
+             BYTE_AT (lb_fx + 0x13) = 0 AND LONG_AT (lb_fx + 0x20) = 6 BEGIN
+      READ_LONG (lb_fx + 0x1c) lb_fx_dice
+      READ_LONG (lb_fx + 0x24) lb_fx_save
+      READ_LONG (lb_fx + 0x2c) lb_fx_special
+      PATCH_IF (lb_fx_save BAND 0x1f) = 0 AND lb_fx_dice = (lb_dice + 1) / 2 AND lb_fx_special = 0 BEGIN
+        SET lb_unsaved_count += 1
+        SET lb_unsaved = lb_fx
+      END
+      PATCH_IF (lb_fx_save BAND 0x1f) = 2 AND lb_fx_dice = lb_dice / 2 AND lb_fx_special = 0 BEGIN
+        SET lb_saved_count += 1
+        SET lb_saved = lb_fx
+      END
+      PATCH_IF (lb_fx_save BAND 0x100001f) = 0x1000001 AND lb_fx_dice = lb_dice AND lb_fx_special = 0x100 BEGIN
+        SET lb_classic_count += 1
+        SET lb_classic_fx = lb_fx
+      END
+    END
+  END
+END
+
 DEFINE_PATCH_FUNCTION srcb_classic_lightning_bolt
   INT_VAR classic_projectile = 40 sr_projectile = 241 alternate_projectile = 0
 BEGIN
   PATCH_IF BUFFER_LENGTH < 0x72 BEGIN
-    PATCH_FAIL ~Classic Lightning Bolt: truncated SPL.~
+    PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% is a truncated SPL.~
   END
   READ_ASCII 0 lb_signature (8)
   PATCH_IF NOT (~%lb_signature%~ STRING_EQUAL ~SPL V1  ~) BEGIN
-    PATCH_FAIL ~Classic Lightning Bolt: expected SPL V1.~
+    PATCH_FAIL ~Classic Lightning Bolt: expected SPL V1 in %SOURCE_FILE%.~
   END
   READ_LONG 0x64 lb_abilities
   READ_SHORT 0x68 lb_count
@@ -19,16 +62,18 @@ BEGIN
   PATCH_IF lb_count = 0 OR lb_abilities < 0x72 OR
            lb_abilities + lb_count * 0x28 > lb_effects OR
            lb_effects > BUFFER_LENGTH OR (BUFFER_LENGTH - lb_effects) MODULO 0x30 != 0 BEGIN
-    PATCH_FAIL ~Classic Lightning Bolt: invalid SPL tables.~
+    PATCH_FAIL ~Classic Lightning Bolt: invalid SPL tables in %SOURCE_FILE%.~
   END
   SET lb_total = (BUFFER_LENGTH - lb_effects) / 0x30
   PATCH_IF lb_cast_first + lb_cast_count > lb_total BEGIN
-    PATCH_FAIL ~Classic Lightning Bolt: invalid casting features.~
+    PATCH_FAIL ~Classic Lightning Bolt: invalid casting features in %SOURCE_FILE%.~
   END
 
-  // Preflight all abilities before changing any bytes. Reject unfamiliar spell rewrites.
+  // Preflight all abilities before changing any bytes, so a rejection leaves no
+  // partly converted spell behind.
   FOR (lb_a = 0; lb_a < lb_count; ++lb_a) BEGIN
     SET lb_h = lb_abilities + lb_a * 0x28
+    SET lb_ability = lb_a + 1
     READ_SHORT (lb_h + 0x20) lb_first
     READ_SHORT (lb_h + 0x1e) lb_nfx
     READ_SHORT (lb_h + 0x26) lb_projectile
@@ -36,60 +81,47 @@ BEGIN
     SET lb_dice = (lb_level < 5 ? 5 : (lb_level > 10 ? 10 : lb_level))
     PATCH_IF BYTE_AT (lb_h + 0x0c) != 1 OR lb_first + lb_nfx > lb_total OR
              (lb_projectile != sr_projectile AND lb_projectile != classic_projectile AND lb_projectile != alternate_projectile) BEGIN
-      PATCH_FAIL ~Classic Lightning Bolt: unsupported ability target, projectile, or effect table.~
+      PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) has an unsupported target, projectile (%lb_projectile%), or effect table.~
     END
     PATCH_IF lb_cast_count > 0 AND lb_first < lb_cast_first + lb_cast_count AND lb_cast_first < lb_first + lb_nfx BEGIN
-      PATCH_FAIL ~Classic Lightning Bolt: overlapping casting/ability effects.~
+      PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) overlaps the casting-feature effects.~
     END
     FOR (lb_b = 0; lb_b < lb_a; ++lb_b) BEGIN
       READ_SHORT (lb_abilities + lb_b * 0x28 + 0x20) lb_other_first
       READ_SHORT (lb_abilities + lb_b * 0x28 + 0x1e) lb_other_count
       PATCH_IF lb_first < lb_other_first + lb_other_count AND lb_other_first < lb_first + lb_nfx BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: shared ability effects are unsupported.~
+        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) shares effects with another ability.~
       END
     END
-    SET lb_damage_count = 0
-    FOR (lb_e = 0; lb_e < lb_nfx; ++lb_e) BEGIN
-      SET lb_fx = lb_effects + (lb_first + lb_e) * 0x30
-      PATCH_IF SHORT_AT lb_fx = 12 BEGIN
-        PATCH_IF lb_damage_count = 0 BEGIN SET lb_one = lb_fx END
-        ELSE BEGIN SET lb_two = lb_fx END
-        SET lb_damage_count += 1
-        PATCH_IF BYTE_AT (lb_fx + 2) != 2 OR LONG_AT (lb_fx + 4) != 0 OR
-                 LONG_AT (lb_fx + 8) != 0x40000 OR BYTE_AT (lb_fx + 0x0c) != 1 OR
-                 LONG_AT (lb_fx + 0x0e) != 0 OR BYTE_AT (lb_fx + 0x12) != 100 OR
-                 BYTE_AT (lb_fx + 0x13) != 0 OR LONG_AT (lb_fx + 0x20) != 6 BEGIN
-          PATCH_FAIL ~Classic Lightning Bolt: unsupported damage delivery.~
-        END
-      END
+    LPF srcb_lb_owned_packets
+      INT_VAR lb_fx_base = lb_effects lb_slice_first = lb_first lb_slice_count = lb_nfx lb_dice
+      RET lb_unsaved_count lb_unsaved lb_saved_count lb_saved lb_classic_count lb_classic_fx
     END
     PATCH_IF lb_projectile = sr_projectile BEGIN
-      PATCH_IF lb_damage_count != 2 BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: expected SR's two damage effects.~
+      SET lb_unsaved_dice = (lb_dice + 1) / 2
+      SET lb_saved_dice = lb_dice / 2
+      PATCH_IF lb_unsaved_count = 0 OR lb_saved_count = 0 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) is not a recognizable SR bolt: expected one unsaved %lb_unsaved_dice%d6 and one breath-save %lb_saved_dice%d6 electrical packet, found %lb_unsaved_count% and %lb_saved_count%.~
       END
-      READ_LONG (lb_one + 0x24) lb_save_one
-      READ_LONG (lb_two + 0x24) lb_save_two
-      PATCH_IF (lb_save_one BAND 0x1f) != 0 OR (lb_save_two BAND 0x1f) != 2 OR
-               (lb_save_one BAND 0xffffffe0) != (lb_save_two BAND 0xffffffe0) OR
-               LONG_AT (lb_one + 0x1c) != (lb_dice + 1) / 2 OR
-               LONG_AT (lb_two + 0x1c) != lb_dice / 2 OR
-               LONG_AT (lb_one + 0x2c) != 0 OR LONG_AT (lb_two + 0x2c) != 0 BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: unrecognized SR damage/save structure.~
+      PATCH_IF lb_unsaved_count > 1 OR lb_saved_count > 1 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) has ambiguous SR damage: %lb_unsaved_count% unsaved %lb_unsaved_dice%d6 and %lb_saved_count% breath-save %lb_saved_dice%d6 electrical packets match the bolt.~
       END
-      // Both halves must have the same delivery and resource metadata.
+      // Both halves of one bolt share save flags, delivery power/dispel, and resource.
+      PATCH_IF (LONG_AT (lb_unsaved + 0x24) BAND 0xffffffe0) != (LONG_AT (lb_saved + 0x24) BAND 0xffffffe0) BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) has SR damage halves with different save flags.~
+      END
       PATCH_FOR_EACH lb_byte IN 3 13 20 21 22 23 24 25 26 27 BEGIN
-        PATCH_IF BYTE_AT (lb_one + lb_byte) != BYTE_AT (lb_two + lb_byte) BEGIN
-          PATCH_FAIL ~Classic Lightning Bolt: damage packets have different metadata.~
+        PATCH_IF BYTE_AT (lb_unsaved + lb_byte) != BYTE_AT (lb_saved + lb_byte) BEGIN
+          PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) has SR damage halves with different metadata.~
         END
       END
     END ELSE BEGIN
-      PATCH_IF lb_damage_count != 1 BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: unrecognized existing classic bolt.~
-      END
-      PATCH_IF LONG_AT (lb_one + 0x1c) != lb_dice OR
-               (LONG_AT (lb_one + 0x24) BAND 0x100001f) != 0x1000001 OR
-               LONG_AT (lb_one + 0x2c) != 0x100 BEGIN
-        PATCH_FAIL ~Classic Lightning Bolt: unrecognized existing classic damage.~
+      // An already classic tier is left byte-identical, so one classic packet suffices to
+      // establish the result. Several are not ambiguous here: no record is chosen or
+      // changed, and the first application itself keeps a foreign classic-shaped rider
+      // beside the packet it converts, which a repeat must accept as a no-op.
+      PATCH_IF lb_classic_count = 0 BEGIN
+        PATCH_FAIL ~Classic Lightning Bolt: %SOURCE_FILE% ability %lb_ability% (level %lb_level%) uses the classic projectile without a recognizable classic bolt: no %lb_dice%d6 electrical packet with save vs spell for half and Mirror Image bypass.~
       END
     END
   END
@@ -102,28 +134,24 @@ BEGIN
       READ_SHORT (lb_h + 0x1e) lb_nfx
       READ_SHORT (lb_h + 0x10) lb_level
       SET lb_dice = (lb_level < 5 ? 5 : (lb_level > 10 ? 10 : lb_level))
-      SET lb_found = 0
-      FOR (lb_e = 0; lb_e < lb_nfx; ++lb_e) BEGIN
-        SET lb_fx = lb_effects + (lb_first + lb_e) * 0x30
-        PATCH_IF SHORT_AT lb_fx = 12 BEGIN
-          PATCH_IF lb_found = 0 BEGIN SET lb_one = lb_fx END
-          ELSE BEGIN
-            SET lb_two = lb_fx
-            SET lb_remove_index = lb_first + lb_e
-          END
-          SET lb_found += 1
-        END
+      // Locate again after earlier deletions; the preflight proved one packet per half.
+      LPF srcb_lb_owned_packets
+        INT_VAR lb_fx_base = lb_effects lb_slice_first = lb_first lb_slice_count = lb_nfx lb_dice
+        RET lb_unsaved_count lb_unsaved lb_saved_count lb_saved lb_classic_count lb_classic_fx
       END
-      READ_LONG (lb_two + 0x28) lb_bonus
-      READ_LONG (lb_two + 0x24) lb_save
-      WRITE_LONG (lb_one + 0x1c) lb_dice
-      WRITE_LONG (lb_one + 0x24) ((lb_save BAND 0xffffffe0) BOR 0x1000001)
-      WRITE_LONG (lb_one + 0x28) (lb_bonus + 4) // remove SR's -4, retain later adjustments
-      WRITE_LONG (lb_one + 0x2c) 0x100 // roll all dice once, then halve on a save
+      SET lb_remove_index = (lb_saved - lb_effects) / 0x30
+      READ_LONG (lb_saved + 0x28) lb_bonus
+      READ_LONG (lb_saved + 0x24) lb_save
+      WRITE_LONG (lb_unsaved + 0x1c) lb_dice
+      WRITE_LONG (lb_unsaved + 0x24) ((lb_save BAND 0xffffffe0) BOR 0x1000001)
+      WRITE_LONG (lb_unsaved + 0x28) (lb_bonus + 4) // remove SR's -4, retain later adjustments
+      WRITE_LONG (lb_unsaved + 0x2c) 0x100 // roll all dice once, then halve on a save
       WRITE_SHORT (lb_h + 0x26) classic_projectile
       WRITE_SHORT (lb_h + 0x0e) (lb_dice * 10) // vanilla per-level range, capped at 100
       WRITE_SHORT (lb_h + 0x1e) (lb_nfx - 1)
-      DELETE_BYTES lb_two 0x30
+      // The unsaved record becomes the combined packet in its own position, also when
+      // the saved half precedes it; all other records keep their relative order.
+      DELETE_BYTES lb_saved 0x30
       // Relocate every slice, including casting features stored AFTER abilities.
       FOR (lb_b = 0; lb_b < lb_count; ++lb_b) BEGIN
         SET lb_index_field = lb_abilities + lb_b * 0x28 + 0x20

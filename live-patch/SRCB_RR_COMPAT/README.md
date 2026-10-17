@@ -1,11 +1,11 @@
 # Rogue Rebalancing / Spell Revisions compatibility
 
-Version: v4.21-chriz.5 (compatibility behavior unchanged from v4.21-chriz.4)
+Version: v4.21-chriz.5
 
 Restores the intended Chaos in the spellbooks and scripts of five Rogue
 Rebalancing v4.92 mages, and corrects Selina's Spell Turning self-recast check for
-SR's Spell Deflection state. Memorized copies, spell-slot caps, and tactics are
-preserved. This does not redesign other spells or provide a general SCS patch.
+SR's Spell Deflection state. Memorized copies (prepared or already cast), spell-slot caps,
+and tactics are preserved. This does not redesign other spells or provide a general SCS patch.
 
 ## Installation
 
@@ -27,8 +27,11 @@ game directory. The mod itself does not require EEex.
 
 Do not reinstall the main SR component mid-stack just to apply this patch.
 Install before first entering/spawning the affected encounters: it updates game
-resources, not creatures already embedded in a save. Unexpected RR resource shapes
-are rejected instead of guessed at. Re-running the installer offers uninstall,
+resources, not creatures already embedded in a save. Spellbook entries and script
+references are recognized by the spell they name, so other copy counts and extra
+Chaos branches are migrated too. A creature or script naming both RR's old Chaos
+slot and the new Chaos is rejected instead of guessed at; one naming neither is
+left unchanged with a warning. Re-running the installer offers uninstall,
 which restores the prior game resources.
 
 ## Validation and scope
