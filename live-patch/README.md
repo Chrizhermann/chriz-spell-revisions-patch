@@ -74,12 +74,15 @@ RR's **Chosen of Cyric** (#11) and/or **Shadow Thief Improvements** (#12).
 
 RR's five affected CRE files have the original physical `SPWI508` spellbook entry baked into
 them. SR turns that slot into Waves of Fatigue and relocates Chaos. The patch resolves both
-identities from the final `SPELL.IDS`, moves each audited known/memorized entry to the final
-level-seven Chaos resource, and preserves its copy count and both levels' spell-slot counters.
+identities from the final `SPELL.IDS` and moves every known and memorized entry of the old slot
+to the final level-seven Chaos resource, keeping each prepared copy's flags and both levels'
+spell-slot counters.
 It also normalizes all Chaos
 references in `RR#SELI`, `RR#ARAN2`, and `RR#STM01`, covering both possible compile orders.
 Finally, it changes only Selina's self-recast status check from Spell Turning to Spell
-Deflection; her availability check and cast action still use the spell's original identifier.
+Deflection, found as the guard of a block that casts Spell Turning on herself; her
+availability check, cast action and Spell Turning checks on enemies keep the spell's original
+identifier.
 
 Copy the `SRCB_RR_COMPAT` folder and `Setup-SRCB_RR_COMPAT.exe` from either release
 archive into the game directory. When using a source checkout, create the setup
@@ -89,17 +92,23 @@ executable there as a copy of WeiDU v249 instead. Double-click it or run:
 ./setup-SRCB_RR_COMPAT.exe --force-install-list 0 --language 0 --use-lang en_US --no-exit-pause
 ```
 
-The component deliberately fails if a present RR resource no longer has either the exact
-audited v4.92 shape or the already-fixed shape. That avoids silently rewriting a future RR
-version whose tactics may have changed. Blindness, Deafness, Bigby's Clenched Fist, Infravision,
-and a wider SCS compatibility sample are outside this component.
+Entries and references are recognized by the spell they name, not by the audited counts, so
+another number of copies or an extra Chaos branch is migrated as well. The component fails,
+naming the resource, when a creature or script names both the old slot and the new Chaos (a
+later mod's intended Waves of Fatigue cannot be told apart from RR's Chaos there), when
+old-slot entries sit outside the level-five wizard book, or when the memorization rows cannot
+take the moved copies. A resource naming neither is left unchanged with a warning. Blindness,
+Deafness, Bigby's Clenched Fist, Infravision, and a wider SCS compatibility sample are outside
+this component.
 
 Install before first entering/spawning the affected encounters. The patch does not edit save
 files, so a creature whose spellbook is already embedded in a save is not retroactively
 rewritten. Uninstall restores the prior game resources. Automated coverage uses real WeiDU with
-synthetic CREs matching all five audited copy counts and compiled BCS fixtures: both SR/RR
-orders converge byte-exactly, a second pass is idempotent, each RR prerequisite scopes its own
-resources, malformed shapes fail closed, and public install/uninstall round-trips cleanly.
+synthetic CREs with the five audited copy counts and with other counts, flags and full
+spellbook layouts, plus compiled BCS fixtures: both SR/RR orders converge byte-exactly, a second
+pass is idempotent, each RR prerequisite scopes its own resources, extra branches, IDS aliases
+and Chaos Shield are handled, ambiguous or malformed shapes fail closed, and public
+install/uninstall round-trips cleanly.
 A quick in-game spellbook/casting smoke test was reported successful by the user
 on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install. Full hostile-encounter behavior,
 including the recast guard in combat, and a wider SCS audit have not been tested.

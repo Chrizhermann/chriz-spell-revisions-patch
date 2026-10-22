@@ -72,12 +72,21 @@ new protection against the private projectile takes effect.
 
 ## Compatibility and rollback
 
-The spell patch resolves the spell and projectiles through IDS symbols. It recognizes SR's
-two electrical damage effects, combines them, removes only SR's built-in -4 save penalty,
-and preserves other effects, casting features, and spell metadata. For example, a later
-mod's -5 total penalty becomes -1. Installed Evasion and electrical-immunity checks survive.
+The spell patch resolves the spell and projectiles through IDS symbols. In each spell
+tier it identifies SR's two electrical damage effects by meaning: the unsaved half and the
+breath-save half, in either order. It combines them, removes only SR's built-in -4 save
+penalty, and preserves other effects, casting features, and spell metadata. For example, a
+later mod's -5 total penalty becomes -1. Installed Evasion and electrical-immunity checks
+survive. Other damage that a mod adds to the spell, such as a fire rider or a separate
+electrical effect with different dice, save or delivery, is left unchanged.
 Only scrolls with a learn effect for the resolved spell receive the new description.
-Unexpected wizard projectile or damage structures fail installation.
+
+Installation fails, naming the spell tier, when the wizard projectile is unexpected, when a
+tier lacks one of SR's two halves, or when the halves disagree in save flags or metadata.
+It also fails when several effects match the same half, because the bolt's own damage is
+then ambiguous. An already classic tier is left unchanged when it holds at least one
+classic damage effect; a foreign effect of the same shape, kept beside the converted
+damage, therefore does not stop a repeat application. A classic tier without one fails.
 
 The non-bouncing option keeps the old projectile identity for traps and clones existing
 immunity/reflection effects for its new projectile in item, spell and creature resources.
@@ -106,11 +115,12 @@ weidu.exe SRCB_CLASSIC_LIGHTNING/setup-SRCB_CLASSIC_LIGHTNING.tp2 --force-uninst
 
 ## Verification
 
-All 110 tests pass with WeiDU 249, including 39 Lightning Bolt tests and the retained
-SR/RR compatibility coverage. They run real WeiDU
+The 88 Lightning Bolt tests pass with WeiDU 249, alongside the retained SR/RR
+compatibility coverage. They run real WeiDU
 against actual SR source spells and disposable synthetic games. They
-check damage/save semantics, Mirror Image bypass, preservation of foreign effects and
-casting features, resource relocation, malformed input rejection, both externalized
+check damage/save semantics, Mirror Image bypass, preservation of foreign effects, foreign
+damage and casting features, reordered damage halves, ambiguous damage rejection, repeat
+application, resource relocation, malformed input rejection, both externalized
 projectile layouts, selective wand routing, unchanged traps, projectile protection cloning,
 component exclusivity, and byte-exact resource restoration on uninstall. The source and
 tail libraries are kept byte-identical by a test.
