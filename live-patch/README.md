@@ -72,17 +72,24 @@ guard.** Install this component after both Spell Revisions and Rogue Rebalancing
 which of those two was installed first. It requires SR's main component (`spell_rev` #0) and
 RR's **Chosen of Cyric** (#11) and/or **Shadow Thief Improvements** (#12).
 
-RR's five affected CRE files have the original physical `SPWI508` spellbook entry baked into
-them. SR turns that slot into Waves of Fatigue and relocates Chaos. The patch resolves both
-identities from the final `SPELL.IDS` and moves every known and memorized entry of the old slot
-to the final level-seven Chaos resource, keeping each prepared copy's flags and both levels'
-spell-slot counters.
-It also normalizes all Chaos
-references in `RR#SELI`, `RR#ARAN2`, and `RR#STM01`, covering both possible compile orders.
+RR's creature files have the original physical `SPWI508` spellbook entry baked into them. SR
+turns that slot into Waves of Fatigue and makes Chaos a level-seven spell, which stays so. The
+patch resolves every identity from the final `SPELL.IDS`. Each prepared level-five copy of the
+old slot becomes a level-five spell where it stands, with its own flags and without changing
+any spell-slot counter: Hold Monster for Aran Linvail (`RR#ARAN2`), Feeblemind for the
+Zhentarim Mercenary (`RR#SFL04`) and Domination for Selina (`RR#SELI`). A wizard's known
+records stay; Selina is a sorcerer, who casts from her known list, so her known old-slot
+record becomes Domination too (or is removed if she already knows it). `RR#SAW09` and
+`RR#ZAER` only know the old slot and are not changed.
+All Chaos references in `RR#ARAN2`, `RR#STM01` and `RR#SELI` name the same replacement,
+covering both possible compile orders; blocks that cast at a target they picked also get
+the checks the replacement needs, such as Spell Turning for Feeblemind and Domination or free
+action for Hold Monster. Selina's opening Spell Trigger casts Domination.
 Finally, it changes only Selina's self-recast status check from Spell Turning to Spell
 Deflection, found as the guard of a block that casts Spell Turning on herself; her
 availability check, cast action and Spell Turning checks on enemies keep the spell's original
-identifier.
+identifier. The decision and the exact checks are recorded in
+`docs/plans/2026-09-02-rr-spell-semantics-compatibility-design.md` (2026-10-23).
 
 Copy the `SRCB_RR_COMPAT` folder and `Setup-SRCB_RR_COMPAT.exe` from either release
 archive into the game directory. When using a source checkout, create the setup
@@ -93,22 +100,24 @@ executable there as a copy of WeiDU v249 instead. Double-click it or run:
 ```
 
 Entries and references are recognized by the spell they name, not by the audited counts, so
-another number of copies or an extra Chaos branch is migrated as well. The component fails,
-naming the resource, when a creature or script names both the old slot and the new Chaos (a
-later mod's intended Waves of Fatigue cannot be told apart from RR's Chaos there), when
-old-slot entries sit outside the level-five wizard book, or when the memorization rows cannot
-take the moved copies. A resource naming neither is left unchanged with a warning. Blindness,
-Deafness, Bigby's Clenched Fist, Infravision, and a wider SCS compatibility sample are outside
-this component.
+another number of copies or an extra Chaos branch is changed as well. The component fails,
+naming the resource, when a creature or script names both the old slot and SR's Chaos (a
+later mod's intended Waves of Fatigue or Chaos cannot be told apart from RR's Chaos there),
+when old-slot copies sit outside the level-five wizard row or share a record with another
+level's row, or when the game lacks an IDS symbol the added checks name. A resource naming
+neither, nor the replacement, is left unchanged with a warning. Blindness, Deafness, Bigby's
+Clenched Fist, Infravision, and a wider SCS compatibility sample are outside this component.
 
 Install before first entering/spawning the affected encounters. The patch does not edit save
 files, so a creature whose spellbook is already embedded in a save is not retroactively
 rewritten. Uninstall restores the prior game resources. Automated coverage uses real WeiDU with
-synthetic CREs with the five audited copy counts and with other counts, flags and full
+synthetic CREs with the audited copy counts and with other counts, flags, classes and full
 spellbook layouts, plus compiled BCS fixtures: both SR/RR orders converge byte-exactly, a second
-pass is idempotent, each RR prerequisite scopes its own resources, extra branches, IDS aliases
-and Chaos Shield are handled, ambiguous or malformed shapes fail closed, and public
-install/uninstall round-trips cleanly.
-A quick in-game spellbook/casting smoke test was reported successful by the user
-on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install. Full hostile-encounter behavior,
-including the recast guard in combat, and a wider SCS audit have not been tested.
+pass is idempotent, each RR prerequisite scopes its own resources, sorcerer and wizard known
+records, added checks, extra branches, IDS aliases and Chaos Shield are handled, ambiguous or
+malformed shapes fail closed, and public install/uninstall round-trips cleanly. A local check
+applied it to RR v4.92's own creatures and scripts in both install orders.
+A quick in-game spellbook/casting smoke test of the earlier level-seven migration was reported
+successful by the user on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install; the level-five
+replacements have not been checked in game yet. Full hostile-encounter behavior, including the
+recast guard in combat, and a wider SCS audit have not been tested.

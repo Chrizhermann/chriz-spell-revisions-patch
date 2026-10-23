@@ -4,9 +4,13 @@
 //
 // SR gives Chaos a level-7 wizard identity and turns its old level-5 slot into
 // Waves of Fatigue. RR's mages were written for the old slot, so their
-// spellbooks and scripts name Waves of Fatigue where RR meant Chaos. Records
-// and references are recognized by the spell they name, never by how many of
-// them one installation happened to contain.
+// spellbooks prepare Waves of Fatigue and their scripts name it where RR meant
+// Chaos. Chaos stays SR's level-7 spell and no slot moves (Christopher's
+// decision, 2026-10-23): each affected mage's level-5 Chaos copies become a
+// level-5 spell that its script casts instead. Records and references are
+// recognized by the spell they name, never by how many of them one
+// installation happened to contain.
+
 
 // Regexp alternation of every SPELL.IDS symbol for one spell number. The script
 // decompiler prints the last of several same-number symbols, so a reference can
@@ -36,161 +40,46 @@ BEGIN
 END
 
 
-// Move every prepared copy of source_spell from the level-5 wizard row to the
-// end of the level-7 wizard row, renamed, keeping its own flags (prepared or
-// already cast). The table keeps its size: records between the two places
-// shift by one, and the rows' first indexes follow them. Both rows' slot
-// counters stay as they were, because RR's mages deliberately hold more
-// prepared records than their counters.
-DEFINE_PATCH_FUNCTION srcb_rr_move_prepared_copies
-    INT_VAR
-        copies = 0
-        source_level = 4
-        target_level = 6
-    STR_VAR
-        resource_name = ""
-        source_spell = ""
-        target_spell = ""
+// Removes the 12-byte known-spell record at `entry`. Every table stored after
+// it moves down by one record.
+DEFINE_PATCH_FUNCTION srcb_rr_remove_known_record
+    INT_VAR entry = 0
 BEGIN
-    READ_LONG 0x2a8 srcb_info_offset
-    READ_LONG 0x2ac srcb_info_count
-    READ_LONG 0x2b0 srcb_memorized_offset
-    SET srcb_source_rows = 0
-    SET srcb_target_rows = 0
-    FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
-        SET srcb_info = srcb_info_offset + srcb_i * 0x10
-        PATCH_IF (SHORT_AT (srcb_info + 0x06) = 1) BEGIN
-            PATCH_IF (SHORT_AT srcb_info = source_level) BEGIN
-                SET srcb_source_rows += 1
-                SET srcb_source_row = srcb_info
-            END
-            PATCH_IF (SHORT_AT srcb_info = target_level) BEGIN
-                SET srcb_target_rows += 1
-                SET srcb_target_row = srcb_info
-            END
-        END
+    DELETE_BYTES entry 0x0c
+    WRITE_LONG 0x2a4 ((LONG_AT 0x2a4) - 1)
+    PATCH_IF ((LONG_AT 0x2a8) > entry) BEGIN
+        WRITE_LONG 0x2a8 ((LONG_AT 0x2a8) - 0x0c)
     END
-    PATCH_IF (srcb_source_rows != 1) OR (srcb_target_rows != 1) BEGIN
-        PATCH_FAIL
-            ~SRCB_RR_COMPAT: %resource_name%.CRE needs one level-5 and one level-7 wizard memorization row to move its %copies% prepared Chaos copies; it has %srcb_source_rows% and %srcb_target_rows%.~
+    PATCH_IF ((LONG_AT 0x2b0) > entry) BEGIN
+        WRITE_LONG 0x2b0 ((LONG_AT 0x2b0) - 0x0c)
     END
-
-    // A record shared by two rows would change the other row too.
-    FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
-        READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x08) srcb_first
-        READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x0c) srcb_count
-        FOR (srcb_j = 0; srcb_j < srcb_i; ++srcb_j) BEGIN
-            READ_LONG (srcb_info_offset + srcb_j * 0x10 + 0x08) srcb_other_first
-            READ_LONG (srcb_info_offset + srcb_j * 0x10 + 0x0c) srcb_other_count
-            PATCH_IF (srcb_count > 0) AND (srcb_other_count > 0)
-                  AND (srcb_first < srcb_other_first + srcb_other_count)
-                  AND (srcb_other_first < srcb_first + srcb_count) BEGIN
-                PATCH_FAIL
-                    ~SRCB_RR_COMPAT: %resource_name%.CRE memorization rows %srcb_j% and %srcb_i% share prepared records; moving Chaos copies would change another spell level.~
-            END
-        END
+    PATCH_IF ((LONG_AT 0x2b8) > entry) BEGIN
+        WRITE_LONG 0x2b8 ((LONG_AT 0x2b8) - 0x0c)
     END
-
-    READ_LONG (srcb_source_row + 0x08) srcb_first
-    READ_LONG (srcb_source_row + 0x0c) srcb_count
-    SET srcb_in_row = 0
-    FOR (srcb_j = 0; srcb_j < srcb_count; ++srcb_j) BEGIN
-        READ_ASCII (srcb_memorized_offset + (srcb_first + srcb_j) * 0x0c) srcb_spell (8) NULL
-        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
-            SET srcb_in_row += 1
-        END
+    PATCH_IF ((LONG_AT 0x2bc) > entry) BEGIN
+        WRITE_LONG 0x2bc ((LONG_AT 0x2bc) - 0x0c)
     END
-    PATCH_IF (srcb_in_row != copies) BEGIN
-        PATCH_FAIL
-            ~SRCB_RR_COMPAT: %resource_name%.CRE has %source_spell% prepared outside its level-5 wizard row (%srcb_in_row% of %copies% copies there); those copies cannot be attributed to RR's Chaos.~
-    END
-
-    // An empty row's first index means nothing to the engine and may point
-    // between another row's records. Copies placed there would join that row
-    // and push its last record out of it, so the level-7 row starts after it.
-    READ_LONG (srcb_target_row + 0x08) srcb_target_first
-    READ_LONG (srcb_target_row + 0x0c) srcb_target_count
-    PATCH_IF (srcb_target_count = 0) BEGIN
-        SET srcb_start = srcb_target_first
-        FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
-            READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x08) srcb_row_first
-            READ_LONG (srcb_info_offset + srcb_i * 0x10 + 0x0c) srcb_row_count
-            PATCH_IF (srcb_row_count > 0) AND (srcb_row_first < srcb_start)
-                  AND (srcb_start < srcb_row_first + srcb_row_count) BEGIN
-                SET srcb_start = srcb_row_first + srcb_row_count
-            END
-        END
-        PATCH_IF (srcb_start != srcb_target_first) BEGIN
-            WRITE_LONG (srcb_target_row + 0x08) srcb_start
-        END
-    END
-
-    FOR (srcb_moved = 0; srcb_moved < copies; ++srcb_moved) BEGIN
-        READ_LONG (srcb_source_row + 0x08) srcb_first
-        READ_LONG (srcb_source_row + 0x0c) srcb_count
-        SET srcb_from = 0 - 1
-        FOR (srcb_j = 0; (srcb_j < srcb_count) AND (srcb_from < 0); ++srcb_j) BEGIN
-            READ_ASCII (srcb_memorized_offset + (srcb_first + srcb_j) * 0x0c) srcb_spell (8) NULL
-            PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
-                SET srcb_from = srcb_first + srcb_j
-            END
-        END
-        READ_LONG (srcb_memorized_offset + srcb_from * 0x0c + 0x08) srcb_flags
-        READ_LONG (srcb_target_row + 0x08) srcb_target_first
-        READ_LONG (srcb_target_row + 0x0c) srcb_target_count
-        SET srcb_to = srcb_target_first + srcb_target_count
-
-        PATCH_IF (srcb_from < srcb_to) BEGIN
-            // Level 7 lies after level 5: records in between move down one place.
-            FOR (srcb_k = srcb_from; srcb_k < srcb_to - 1; ++srcb_k) BEGIN
-                FOR (srcb_b = 0; srcb_b < 0x0c; srcb_b += 4) BEGIN
-                    WRITE_LONG (srcb_memorized_offset + srcb_k * 0x0c + srcb_b)
-                        (LONG_AT (srcb_memorized_offset + (srcb_k + 1) * 0x0c + srcb_b))
-                END
-            END
-            SET srcb_slot = srcb_to - 1
-            FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
-                SET srcb_info = srcb_info_offset + srcb_i * 0x10
-                READ_LONG (srcb_info + 0x08) srcb_row_first
-                PATCH_IF (srcb_info = srcb_target_row)
-                      OR ((srcb_row_first > srcb_from) AND (srcb_row_first < srcb_to)) BEGIN
-                    WRITE_LONG (srcb_info + 0x08) (srcb_row_first - 1)
-                END
-            END
-        END ELSE BEGIN
-            // Level 7 lies before level 5: records in between move up one place.
-            FOR (srcb_k = srcb_from; srcb_k > srcb_to; srcb_k -= 1) BEGIN
-                FOR (srcb_b = 0; srcb_b < 0x0c; srcb_b += 4) BEGIN
-                    WRITE_LONG (srcb_memorized_offset + srcb_k * 0x0c + srcb_b)
-                        (LONG_AT (srcb_memorized_offset + (srcb_k - 1) * 0x0c + srcb_b))
-                END
-            END
-            SET srcb_slot = srcb_to
-            FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
-                SET srcb_info = srcb_info_offset + srcb_i * 0x10
-                READ_LONG (srcb_info + 0x08) srcb_row_first
-                PATCH_IF (srcb_info != srcb_target_row)
-                      AND (srcb_row_first >= srcb_to) AND (srcb_row_first <= srcb_from) BEGIN
-                    WRITE_LONG (srcb_info + 0x08) (srcb_row_first + 1)
-                END
-            END
-        END
-        WRITE_ASCIIE (srcb_memorized_offset + srcb_slot * 0x0c) ~%target_spell%~ #8
-        WRITE_LONG (srcb_memorized_offset + srcb_slot * 0x0c + 0x08) srcb_flags
-        WRITE_LONG (srcb_source_row + 0x0c) (LONG_AT (srcb_source_row + 0x0c) - 1)
-        WRITE_LONG (srcb_target_row + 0x0c) (LONG_AT (srcb_target_row + 0x0c) + 1)
+    PATCH_IF ((LONG_AT 0x2c4) > entry) BEGIN
+        WRITE_LONG 0x2c4 ((LONG_AT 0x2c4) - 0x0c)
     END
 END
 
 
-DEFINE_PATCH_FUNCTION srcb_rr_migrate_chaos_spellbook
-    INT_VAR
-        source_level = 4
-        target_level = 6
+// RR's prepared level-5 Chaos copies hold Waves of Fatigue under SR. Each one
+// becomes `replacement_spell` where it stands, with its own flags (prepared or
+// already cast): the table keeps its size and layout, and no slot counter
+// changes. A wizard's known records stay as they are. A sorcerer casts from
+// its known list, so its known old-slot record becomes the replacement too, or
+// is removed when the replacement is already known: no spell is known twice.
+// Sorcerer (19) is the engine's only class that casts wizard spells from its
+// known list.
+DEFINE_PATCH_FUNCTION srcb_rr_replace_chaos_copies
+    INT_VAR source_level = 4
     STR_VAR
         resource_name = ""
         source_spell = ""
-        target_spell = ""
+        chaos_spell = ""
+        replacement_spell = ""
 BEGIN
     SET srcb_valid_cre = 0
     PATCH_IF (SOURCE_SIZE > 0x2d3) BEGIN
@@ -244,100 +133,250 @@ BEGIN
 
     SET srcb_source_known = 0
     SET srcb_source_known_book = 0
-    SET srcb_target_known = 0
+    SET srcb_chaos_known = 0
+    SET srcb_replacement_known_book = 0
     FOR (srcb_i = 0; srcb_i < srcb_known_count; ++srcb_i) BEGIN
         SET srcb_entry = srcb_known_offset + srcb_i * 0x0c
         READ_ASCII srcb_entry srcb_spell (8) NULL
+        SET srcb_in_book = (SHORT_AT (srcb_entry + 0x08) = source_level) AND (SHORT_AT (srcb_entry + 0x0a) = 1)
         PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
             SET srcb_source_known += 1
-            PATCH_IF (SHORT_AT (srcb_entry + 0x08) = source_level) AND (SHORT_AT (srcb_entry + 0x0a) = 1) BEGIN
-                SET srcb_source_known_book += 1
-            END
+            SET srcb_source_known_book += srcb_in_book
         END
-        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%target_spell%~) BEGIN
-            SET srcb_target_known += 1
+        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%chaos_spell%~) BEGIN
+            SET srcb_chaos_known += 1
+        END
+        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%replacement_spell%~) BEGIN
+            SET srcb_replacement_known_book += srcb_in_book
         END
     END
-    SET srcb_source_prepared = 0
-    SET srcb_target_prepared = 0
+    SET srcb_chaos_prepared = 0
     FOR (srcb_i = 0; srcb_i < srcb_memorized_count; ++srcb_i) BEGIN
         READ_ASCII (srcb_memorized_offset + srcb_i * 0x0c) srcb_spell (8) NULL
-        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
-            SET srcb_source_prepared += 1
-        END
-        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%target_spell%~) BEGIN
-            SET srcb_target_prepared += 1
+        PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%chaos_spell%~) BEGIN
+            SET srcb_chaos_prepared += 1
         END
     END
-    SET srcb_has_source = (srcb_source_known + srcb_source_prepared > 0)
-    SET srcb_has_target = (srcb_target_known + srcb_target_prepared > 0)
+    // A prepared copy is cast through the memorization row that holds it.
+    SET srcb_source_book = 0
+    SET srcb_source_outside = 0
+    SET srcb_replacement_book = 0
+    FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
+        SET srcb_info = srcb_info_offset + srcb_i * 0x10
+        SET srcb_book_row = (SHORT_AT srcb_info = source_level) AND (SHORT_AT (srcb_info + 0x06) = 1)
+        READ_LONG (srcb_info + 0x08) srcb_first
+        READ_LONG (srcb_info + 0x0c) srcb_count
+        FOR (srcb_j = 0; srcb_j < srcb_count; ++srcb_j) BEGIN
+            READ_ASCII (srcb_memorized_offset + (srcb_first + srcb_j) * 0x0c) srcb_spell (8) NULL
+            PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
+                PATCH_IF srcb_book_row BEGIN
+                    SET srcb_source_book += 1
+                END ELSE BEGIN
+                    SET srcb_source_outside += 1
+                END
+            END
+            PATCH_IF srcb_book_row AND (~%srcb_spell%~ STRING_EQUAL_CASE ~%replacement_spell%~) BEGIN
+                SET srcb_replacement_book += 1
+            END
+        END
+    END
+    SET srcb_source_prepared = srcb_source_book + srcb_source_outside
 
-    // Old-slot records alongside Chaos could be RR's broken Chaos or a later
-    // mod's intended Waves of Fatigue.
-    PATCH_IF srcb_has_source AND srcb_has_target BEGIN
-        PATCH_FAIL
-            ~SRCB_RR_COMPAT: %resource_name%.CRE names both %source_spell% (RR's Chaos slot, now Waves of Fatigue) and %target_spell% (Chaos): known %srcb_source_known% and %srcb_target_known%, prepared %srcb_source_prepared% and %srcb_target_prepared%. Which %source_spell% records RR meant as Chaos is ambiguous.~
-    END
-    PATCH_IF (srcb_has_source = 0) AND (srcb_has_target = 0) BEGIN
-        PATCH_WARN
-            ~SRCB_RR_COMPAT: %resource_name%.CRE names neither %source_spell% nor %target_spell%; its spellbook is left unchanged.~
-    END
-    PATCH_IF srcb_has_source AND (srcb_has_target = 0) BEGIN
-        PATCH_IF (srcb_source_known_book != srcb_source_known) BEGIN
+    PATCH_IF (srcb_source_prepared = 0) BEGIN
+        // Known-only old-slot records are not RR's prepared Chaos; a creature
+        // that already prepares the replacement needs nothing.
+        PATCH_IF (srcb_replacement_book = 0) BEGIN
+            PATCH_WARN
+                ~SRCB_RR_COMPAT: %resource_name%.CRE prepares neither %source_spell% (RR's Chaos slot, now Waves of Fatigue) nor %replacement_spell% at level 5; its spellbook is left unchanged.~
+        END
+    END ELSE BEGIN
+        // Old-slot copies alongside Chaos could be a later mod's intended Waves
+        // of Fatigue.
+        PATCH_IF (srcb_chaos_known + srcb_chaos_prepared > 0) BEGIN
+            PATCH_FAIL
+                ~SRCB_RR_COMPAT: %resource_name%.CRE names both %source_spell% (RR's Chaos slot, now Waves of Fatigue) and %chaos_spell% (Chaos): known %srcb_source_known% and %srcb_chaos_known%, prepared %srcb_source_prepared% and %srcb_chaos_prepared%. Which %source_spell% records RR meant as Chaos is ambiguous.~
+        END
+        // A copy shared with another level's row would change that row's
+        // spell too.
+        FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
+            SET srcb_info = srcb_info_offset + srcb_i * 0x10
+            SET srcb_book_row = (SHORT_AT srcb_info = source_level) AND (SHORT_AT (srcb_info + 0x06) = 1)
+            READ_LONG (srcb_info + 0x08) srcb_first
+            READ_LONG (srcb_info + 0x0c) srcb_count
+            FOR (srcb_j = 0; srcb_j < srcb_i; ++srcb_j) BEGIN
+                SET srcb_other = srcb_info_offset + srcb_j * 0x10
+                SET srcb_other_book_row = (SHORT_AT srcb_other = source_level) AND (SHORT_AT (srcb_other + 0x06) = 1)
+                READ_LONG (srcb_other + 0x08) srcb_other_first
+                READ_LONG (srcb_other + 0x0c) srcb_other_count
+                SET srcb_from = (srcb_first > srcb_other_first) ? srcb_first : srcb_other_first
+                SET srcb_to = (srcb_first + srcb_count < srcb_other_first + srcb_other_count)
+                    ? (srcb_first + srcb_count) : (srcb_other_first + srcb_other_count)
+                PATCH_IF srcb_book_row AND srcb_other_book_row BEGIN
+                    SET srcb_to = srcb_from
+                END
+                FOR (srcb_k = srcb_from; srcb_k < srcb_to; ++srcb_k) BEGIN
+                    READ_ASCII (srcb_memorized_offset + srcb_k * 0x0c) srcb_spell (8) NULL
+                    PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
+                        PATCH_FAIL
+                            ~SRCB_RR_COMPAT: %resource_name%.CRE memorization rows %srcb_j% and %srcb_i% share prepared records; renaming Chaos copies would change another spell level.~
+                    END
+                END
+            END
+        END
+        PATCH_IF (srcb_source_outside > 0) BEGIN
+            PATCH_FAIL
+                ~SRCB_RR_COMPAT: %resource_name%.CRE has %source_spell% prepared outside its level-5 wizard row (%srcb_source_book% of %srcb_source_prepared% copies there); those copies cannot be attributed to RR's Chaos.~
+        END
+        SET srcb_sorcerer = (BYTE_AT 0x273 = 19)
+        PATCH_IF srcb_sorcerer AND (srcb_source_known_book != srcb_source_known) BEGIN
             PATCH_FAIL
                 ~SRCB_RR_COMPAT: %resource_name%.CRE knows %source_spell% outside its level-5 wizard book (%srcb_source_known_book% of %srcb_source_known% known records there); those records cannot be attributed to RR's Chaos.~
         END
-        PATCH_IF (srcb_source_prepared > 0) BEGIN
-            LPF srcb_rr_move_prepared_copies
-                INT_VAR
-                    copies = srcb_source_prepared
-                    source_level = source_level
-                    target_level = target_level
-                STR_VAR
-                    resource_name = EVAL ~%resource_name%~
-                    source_spell = EVAL ~%source_spell%~
-                    target_spell = EVAL ~%target_spell%~
+
+        FOR (srcb_i = 0; srcb_i < srcb_info_count; ++srcb_i) BEGIN
+            SET srcb_info = srcb_info_offset + srcb_i * 0x10
+            PATCH_IF (SHORT_AT srcb_info = source_level) AND (SHORT_AT (srcb_info + 0x06) = 1) BEGIN
+                READ_LONG (srcb_info + 0x08) srcb_first
+                READ_LONG (srcb_info + 0x0c) srcb_count
+                FOR (srcb_j = 0; srcb_j < srcb_count; ++srcb_j) BEGIN
+                    SET srcb_record = srcb_memorized_offset + (srcb_first + srcb_j) * 0x0c
+                    READ_ASCII srcb_record srcb_spell (8) NULL
+                    PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
+                        WRITE_ASCIIE srcb_record ~%replacement_spell%~ #8
+                    END
+                END
             END
         END
-        // Known records are renamed where they stand.
-        FOR (srcb_i = 0; srcb_i < srcb_known_count; ++srcb_i) BEGIN
-            SET srcb_entry = srcb_known_offset + srcb_i * 0x0c
-            READ_ASCII srcb_entry srcb_spell (8) NULL
-            PATCH_IF (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
-                WRITE_ASCIIE srcb_entry ~%target_spell%~ #8
-                WRITE_SHORT (srcb_entry + 0x08) target_level
+
+        PATCH_IF srcb_sorcerer BEGIN
+            SET srcb_i = 0
+            WHILE (srcb_i < srcb_known_count) BEGIN
+                SET srcb_entry = srcb_known_offset + srcb_i * 0x0c
+                READ_ASCII srcb_entry srcb_spell (8) NULL
+                PATCH_IF NOT (~%srcb_spell%~ STRING_EQUAL_CASE ~%source_spell%~) BEGIN
+                    SET srcb_i += 1
+                END ELSE PATCH_IF (srcb_replacement_known_book = 0) BEGIN
+                    WRITE_ASCIIE srcb_entry ~%replacement_spell%~ #8
+                    SET srcb_replacement_known_book = 1
+                    SET srcb_i += 1
+                END ELSE BEGIN
+                    LPF srcb_rr_remove_known_record INT_VAR entry = srcb_entry END
+                    SET srcb_known_count -= 1
+                END
             END
         END
     END
 END
 
 
-// RR wrote these scripts for Chaos's old slot: RR v4.92 names it only by the
-// WIZARD_CHAOS symbol. A script that still names the old slot therefore means
-// Chaos by it. A script naming both slots could hold a later mod's intended
-// Waves of Fatigue, so it is not guessed at.
-DEFINE_PATCH_FUNCTION srcb_rr_normalize_chaos_script
+// Appends to `missing` each of `filters` (separated by whitespace, <target>
+// standing for the cast's target object) that neither `triggers` nor `missing`
+// already has, as one trigger line. A decompiled trigger line ends at the line
+// break or at the comment the decompiler adds to some of them.
+DEFINE_PATCH_FUNCTION srcb_rr_missing_filters
+    STR_VAR
+        filters = ""
+        target = ""
+        triggers = ""
+        missing = ""
+    RET missing
+BEGIN
+    INNER_PATCH ~%filters%~ BEGIN
+        REPLACE_EVALUATE CASE_SENSITIVE ~[^ %TAB%%MNL%%LNL%]+~ BEGIN
+            INNER_PATCH_SAVE srcb_filter ~%MATCH0%~ BEGIN
+                REPLACE_TEXTUALLY CASE_SENSITIVE EXACT_MATCH ~<target>~ ~%target%~
+            END
+            SET srcb_present = (INDEX (CASE_INSENSITIVE EXACT_MATCH ~%srcb_filter%%MNL%~ ~%triggers%~) >= 0)
+                OR (INDEX (CASE_INSENSITIVE EXACT_MATCH ~%srcb_filter%%LNL%~ ~%triggers%~) >= 0)
+                OR (INDEX (CASE_INSENSITIVE EXACT_MATCH ~%srcb_filter% ~ ~%triggers%~) >= 0)
+                OR (INDEX (CASE_INSENSITIVE EXACT_MATCH ~%srcb_filter%%TAB%~ ~%triggers%~) >= 0)
+            PATCH_IF (srcb_present = 0)
+                  AND (INDEX (CASE_INSENSITIVE EXACT_MATCH ~%srcb_filter%%LNL%~ ~%missing%~) < 0) BEGIN
+                TEXT_SPRINT missing ~%missing%  %srcb_filter%%LNL%~
+            END
+        END ~%MATCH0%~
+    END
+END
+
+
+// RR wrote these scripts for Chaos's old slot and names it only by the
+// WIZARD_CHAOS symbol. Compiled before SR, the references decompile as the old
+// slot (now Waves of Fatigue); compiled after SR, as SR's level-7 Chaos, which
+// these mages do not prepare. Either way every reference now names
+// `replacement`, the level-5 spell their spellbooks prepare instead. A script
+// naming both slots could hold a later mod's intended Waves of Fatigue or
+// Chaos, so it is not guessed at.
+//
+// A block that casts Chaos at a target it picked (Spell, SpellNoDec) keeps its
+// filters and gains each of `filters` it lacks, for the same target object:
+// what the replacement needs that Chaos did not. A forced cast (Selina's
+// opening Spell Trigger) is a scripted sequence; only its spell changes.
+DEFINE_PATCH_FUNCTION srcb_rr_retarget_chaos_script
     STR_VAR
         resource_name = ""
-        source_symbols = ""
-        target_symbols = ""
+        old_symbols = ""
+        chaos_symbols = ""
+        replacement = ""
+        replacement_symbols = ""
+        filters = ""
 BEGIN
-    COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%source_symbols%\)[),]~ srcb_old_count
-    COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%target_symbols%\)[),]~ srcb_final_count
-    PATCH_IF (srcb_old_count > 0) AND (srcb_final_count > 0) BEGIN
+    COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%old_symbols%\)[),]~ srcb_old_count
+    COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%chaos_symbols%\)[),]~ srcb_chaos_count
+    PATCH_IF (srcb_old_count > 0) AND (srcb_chaos_count > 0) BEGIN
         PATCH_FAIL
-            ~SRCB_RR_COMPAT: %resource_name%.BCS names both Waves of Fatigue (%srcb_old_count% references) and Chaos (%srcb_final_count%); which Waves of Fatigue references RR meant as Chaos is ambiguous.~
-    END ELSE PATCH_IF (srcb_old_count > 0) BEGIN
-        // Adjacent references share a delimiter, so repeat until none is left.
-        WHILE (srcb_old_count > 0) BEGIN
-            REPLACE_TEXTUALLY CASE_SENSITIVE
-                ~\([(,]\)\(%source_symbols%\)\([),]\)~
-                ~\1WIZARD_CHAOS\3~
-            COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%source_symbols%\)[),]~ srcb_old_count
+            ~SRCB_RR_COMPAT: %resource_name%.BCS names both Waves of Fatigue (%srcb_old_count% references) and Chaos (%srcb_chaos_count%); which of them RR meant as Chaos is ambiguous.~
+    END ELSE PATCH_IF (srcb_old_count + srcb_chaos_count = 0) BEGIN
+        COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%replacement_symbols%\)[),]~ srcb_replacement_count
+        PATCH_IF (srcb_replacement_count = 0) BEGIN
+            PATCH_WARN
+                ~SRCB_RR_COMPAT: %resource_name%.BCS names neither Waves of Fatigue nor Chaos, and not %replacement% either; it is left unchanged.~
         END
-    END ELSE PATCH_IF (srcb_final_count = 0) BEGIN
-        PATCH_WARN
-            ~SRCB_RR_COMPAT: %resource_name%.BCS names neither Waves of Fatigue nor Chaos; it is left unchanged.~
+    END ELSE BEGIN
+        PATCH_IF (srcb_old_count > 0) BEGIN
+            TEXT_SPRINT srcb_symbols ~%old_symbols%~
+        END ELSE BEGIN
+            TEXT_SPRINT srcb_symbols ~%chaos_symbols%~
+        END
+        SET srcb_at = INDEX_BUFFER (CASE_SENSITIVE ~^IF~)
+        WHILE (srcb_at >= 0) BEGIN
+            SET srcb_then = INDEX_BUFFER (CASE_SENSITIVE ~^THEN~ srcb_at)
+            SET srcb_end = INDEX_BUFFER (CASE_SENSITIVE ~^END~ srcb_at)
+            PATCH_IF (srcb_then < 0) OR (srcb_end < srcb_then) BEGIN
+                PATCH_FAIL ~SRCB_RR_COMPAT: %resource_name%.BCS decompiled to an unrecognized block layout.~
+            END
+            READ_ASCII srcb_at srcb_triggers (srcb_then - srcb_at)
+            READ_ASCII srcb_then srcb_actions (srcb_end - srcb_then)
+            TEXT_SPRINT srcb_missing ~~
+            INNER_PATCH ~%srcb_actions%~ BEGIN
+                REPLACE_EVALUATE CASE_SENSITIVE
+                    ~\b\(Spell\|SpellNoDec\)(\([^,]+\),\(%srcb_symbols%\))~
+                BEGIN
+                    TEXT_SPRINT srcb_target ~%MATCH2%~
+                    LPF srcb_rr_missing_filters
+                        STR_VAR
+                            filters = EVAL ~%filters%~
+                            target = EVAL ~%srcb_target%~
+                            triggers = EVAL ~%srcb_triggers%~
+                            missing = EVAL ~%srcb_missing%~
+                        RET srcb_missing = missing
+                    END
+                END ~%MATCH0%~
+            END
+            PATCH_IF (STRING_LENGTH ~%srcb_missing%~ > 0) BEGIN
+                INSERT_BYTES srcb_then (STRING_LENGTH ~%srcb_missing%~)
+                WRITE_ASCIIE srcb_then ~%srcb_missing%~
+                SET srcb_end += STRING_LENGTH ~%srcb_missing%~
+            END
+            SET srcb_at = INDEX_BUFFER (CASE_SENSITIVE ~^IF~ srcb_end)
+        END
+        // Adjacent references share a delimiter, so repeat until none is left.
+        SET srcb_left = srcb_old_count + srcb_chaos_count
+        WHILE (srcb_left > 0) BEGIN
+            REPLACE_TEXTUALLY CASE_SENSITIVE
+                ~\([(,]\)\(%srcb_symbols%\)\([),]\)~
+                ~\1%replacement%\3~
+            COUNT_REGEXP_INSTANCES CASE_SENSITIVE ~[(,]\(%srcb_symbols%\)[),]~ srcb_left
+        END
     END
 END
 
@@ -413,28 +452,26 @@ END
 
 
 DEFINE_ACTION_FUNCTION srcb_rr_patch_cre_resource
-    INT_VAR
-        source_level = 4
-        target_level = 6
+    INT_VAR source_level = 4
     STR_VAR
         resource_name = ""
         source_spell = ""
-        target_spell = ""
+        chaos_spell = ""
+        replacement_spell = ""
 BEGIN
     ACTION_IF FILE_EXISTS_IN_GAME ~%resource_name%.cre~ BEGIN
         COPY_EXISTING ~%resource_name%.cre~ ~override~
-            LPF srcb_rr_migrate_chaos_spellbook
-                INT_VAR
-                    source_level = source_level
-                    target_level = target_level
+            LPF srcb_rr_replace_chaos_copies
+                INT_VAR source_level = source_level
                 STR_VAR
                     resource_name = EVAL ~%resource_name%~
                     source_spell = EVAL ~%source_spell%~
-                    target_spell = EVAL ~%target_spell%~
+                    chaos_spell = EVAL ~%chaos_spell%~
+                    replacement_spell = EVAL ~%replacement_spell%~
             END
         BUT_ONLY
     END ELSE BEGIN
-        WARN ~SRCB_RR_COMPAT: %resource_name%.CRE is not in the game; there is no spellbook to migrate.~
+        WARN ~SRCB_RR_COMPAT: %resource_name%.CRE is not in the game; there is no spellbook to change.~
     END
 END
 
@@ -445,17 +482,23 @@ DEFINE_ACTION_FUNCTION srcb_rr_patch_script_resource
         turning_number = 0
     STR_VAR
         resource_name = ""
-        source_symbols = ""
-        target_symbols = ""
+        old_symbols = ""
+        chaos_symbols = ""
+        replacement = ""
+        replacement_symbols = ""
+        filters = ""
 BEGIN
     ACTION_IF FILE_EXISTS_IN_GAME ~%resource_name%.bcs~ BEGIN
         COPY_EXISTING ~%resource_name%.bcs~ ~override~
             DECOMPILE_AND_PATCH BEGIN
-                LPF srcb_rr_normalize_chaos_script
+                LPF srcb_rr_retarget_chaos_script
                     STR_VAR
                         resource_name = EVAL ~%resource_name%~
-                        source_symbols = EVAL ~%source_symbols%~
-                        target_symbols = EVAL ~%target_symbols%~
+                        old_symbols = EVAL ~%old_symbols%~
+                        chaos_symbols = EVAL ~%chaos_symbols%~
+                        replacement = EVAL ~%replacement%~
+                        replacement_symbols = EVAL ~%replacement_symbols%~
+                        filters = EVAL ~%filters%~
                 END
                 PATCH_IF (patch_selina_guard = 1) BEGIN
                     LPF srcb_rr_fix_selina_deflection_guard
@@ -466,7 +509,7 @@ BEGIN
             END
         BUT_ONLY
     END ELSE BEGIN
-        WARN ~SRCB_RR_COMPAT: %resource_name%.BCS is not in the game; there is no script to migrate.~
+        WARN ~SRCB_RR_COMPAT: %resource_name%.BCS is not in the game; there is no script to change.~
     END
 END
 
@@ -495,19 +538,67 @@ BEGIN
 END
 
 
+// The level-5 wizard spell a replacement symbol names in the final SPELL.IDS,
+// and every symbol of its number.
+DEFINE_ACTION_FUNCTION srcb_rr_resolve_replacement
+    INT_VAR old_number = 0
+    STR_VAR symbol = ""
+    RET spell symbols
+BEGIN
+    OUTER_SET srcb_number = IDS_OF_SYMBOL (~spell~ ~%symbol%~)
+    ACTION_IF (srcb_number < 2501) OR (srcb_number > 2599) OR (srcb_number = old_number) BEGIN
+        FAIL
+            ~SRCB_RR_COMPAT: final SPELL.IDS must map %symbol% to a level-5 wizard spell other than Waves of Fatigue.~
+    END
+    LAF RES_NUM_OF_SPELL_NAME
+        STR_VAR spell_name = EVAL ~%symbol%~
+        RET spell = spell_res
+    END
+    OUTER_TEXT_SPRINT spell ~%spell%~
+    ACTION_TO_UPPER spell
+    LAF srcb_rr_require_wizard_spell
+        INT_VAR expected_level = 5
+        STR_VAR resource_name = EVAL ~%spell%~
+    END
+    LAF srcb_rr_spell_symbols
+        INT_VAR number = srcb_number
+        RET symbols
+    END
+END
+
+
+// WeiDU reports a script symbol that the game's IDS file lacks, but can still
+// compile it as 0, which would silently change a filter. Every symbol the
+// added filters name must therefore exist first.
+DEFINE_ACTION_FUNCTION srcb_rr_require_filter_symbols
+    STR_VAR
+        ids = ""
+        symbols = ""
+BEGIN
+    OUTER_PATCH ~%symbols%~ BEGIN
+        REPLACE_EVALUATE CASE_SENSITIVE ~[^ %TAB%%MNL%%LNL%]+~ BEGIN
+            PATCH_IF (IDS_OF_SYMBOL (~%ids%~ ~%MATCH0%~) < 0) BEGIN
+                PATCH_FAIL
+                    ~SRCB_RR_COMPAT: %ids%.IDS has no %MATCH0%, which the filters added to RR's casting blocks name.~
+            END
+        END ~%MATCH0%~
+    END
+END
+
+
 DEFINE_ACTION_FUNCTION srcb_rr_apply_spell_semantics
 BEGIN
     OUTER_SET srcb_source_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_WAVES_OF_FATIGUE~)
-    OUTER_SET srcb_target_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_CHAOS~)
+    OUTER_SET srcb_chaos_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_CHAOS~)
     OUTER_SET srcb_sphere_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_SPHERE_OF_CHAOS~)
     // A Sphere of Chaos symbol naming another spell would leave two candidates
     // for Chaos.
     ACTION_IF (srcb_source_number < 2001)
           OR (srcb_source_number > 2999)
-          OR (srcb_target_number < 2001)
-          OR (srcb_target_number > 2999)
-          OR (srcb_source_number = srcb_target_number)
-          OR ((srcb_sphere_number >= 0) AND (srcb_sphere_number != srcb_target_number)) BEGIN
+          OR (srcb_chaos_number < 2001)
+          OR (srcb_chaos_number > 2999)
+          OR (srcb_source_number = srcb_chaos_number)
+          OR ((srcb_sphere_number >= 0) AND (srcb_sphere_number != srcb_chaos_number)) BEGIN
         FAIL
             ~SRCB_RR_COMPAT: final SPELL.IDS must map WIZARD_WAVES_OF_FATIGUE and WIZARD_CHAOS to two different wizard spells, and WIZARD_SPHERE_OF_CHAOS, if present, to the same spell as WIZARD_CHAOS.~
     END
@@ -518,15 +609,15 @@ BEGIN
     END
     LAF RES_NUM_OF_SPELL_NAME
         STR_VAR spell_name = ~WIZARD_CHAOS~
-        RET srcb_target_spell = spell_res
+        RET srcb_chaos_spell = spell_res
     END
     OUTER_TEXT_SPRINT srcb_source_spell ~%srcb_source_spell%~
-    OUTER_TEXT_SPRINT srcb_target_spell ~%srcb_target_spell%~
+    OUTER_TEXT_SPRINT srcb_chaos_spell ~%srcb_chaos_spell%~
     ACTION_TO_UPPER srcb_source_spell
-    ACTION_TO_UPPER srcb_target_spell
+    ACTION_TO_UPPER srcb_chaos_spell
     OUTER_SET srcb_source_level = ((srcb_source_number - 2000) / 100) - 1
-    OUTER_SET srcb_target_level = ((srcb_target_number - 2000) / 100) - 1
-    ACTION_IF (srcb_source_level != 4) OR (srcb_target_level != 6) BEGIN
+    OUTER_SET srcb_chaos_level = ((srcb_chaos_number - 2000) / 100) - 1
+    ACTION_IF (srcb_source_level != 4) OR (srcb_chaos_level != 6) BEGIN
         FAIL
             ~SRCB_RR_COMPAT: expected Waves of Fatigue at wizard level 5 and Chaos at wizard level 7 in final SPELL.IDS.~
     END
@@ -536,16 +627,52 @@ BEGIN
     END
     LAF srcb_rr_require_wizard_spell
         INT_VAR expected_level = 7
-        STR_VAR resource_name = EVAL ~%srcb_target_spell%~
+        STR_VAR resource_name = EVAL ~%srcb_chaos_spell%~
     END
     LAF srcb_rr_spell_symbols
         INT_VAR number = srcb_source_number
-        RET srcb_source_symbols = symbols
+        RET srcb_old_symbols = symbols
     END
     LAF srcb_rr_spell_symbols
-        INT_VAR number = srcb_target_number
-        RET srcb_target_symbols = symbols
+        INT_VAR number = srcb_chaos_number
+        RET srcb_chaos_symbols = symbols
     END
+
+    // What each replacement needs that Chaos did not, as RR checks it in its
+    // own blocks for the same spell or effect (<target> is the cast's target).
+    // Feeblemind and Domination are single-target spells, which Spell Turning,
+    // Spell Deflection, Spell Trap and Shield of the Archons stop or reflect;
+    // Chaos and SR's Hold Monster use area projectiles. Hold Monster also fails
+    // on free action, the hold-immune kits and the items RR's Hold Person
+    // blocks name, and on undead (RR's Chaos blocks already skip them).
+    // Domination also fails on the charm-immune items RR's Domination blocks
+    // name. Saving-throw thresholds and difficulty gates are tactics and stay.
+    OUTER_TEXT_SPRINT srcb_single_target_filters
+        ~!CheckStatGT(<target>,0,WIZARD_SPELL_TURNING)
+         !CheckStatGT(<target>,0,WIZARD_SPELL_DEFLECTION)
+         !CheckStatGT(<target>,0,WIZARD_SPELL_TRAP)
+         !CheckStat(<target>,1,CLERIC_SHIELD_OF_THE_ARCHONS)~
+    OUTER_TEXT_SPRINT srcb_domination_filters
+        ~%srcb_single_target_filters%
+         !HasItemEquiped("HELM06",<target>)
+         !HasItemEquiped("SHLD25",<target>)
+         !HasItemEquipedReal("SPER07",<target>)
+         !HasItemEquipedReal("SW1H35",<target>)
+         !HasItemEquipedReal("SW2H14",<target>)~
+    OUTER_TEXT_SPRINT srcb_hold_filters
+        ~!General(<target>,UNDEAD)
+         !CheckStatGT(<target>,0,CLERIC_FREE_ACTION)
+         !Kit(<target>,INQUISITOR)
+         !Kit(<target>,UNDEADHUNTER)
+         !HasItem("MORSWORD",<target>)
+         !HasItemEquiped("RING09",<target>)
+         !HasItemEquiped("SHLD25",<target>)
+         !HasItemEquipedReal("NPSW01",<target>)
+         !HasItemEquipedReal("SPER07",<target>)
+         !HasItemEquipedReal("SW1H27",<target>)
+         !HasItemEquipedReal("SW2H06",<target>)~
+    OUTER_TEXT_SPRINT srcb_single_target_stats
+        ~WIZARD_SPELL_TURNING WIZARD_SPELL_DEFLECTION WIZARD_SPELL_TRAP CLERIC_SHIELD_OF_THE_ARCHONS~
 
     ACTION_IF MOD_IS_INSTALLED ~rr/setup-rr.tp2~ 11 BEGIN
         OUTER_SET srcb_turning_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_SPELL_TURNING~)
@@ -553,41 +680,92 @@ BEGIN
             FAIL
                 ~SRCB_RR_COMPAT: SPELL.IDS has no WIZARD_SPELL_TURNING, so Selina's Spell Turning self-recast block cannot be identified.~
         END
-        ACTION_FOR_EACH srcb_creature IN ~RR#SELI~ ~RR#ZAER~ BEGIN
-            LAF srcb_rr_patch_cre_resource
-                INT_VAR source_level = srcb_source_level target_level = srcb_target_level
-                STR_VAR
-                    resource_name = EVAL ~%srcb_creature%~
-                    source_spell = EVAL ~%srcb_source_spell%~
-                    target_spell = EVAL ~%srcb_target_spell%~
-            END
+        LAF srcb_rr_resolve_replacement
+            INT_VAR old_number = srcb_source_number
+            STR_VAR symbol = ~WIZARD_DOMINATION~
+            RET srcb_domination_spell = spell srcb_domination_symbols = symbols
+        END
+        LAF srcb_rr_require_filter_symbols
+            STR_VAR ids = ~STATS~ symbols = EVAL ~%srcb_single_target_stats%~
+        END
+        // Selina, a sorcerer: Chaos becomes Domination, so her level-5 book
+        // keeps four different spells.
+        LAF srcb_rr_patch_cre_resource
+            INT_VAR source_level = srcb_source_level
+            STR_VAR
+                resource_name = ~RR#SELI~
+                source_spell = EVAL ~%srcb_source_spell%~
+                chaos_spell = EVAL ~%srcb_chaos_spell%~
+                replacement_spell = EVAL ~%srcb_domination_spell%~
         END
         LAF srcb_rr_patch_script_resource
             INT_VAR patch_selina_guard = 1 turning_number = srcb_turning_number
             STR_VAR
                 resource_name = ~RR#SELI~
-                source_symbols = EVAL ~%srcb_source_symbols%~
-                target_symbols = EVAL ~%srcb_target_symbols%~
+                old_symbols = EVAL ~%srcb_old_symbols%~
+                chaos_symbols = EVAL ~%srcb_chaos_symbols%~
+                replacement = ~WIZARD_DOMINATION~
+                replacement_symbols = EVAL ~%srcb_domination_symbols%~
+                filters = EVAL ~%srcb_domination_filters%~
         END
     END
 
     ACTION_IF MOD_IS_INSTALLED ~rr/setup-rr.tp2~ 12 BEGIN
-        ACTION_FOR_EACH srcb_creature IN ~RR#ARAN2~ ~RR#SAW09~ ~RR#SFL04~ BEGIN
-            LAF srcb_rr_patch_cre_resource
-                INT_VAR source_level = srcb_source_level target_level = srcb_target_level
-                STR_VAR
-                    resource_name = EVAL ~%srcb_creature%~
-                    source_spell = EVAL ~%srcb_source_spell%~
-                    target_spell = EVAL ~%srcb_target_spell%~
-            END
+        LAF srcb_rr_resolve_replacement
+            INT_VAR old_number = srcb_source_number
+            STR_VAR symbol = ~WIZARD_HOLD_MONSTER~
+            RET srcb_hold_spell = spell srcb_hold_symbols = symbols
         END
-        ACTION_FOR_EACH srcb_script IN ~RR#ARAN2~ ~RR#STM01~ BEGIN
-            LAF srcb_rr_patch_script_resource
-                STR_VAR
-                    resource_name = EVAL ~%srcb_script%~
-                    source_symbols = EVAL ~%srcb_source_symbols%~
-                    target_symbols = EVAL ~%srcb_target_symbols%~
-            END
+        LAF srcb_rr_resolve_replacement
+            INT_VAR old_number = srcb_source_number
+            STR_VAR symbol = ~WIZARD_FEEBLEMIND~
+            RET srcb_feeblemind_spell = spell srcb_feeblemind_symbols = symbols
+        END
+        LAF srcb_rr_require_filter_symbols
+            STR_VAR ids = ~STATS~ symbols = EVAL ~CLERIC_FREE_ACTION %srcb_single_target_stats%~
+        END
+        LAF srcb_rr_require_filter_symbols
+            STR_VAR ids = ~KIT~ symbols = ~INQUISITOR UNDEADHUNTER~
+        END
+        LAF srcb_rr_require_filter_symbols
+            STR_VAR ids = ~GENERAL~ symbols = ~UNDEAD~
+        END
+        // Aran: Hold Monster, cast by his own script RR#ARAN2.
+        LAF srcb_rr_patch_cre_resource
+            INT_VAR source_level = srcb_source_level
+            STR_VAR
+                resource_name = ~RR#ARAN2~
+                source_spell = EVAL ~%srcb_source_spell%~
+                chaos_spell = EVAL ~%srcb_chaos_spell%~
+                replacement_spell = EVAL ~%srcb_hold_spell%~
+        END
+        LAF srcb_rr_patch_script_resource
+            STR_VAR
+                resource_name = ~RR#ARAN2~
+                old_symbols = EVAL ~%srcb_old_symbols%~
+                chaos_symbols = EVAL ~%srcb_chaos_symbols%~
+                replacement = ~WIZARD_HOLD_MONSTER~
+                replacement_symbols = EVAL ~%srcb_hold_symbols%~
+                filters = EVAL ~%srcb_hold_filters%~
+        END
+        // RR#SFL04: Feeblemind, cast by its script RR#STM01, which already
+        // casts Feeblemind elsewhere.
+        LAF srcb_rr_patch_cre_resource
+            INT_VAR source_level = srcb_source_level
+            STR_VAR
+                resource_name = ~RR#SFL04~
+                source_spell = EVAL ~%srcb_source_spell%~
+                chaos_spell = EVAL ~%srcb_chaos_spell%~
+                replacement_spell = EVAL ~%srcb_feeblemind_spell%~
+        END
+        LAF srcb_rr_patch_script_resource
+            STR_VAR
+                resource_name = ~RR#STM01~
+                old_symbols = EVAL ~%srcb_old_symbols%~
+                chaos_symbols = EVAL ~%srcb_chaos_symbols%~
+                replacement = ~WIZARD_FEEBLEMIND~
+                replacement_symbols = EVAL ~%srcb_feeblemind_symbols%~
+                filters = EVAL ~%srcb_single_target_filters%~
         END
     END
 END

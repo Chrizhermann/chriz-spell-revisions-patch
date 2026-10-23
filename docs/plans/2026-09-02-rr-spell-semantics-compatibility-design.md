@@ -1,5 +1,9 @@
 # RR / Spell Revisions spell-semantics compatibility
 
+The decision of 2026-10-23 (last section) replaces the level-seven Chaos
+migration described in the earlier sections: Chaos stays at level 7, and RR's
+level-five copies become level-five spells.
+
 ## Scope
 
 Add a standalone WeiDU mini-mod that is installed after both Spell Revisions and
@@ -141,3 +145,97 @@ Limits: synthetic fixtures only; no new authentic-install or in-game check. A
 Waves of Fatigue reference that another mod added to these RR scripts before
 this component, in a script without any Chaos reference, cannot be told apart
 and becomes Chaos.
+
+## Decision, 2026-10-23: Chaos stays at level 7
+
+The BG2:EE 2.7.3.0 lab check of 2026-10-20 showed that the migration above
+leaves Aran Linvail (`RR#ARAN2`) and the Zhentarim Mercenary (`RR#SFL04`) unable
+to cast Chaos: their moved copies land behind their level-seven slot counters.
+An exception to the slot-cap rule, moving each copy's slot along to level 7, was
+proposed and not adopted. Christopher decided instead ("passt", 2026-10-23):
+
+- Chaos stays SR's level-seven spell. No copy and no slot moves; every slot
+  counter stays as it is (the slot-cap rule above still holds). Christopher
+  ruled out keeping RR's copies as Waves of Fatigue.
+- RR's prepared level-five Chaos copies, the `SPWI508` records in the level-five
+  wizard row, become a level-five spell where they stand, each with its own
+  flags: Hold Monster (`SPWI507`) for `RR#ARAN2`, Feeblemind (`SPWI509`) for
+  `RR#SFL04`, and Domination (`SPWI506`) for Selina (`RR#SELI`), so that she keeps
+  four different level-five spells.
+- Known-only old-slot records stay as they are. `RR#SAW09` (cleric/mage) and
+  `RR#ZAER` (fighter/mage/thief) know `SPWI508` but never prepare it; they are no
+  longer changed, and nothing moves to level-seven Chaos any more.
+- Every Chaos reference in the scripts names the replacement: `RR#ARAN2` Hold
+  Monster, `RR#STM01` (the script of `RR#SFL04`, which already casts Feeblemind
+  in blocks of its own) Feeblemind, `RR#SELI` Domination. Selina's opening Spell
+  Trigger casts Domination as its third spell.
+
+**A sorcerer's known record.** A wizard memorizes from a spellbook, and RR's
+wizards know more spells than they prepare, so their known records stay. A
+sorcerer casts from its known list: had Selina's known `SPWI508` stayed while her
+six copies became Domination, her level-five book would list Waves of Fatigue as
+a spell she casts. Her known record therefore changes with the copies (approved
+the same day). The rule is keyed by meaning, not by name: it applies to class 19,
+sorcerer, the engine's only class that casts wizard spells from its known list.
+When the replacement is already known, the old record is removed instead, so no
+spell is known twice. RR v4.92's Selina ends with level-five known `SPWI513`,
+`SPWI506`, `SPWI505`, `SPWI514` and six memorized copies of each; slots stay 6/6.
+
+**Script filters.** A retargeted block that picks a target and casts at it
+(`Spell`, `SpellNoDec`) keeps every filter it had for Chaos and gains what the
+replacement needs that Chaos did not, for the same target object, as RR checks
+it in its own blocks for that spell or effect:
+
+- Feeblemind and Domination are single-target spells, which Spell Turning, Spell
+  Deflection, Spell Trap and Shield of the Archons reflect or stop. RR's own
+  Feeblemind (`RR#STM01`) and Domination (`RR#STM02`) blocks skip such targets.
+  Chaos and SR's Hold Monster use area projectiles (Hold Monster `HOLD.PRO`),
+  which these protections do not stop.
+- Domination also skips the charm-protection items RR's Domination blocks name:
+  `HELM06`, `SHLD25`, `SPER07`, `SW1H35`, `SW2H14`.
+- Hold Monster also skips free action (`CLERIC_FREE_ACTION`), the hold-immune
+  Inquisitor and Undead Hunter kits, the items RR's Hold Person blocks name
+  (`MORSWORD`, `RING09`, `SHLD25`, `NPSW01`, `SPER07`, `SW1H27`, `SW2H06`), and
+  undead, which RR's Chaos blocks already skip.
+
+A filter a block already has is not added again; improved-invisible and disabled
+targets are already excluded by RR's `STATE_NOT_TARGETABLE` and `STATE_DISABLED`
+checks. Saving-throw thresholds and difficulty gates are tactics and stay as RR
+wrote them. A forced cast (Selina's Spell Trigger) is a scripted sequence and only
+changes its spell: a filter there would skip the whole sequence. Every IDS symbol
+the filters name must exist in the game first, because WeiDU can compile a
+missing symbol as 0.
+
+**Guards, each with a reason.** A creature naming both the old slot and Chaos (a
+later mod's intended Waves of Fatigue cannot be told apart); a script naming both
+(either could be RR's Chaos, depending on the compile order); a copy prepared
+outside the level-five wizard row; a copy shared with another level's row
+(renaming it would change that level too); a sorcerer knowing the old slot
+outside its level-five book; the CRE structure checks; the final `SPELL.IDS`
+levels of Waves of Fatigue, Chaos and the three replacements. A creature that
+prepares neither the old slot nor its replacement, and a script that names
+neither Chaos slot nor its replacement, are left unchanged with a warning; one
+already in the final state is left unchanged without one. The earlier guard
+against an empty or missing level-seven row is gone, since nothing moves there.
+
+Validation: `tests/test_rr_compat.py` has 53 real-WeiDU tests; 39 of them fail
+against the previous library. They cover the three creatures in both install
+orders, Selina's sorcerer book (known and memorized together, six copies), a
+sorcerer that already knows Domination, a sorcerer-shaped book of class mage,
+Aran's and the Zhentarim Mercenary's wizard books, the unchanged known-only
+creatures, creatures and scripts already changed by another mod, other copy
+counts and row layouts, filters already present, `SpellNoDec` and other targets,
+missing IDS symbols, replacements at the wrong level, and each component of RR
+alone. Local check, not part of the repository: RR v4.92's own five CREs and its
+three BAF sources, compiled for both install orders against the reference
+install's final IDS files with SR's spell files, in a disposable synthetic game.
+The three creatures got the books above (Aran memorizes `SPWI507` ×4 and
+`SPWI505`, the Zhentarim Mercenary `SPWI509` ×4 and `SPWI505`, known records
+unchanged); `RR#SAW09` and `RR#ZAER` stayed byte for byte; both orders gave the
+same files; a second pass was byte-exact; every script change stayed inside RR's
+Chaos blocks.
+
+Limits: no in-game check of the new spellbooks and casts yet. Creatures already
+spawned in a save keep their old books. A level-five Waves of Fatigue copy that a
+later mod deliberately prepared for these creatures, without any Chaos record,
+cannot be told apart from RR's Chaos and becomes the replacement.
