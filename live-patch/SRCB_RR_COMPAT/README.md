@@ -1,6 +1,6 @@
 # Rogue Rebalancing / Spell Revisions compatibility
 
-Version: v4.21-chriz.6
+Version: v4.21-chriz.7 (compatibility behavior unchanged from v4.21-chriz.6)
 
 Three Rogue Rebalancing v4.92 mages prepare Chaos in the level-5 slot that Spell
 Revisions gives to Waves of Fatigue; SR's Chaos is a level-7 spell. Their level-5
@@ -36,8 +36,11 @@ resources, not creatures already embedded in a save. Spellbook entries and scrip
 references are recognized by the spell they name, so other copy counts and extra
 Chaos branches are changed too. A creature or script naming both RR's old Chaos
 slot and SR's Chaos is rejected instead of guessed at; one naming neither, nor the
-replacement, is left unchanged with a warning. Re-running the installer offers
-uninstall, which restores the prior game resources.
+replacement, is left unchanged with a warning. While this component is the last
+entry in WeiDU.log, re-running the installer offers a reinstall, which updates it in
+place from a newer folder, and an uninstall, which restores the prior game resources.
+Deeper in a stack, do not reinstall or uninstall it: WeiDU 249 either skips the
+request or reinstalls every later component, which can drop some of them.
 
 ## Validation and scope
 

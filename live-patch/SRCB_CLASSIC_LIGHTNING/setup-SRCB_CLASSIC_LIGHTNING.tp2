@@ -1,6 +1,6 @@
 BACKUP ~weidu_external/backup/SRCB_CLASSIC_LIGHTNING~
 AUTHOR ~Chriz (https://github.com/Chrizhermann/chriz-spell-revisions-patch)~
-VERSION ~v4.21-chriz.6~
+VERSION ~v4.21-chriz.7~
 
 BEGIN ~Restore classic bouncing Lightning Bolt (with friendly fire)~ DESIGNATED 0
 SUBCOMPONENT ~Lightning Bolt behavior (skip for Spell Revisions)~

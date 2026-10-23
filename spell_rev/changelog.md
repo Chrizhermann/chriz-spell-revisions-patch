@@ -1,5 +1,23 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.7 (2026-10-24).
+
+Documentation-only correction of v4.21-chriz.6. Every component installs the same game
+resources as in v4.21-chriz.6; only the installers' version label changed.
+
+1. As shipped, the v4.21-chriz.6 release notes and the validation note of its changelog
+   entry below said that an installed `SRCB_RR_COMPAT` is updated by reinstalling
+   component 0. That is safe only while it is the last entry in WeiDU.log. Deeper in a
+   stack, do not reinstall it: WeiDU 249 either skips it or reinstalls every later
+   component, which can drop some of them.
+2. The `SRCB_RR_COMPAT` README gives the same limit for re-running its installer to
+   reinstall or uninstall the component.
+
+Validation: 198 tests passed with real WeiDU 249. Every test scenario, and a local check
+with RR v4.92's own creatures and scripts, left byte-identical game resources when
+installed from this release and from v4.21-chriz.6. The archives differ only in
+documentation and the three installers' version label.
+
 ## Fork version: v4.21-chriz.6 (2026-10-23).
 
 1. `SRCB_RR_COMPAT`: Chaos stays Spell Revisions' level-7 spell. Rogue Rebalancing
