@@ -26,9 +26,11 @@
 
 Validation: 198 tests passed with real WeiDU 249, including 53 SR/RR compatibility and
 88 Lightning Bolt tests. A local check applied the RR component to RR v4.92's own
-creatures and scripts in both orders and over a v4.21-chriz.5 installation of it. The
-level-5 replacements have not been checked in game yet. The main SR component,
-component 60 and the component menu are unchanged from v4.21-chriz.5.
+creatures and scripts in both orders, and over a v4.21-chriz.5 installation of it as
+the last WeiDU.log entry. Deeper in a stack, a WeiDU 249 reinstall skips the component
+or reinstalls every later one and can drop some of them, so it is not an update path
+there. The level-5 replacements have not been checked in game yet. The main SR
+component, component 60 and the component menu are unchanged from v4.21-chriz.5.
 
 ## Fork version: v4.21-chriz.5 (2026-09-16).
 
