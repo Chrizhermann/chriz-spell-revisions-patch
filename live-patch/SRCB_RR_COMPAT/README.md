@@ -2,10 +2,15 @@
 
 Version: v4.21-chriz.5
 
-Restores the intended Chaos in the spellbooks and scripts of five Rogue
-Rebalancing v4.92 mages, and corrects Selina's Spell Turning self-recast check for
-SR's Spell Deflection state. Memorized copies (prepared or already cast), spell-slot caps,
-and tactics are preserved. This does not redesign other spells or provide a general SCS patch.
+Three Rogue Rebalancing v4.92 mages prepare Chaos in the level-5 slot that Spell
+Revisions gives to Waves of Fatigue; SR's Chaos is a level-7 spell. Their level-5
+Chaos copies become a level-5 spell that their scripts cast instead: Hold Monster
+for Aran Linvail, Feeblemind for the Zhentarim Mercenary and Domination for Selina,
+each with the target checks that spell needs. Selina's Spell Turning self-recast
+check is corrected for SR's Spell Deflection state. Memorized copies (prepared or
+already cast), spell-slot caps, and the other tactics are preserved; Chaos itself
+stays SR's level-7 spell. This does not redesign other spells or provide a general
+SCS patch.
 
 ## Installation
 
@@ -29,16 +34,18 @@ Do not reinstall the main SR component mid-stack just to apply this patch.
 Install before first entering/spawning the affected encounters: it updates game
 resources, not creatures already embedded in a save. Spellbook entries and script
 references are recognized by the spell they name, so other copy counts and extra
-Chaos branches are migrated too. A creature or script naming both RR's old Chaos
-slot and the new Chaos is rejected instead of guessed at; one naming neither is
-left unchanged with a warning. Re-running the installer offers uninstall,
-which restores the prior game resources.
+Chaos branches are changed too. A creature or script naming both RR's old Chaos
+slot and SR's Chaos is rejected instead of guessed at; one naming neither, nor the
+replacement, is left unchanged with a warning. Re-running the installer offers
+uninstall, which restores the prior game resources.
 
 ## Validation and scope
 
-Verified with real WeiDU automated tests, authentic RR/SR installs in both orders,
-and a user-reported in-game spellbook/casting smoke test. Full hostile-encounter
-behavior and a wider SCS compatibility audit remain untested. Blindness, Deafness,
-Bigby's spells, and Infravision are not changed.
+Verified with real WeiDU automated tests and a local check with RR v4.92's own
+creatures and scripts in both install orders. The user-reported in-game smoke test
+of v4.21-chriz.4 predates the level-5 replacements; the new spellbooks and casts
+have not been checked in game yet. Full hostile-encounter behavior and a wider SCS
+compatibility audit remain untested. Blindness, Deafness, Bigby's spells, and
+Infravision are not changed.
 
 [Source, tests, and detailed notes](https://github.com/Chrizhermann/chriz-spell-revisions-patch)

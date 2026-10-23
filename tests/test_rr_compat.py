@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import struct
 import tempfile
@@ -28,7 +29,8 @@ LIBRARY = LIVE_ROOT / "lib" / "rr_spell_semantics.tpa"
 HARNESS = ROOT / "tests" / "weidu" / "rr_compat_harness.tp2"
 
 OLD_RESREF = "SPWI508"
-FINAL_RESREF = "SPWI711"
+CHAOS_RESREF = "SPWI711"
+SORCERER = 19
 COUNTS = {
     "RR#SELI": 6,
     "RR#ZAER": 0,
@@ -36,22 +38,84 @@ COUNTS = {
     "RR#SAW09": 0,
     "RR#SFL04": 2,
 }
+SORCERERS = {"RR#SELI"}
+# Christopher's decision, 2026-10-23: Chaos stays SR's level-7 spell. These
+# level-5 spells take the prepared Chaos copies, and the scripts cast them.
+# RR#ZAER and RR#SAW09 only know the old slot and are not changed.
+REPLACEMENTS = {"RR#SELI": "SPWI506", "RR#ARAN2": "SPWI507", "RR#SFL04": "SPWI509"}
 SCRIPT_COUNTS = {"RR#SELI": 17, "RR#ARAN2": 13, "RR#STM01": 12}
+CASTING_BLOCKS = {"RR#SELI": 8, "RR#ARAN2": 6, "RR#STM01": 6}
+SCRIPT_REPLACEMENTS = {
+    "RR#SELI": "WIZARD_DOMINATION",
+    "RR#ARAN2": "WIZARD_HOLD_MONSTER",
+    "RR#STM01": "WIZARD_FEEBLEMIND",
+}
+# RR#STM01 casts Feeblemind already in a block of its own.
+NATIVE_REFERENCES = {"RR#STM01": 2}
+
+TARGET = "LastSeenBy(Myself)"
+# Filters of RR's Chaos blocks; they stay for the replacement.
+CHAOS_FILTERS = (
+    "!General({t},UNDEAD)",
+    "!CheckStatGT({t},0,CLERIC_CHAOTIC_COMMANDS)",
+    '!HasItemEquiped("SHLD25",{t})',
+)
+# What each replacement needs that Chaos did not (rr_spell_semantics.tpa).
+SINGLE_TARGET_FILTERS = (
+    "!CheckStatGT({t},0,WIZARD_SPELL_TURNING)",
+    "!CheckStatGT({t},0,WIZARD_SPELL_DEFLECTION)",
+    "!CheckStatGT({t},0,WIZARD_SPELL_TRAP)",
+    "!CheckStat({t},1,CLERIC_SHIELD_OF_THE_ARCHONS)",
+)
+DOMINATION_FILTERS = SINGLE_TARGET_FILTERS + (
+    '!HasItemEquiped("HELM06",{t})',
+    '!HasItemEquiped("SHLD25",{t})',
+    '!HasItemEquipedReal("SPER07",{t})',
+    '!HasItemEquipedReal("SW1H35",{t})',
+    '!HasItemEquipedReal("SW2H14",{t})',
+)
+HOLD_FILTERS = (
+    "!General({t},UNDEAD)",
+    "!CheckStatGT({t},0,CLERIC_FREE_ACTION)",
+    "!Kit({t},INQUISITOR)",
+    "!Kit({t},UNDEADHUNTER)",
+    '!HasItem("MORSWORD",{t})',
+    '!HasItemEquiped("RING09",{t})',
+    '!HasItemEquiped("SHLD25",{t})',
+    '!HasItemEquipedReal("NPSW01",{t})',
+    '!HasItemEquipedReal("SPER07",{t})',
+    '!HasItemEquipedReal("SW1H27",{t})',
+    '!HasItemEquipedReal("SW2H06",{t})',
+)
+SCRIPT_FILTERS = {
+    "RR#SELI": DOMINATION_FILTERS,
+    "RR#ARAN2": HOLD_FILTERS,
+    "RR#STM01": SINGLE_TARGET_FILTERS,
+}
 
 CURRENT_SPELL_IDS = """IDS V1.0
+2506 WIZARD_DOMINATION
+2507 WIZARD_HOLD_MONSTER
 2508 WIZARD_WAVES_OF_FATIGUE
+2509 WIZARD_FEEBLEMIND
 2701 WIZARD_SPELL_TURNING
 2711 WIZARD_CHAOS
 2711 WIZARD_SPHERE_OF_CHAOS
 """
 CURRENT_SPELL_IDS_CHAOS_LAST = """IDS V1.0
+2506 WIZARD_DOMINATION
+2507 WIZARD_HOLD_MONSTER
 2508 WIZARD_WAVES_OF_FATIGUE
+2509 WIZARD_FEEBLEMIND
 2701 WIZARD_SPELL_TURNING
 2711 WIZARD_SPHERE_OF_CHAOS
 2711 WIZARD_CHAOS
 """
 VANILLA_SPELL_IDS = """IDS V1.0
+2506 WIZARD_DOMINATION
+2507 WIZARD_HOLD_MONSTER
 2508 WIZARD_CHAOS
+2509 WIZARD_FEEBLEMIND
 2701 WIZARD_SPELL_TURNING
 2711 WIZARD_SPHERE_OF_CHAOS
 """
@@ -73,11 +137,11 @@ def _resref(data: bytes, offset: int) -> str:
     return data[offset : offset + 8].split(b"\0", 1)[0].decode("ascii").upper()
 
 
-def _make_rr_cre(old_copies: int, *, mixed: bool = False) -> bytes:
+def _make_rr_cre(old_copies: int, *, mixed: bool = False, sorcerer: bool = False) -> bytes:
     """Build RR's relevant spellbook shape plus unrelated level-five/seven spells."""
     known = (("ZZFIVE", 4), (OLD_RESREF, 4), ("ZZSEVEN", 6))
     if mixed:
-        known += ((FINAL_RESREF, 6),)
+        known += ((CHAOS_RESREF, 6),)
     level_five = ["ZZMEMA", *([OLD_RESREF] * old_copies)]
     level_seven = ["ZZMEMB"]
     memorized = level_five + level_seven
@@ -90,6 +154,8 @@ def _make_rr_cre(old_copies: int, *, mixed: bool = False) -> bytes:
     data = bytearray(end_offset)
     data[:8] = b"CRE V1.0"
     data[0x33] = 0
+    if sorcerer:
+        data[0x273] = SORCERER
     for field_offset, value in (
         (0x2A0, known_offset),
         (0x2A4, len(known)),
@@ -182,58 +248,88 @@ def _memorization_caps(data: bytes) -> dict[int, tuple[int, int]]:
     return result
 
 
-def _write_script_ids(root: Path, spell_ids: str) -> None:
-    files = {
+def _script_ids(spell_ids: str) -> dict[str, str]:
+    return {
         "ACTION.IDS": """90
+0 NoAction()
 31 Spell(O:Target*,I:Spell*Spell)
 181 ReallyForceSpell(O:Target,I:Spell*Spell)
+191 SpellNoDec(O:Target*,I:Spell*Spell)
 """,
         "TRIGGER.IDS": """IDS V1.0
 0x4000 True()
+0x400E General(O:Object*,I:General*General)
 0x4031 HaveSpell(I:Spell*Spell)
+0x4044 CheckStat(O:Object*,I:Value*,I:StatNum*Stats)
 0x4045 CheckStatGT(O:Object*,I:Value*,I:StatNum*Stats)
+0x4061 HasItem(S:ResRef*,O:Object*)
+0x407F HasItemEquiped(S:ResRef*,O:Object*)
+0x40BB Kit(O:Object*,I:Kit*KIT)
+0x40C2 HasItemEquipedReal(S:ResRef*,O:Object*)
 """,
-        "OBJECT.IDS": "IDS V1.0\n0 Nothing\n1 Myself\n",
+        "OBJECT.IDS": "IDS V1.0\n0 Nothing\n1 Myself\n12 NearestEnemyOf\n18 LastSeenBy\n21 Player1\n",
         "STATS.IDS": """IDS V1.0
 116 WIZARD_SPELL_DEFLECTION
+119 CLERIC_CHAOTIC_COMMANDS
+123 CLERIC_SHIELD_OF_THE_ARCHONS
 129 WIZARD_SPELL_TURNING
+131 CLERIC_FREE_ACTION
+164 WIZARD_SPELL_TRAP
 """,
+        "KIT.IDS": "IDS V1.0\n0x4005 INQUISITOR\n0x4006 UNDEADHUNTER\n",
         "SPELL.IDS": spell_ids,
-        "GENERAL.IDS": "IDS V1.0\n0 GENERAL_NONE\n",
+        "GENERAL.IDS": "IDS V1.0\n0 GENERAL_NONE\n4 UNDEAD\n",
         "RACE.IDS": "IDS V1.0\n0 NO_RACE\n",
         "CLASS.IDS": "IDS V1.0\n0 NO_CLASS\n",
         "SPECIFIC.IDS": "IDS V1.0\n0 SPECIFIC_NONE\n",
         "GENDER.IDS": "IDS V1.0\n0 GENDER_NONE\n",
         "ALIGN.IDS": "IDS V1.0\n0 NO_ALIGNMENT\n",
     }
+
+
+GAME_IDS = ("SPELL", "ACTION", "TRIGGER", "OBJECT", "STATS", "KIT", "GENERAL")
+
+
+def _write_script_ids(root: Path, spell_ids: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    for name, text in files.items():
+    for name, text in _script_ids(spell_ids).items():
         (root / name).write_text(text, encoding="ascii", newline="\n")
 
 
-def _chaos_blocks(pair_count: int) -> str:
-    blocks = []
-    for _ in range(pair_count):
-        blocks.append(
-            """IF
-  HaveSpell(WIZARD_CHAOS)
-THEN
-  RESPONSE #100
-    Spell(Myself,WIZARD_CHAOS)
-END
-"""
-        )
-    return "\n".join(blocks)
+def _chaos_block(target: str = TARGET, action: str = "Spell", extra: tuple[str, ...] = ()) -> str:
+    """One of RR's Chaos casting blocks: availability, target filters, cast."""
+    triggers = ("HaveSpell(WIZARD_CHAOS)", *(f.format(t=target) for f in CHAOS_FILTERS), *extra)
+    return (
+        "IF\n"
+        + "".join(f"  {trigger}\n" for trigger in triggers)
+        + f"THEN\n  RESPONSE #100\n    {action}({target},WIZARD_CHAOS)\nEND\n"
+    )
+
+
+def _chaos_blocks(count: int) -> str:
+    return "\n".join(_chaos_block() for _ in range(count))
+
+
+FEEBLEMIND_TRIGGERS = [
+    "HaveSpell(WIZARD_FEEBLEMIND)",
+    *(f.format(t=TARGET) for f in SINGLE_TARGET_FILTERS),
+]
+FEEBLEMIND_BLOCK = (
+    "IF\n"
+    + "".join(f"  {trigger}\n" for trigger in FEEBLEMIND_TRIGGERS)
+    + f"THEN\n  RESPONSE #100\n    Spell({TARGET},WIZARD_FEEBLEMIND)\nEND\n"
+)
 
 
 def _script_source(name: str) -> str:
     if name == "RR#SELI":
+        # Her opening Spell Trigger forces Chaos as its third spell.
         return (
             """IF
   True()
 THEN
   RESPONSE #100
-    ReallyForceSpell(Myself,WIZARD_CHAOS)
+    ReallyForceSpell(Player1,WIZARD_CHAOS)
 END
 
 """
@@ -256,16 +352,17 @@ END
 """
         )
     if name == "RR#ARAN2":
+        # Another of his blocks asks whether he still has Chaos.
         return """IF
-  True()
+  !HaveSpell(WIZARD_CHAOS)
 THEN
   RESPONSE #100
-    ReallyForceSpell(Myself,WIZARD_CHAOS)
+    NoAction()
 END
 
 """ + _chaos_blocks(6)
     if name == "RR#STM01":
-        return _chaos_blocks(6)
+        return _chaos_blocks(6) + "\n" + FEEBLEMIND_BLOCK
     raise AssertionError(name)
 
 
@@ -279,6 +376,7 @@ def _compile_baf(source: str, ids_root: Path, stem: str) -> bytes:
             cwd=scratch,
         )
         assert process.returncode == 0, transcript(process)
+        assert "ERROR" not in transcript(process), transcript(process)
         return (scratch / f"{stem}.bcs").read_bytes()
 
 
@@ -304,28 +402,39 @@ def _make_game(
     compile_spell_ids: str | None = None,
     cres: dict[str, bytes | None] | None = None,
     scripts: dict[str, str | None] | None = None,
+    game_ids: dict[str, str] | None = None,
+    spells: dict[str, bytes] | None = None,
 ) -> tuple[FakeGame, Path]:
-    """``cres``/``scripts`` replace a resource; ``None`` leaves it out of the game."""
+    """``cres``/``scripts`` replace a resource; ``None`` leaves it out of the game.
+
+    ``game_ids`` replaces an IDS file in the game only; ``spells`` replaces an SPL.
+    """
     compile_ids_root = tmp_path / ("compile-current" if rr_after_sr else "compile-vanilla")
     verify_ids_root = tmp_path / "verify-current"
     if compile_spell_ids is None:
         compile_spell_ids = current_spell_ids if rr_after_sr else VANILLA_SPELL_IDS
     _write_script_ids(compile_ids_root, compile_spell_ids)
     _write_script_ids(verify_ids_root, current_spell_ids)
-    resources: list[tuple[str, str, bytes]] = [
-        ("OH6000", "ARE", b"synthetic BG2EE marker"),
-        ("SPELL", "IDS", current_spell_ids.encode("ascii")),
-        ("ACTION", "IDS", (verify_ids_root / "ACTION.IDS").read_bytes()),
-        ("TRIGGER", "IDS", (verify_ids_root / "TRIGGER.IDS").read_bytes()),
-        ("OBJECT", "IDS", (verify_ids_root / "OBJECT.IDS").read_bytes()),
-        ("STATS", "IDS", (verify_ids_root / "STATS.IDS").read_bytes()),
-        (OLD_RESREF, "SPL", _wizard_spell(5)),
-        (FINAL_RESREF, "SPL", _wizard_spell(7)),
-    ]
+    game_ids = game_ids or {}
+    resources: list[tuple[str, str, bytes]] = [("OH6000", "ARE", b"synthetic BG2EE marker")]
+    for name in GAME_IDS:
+        text = game_ids.get(f"{name}.IDS")
+        data = (verify_ids_root / f"{name}.IDS").read_bytes() if text is None else text.encode("ascii")
+        resources.append((name, "IDS", data))
+    game_spells = {
+        OLD_RESREF: _wizard_spell(5),
+        CHAOS_RESREF: _wizard_spell(7),
+        **{resref: _wizard_spell(5) for resref in REPLACEMENTS.values()},
+        **(spells or {}),
+    }
+    resources.extend((resref, "SPL", data) for resref, data in game_spells.items())
     cres = cres or {}
     scripts = scripts or {}
     for name, count in COUNTS.items():
-        data = cres.get(name, _make_rr_cre(count, mixed=mixed_cre and name == "RR#SELI"))
+        data = cres.get(
+            name,
+            _make_rr_cre(count, mixed=mixed_cre and name == "RR#SELI", sorcerer=name in SORCERERS),
+        )
         if data is not None:
             resources.append((name, "CRE", data))
     game = FakeGame(tmp_path / "game", tuple(resources))
@@ -362,39 +471,96 @@ def _install_public(game: FakeGame):
     return game.install("SRCB_RR_COMPAT/setup-SRCB_RR_COMPAT.tp2", 0)
 
 
+def _decompiled(game: FakeGame, ids_root: Path, name: str) -> str:
+    path = game.override_file(f"{name}.BCS")
+    assert path is not None
+    return _decompile_bcs(path, ids_root)
+
+
+def _chaos_count(text: str) -> int:
+    return text.count("WIZARD_CHAOS)") + text.count("WIZARD_SPHERE_OF_CHAOS)")
+
+
+def _references(text: str, symbol: str) -> int:
+    return len(re.findall(rf"[(,]{re.escape(symbol)}[),]", text))
+
+
+def _blocks(text: str) -> list[tuple[list[str], str]]:
+    """(trigger lines without the decompiler's comments, response text) of each block."""
+    return [
+        (
+            [line.split("//", 1)[0].strip() for line in match.group(1).splitlines()
+             if line.split("//", 1)[0].strip()],
+            match.group(2),
+        )
+        for match in re.finditer(r"^IF\s*$(.*?)^THEN\s*$(.*?)^END\s*$", text, flags=re.S | re.M)
+    ]
+
+
+def _casts(actions: str, symbol: str, target: str = TARGET) -> bool:
+    return re.search(rf"\b(Spell|SpellNoDec)\({re.escape(target)},{symbol}\)", actions) is not None
+
+
+def _expected_triggers(name: str, target: str = TARGET, extra: tuple[str, ...] = ()) -> list[str]:
+    """A retargeted Chaos block: its own triggers, then the missing filters in order."""
+    kept = [*(f.format(t=target) for f in CHAOS_FILTERS), *extra]
+    added = [f.format(t=target) for f in SCRIPT_FILTERS[name] if f.format(t=target) not in kept]
+    return [f"HaveSpell({SCRIPT_REPLACEMENTS[name]})", *kept, *added]
+
+
+def _assert_retargeted(text: str, name: str, chaos_references: int) -> int:
+    """No Chaos is left; each retargeted cast block has exactly its expected triggers."""
+    replacement = SCRIPT_REPLACEMENTS[name]
+    assert "WIZARD_WAVES_OF_FATIGUE" not in text, text
+    assert _chaos_count(text) == 0, text
+    assert _references(text, replacement) == chaos_references + NATIVE_REFERENCES.get(name, 0), text
+    filters = {f.format(t=TARGET) for f in SCRIPT_FILTERS[name]}
+    retargeted = 0
+    for triggers, actions in _blocks(text):
+        if not _casts(actions, replacement):
+            # Forced casts and other references gain no target filters.
+            assert not filters & set(triggers), text
+            continue
+        if triggers == FEEBLEMIND_TRIGGERS:
+            continue  # RR#STM01's own Feeblemind block, unchanged
+        assert triggers == _expected_triggers(name), text
+        retargeted += 1
+    return retargeted
+
+
 def _assert_final_resources(game: FakeGame, ids_root: Path) -> None:
     for name, old_count in COUNTS.items():
         path = game.override_file(f"{name}.CRE")
+        replacement = REPLACEMENTS.get(name)
+        if replacement is None:
+            assert path is None, name
+            continue
         assert path is not None
         data = path.read_bytes()
-        known = _known_spells(data)
-        assert Counter(known) == Counter(
-            (("ZZFIVE", 4, 1), (FINAL_RESREF, 6, 1), ("ZZSEVEN", 6, 1))
-        )
+        known_five = replacement if name in SORCERERS else OLD_RESREF
+        assert _known_spells(data) == [("ZZFIVE", 4, 1), (known_five, 4, 1), ("ZZSEVEN", 6, 1)]
         memorized = _memorized_by_level(data)
-        assert memorized[4] == [("ZZMEMA", 1)]
-        assert Counter(memorized[6]) == Counter(
-            [("ZZMEMB", 1), *((FINAL_RESREF, 1),) * old_count]
-        )
+        assert memorized[4] == [("ZZMEMA", 1), *((replacement, 1),) * old_count]
+        assert memorized[6] == [("ZZMEMB", 1)]
         assert _memorization_caps(data) == {
             4: (max(1, old_count + 1), 0),
             6: (1, 0),
         }
 
-    for name, expected_count in SCRIPT_COUNTS.items():
-        path = game.override_file(f"{name}.BCS")
-        assert path is not None
-        text = _decompile_bcs(path, ids_root)
-        assert (
-            text.count("WIZARD_CHAOS") + text.count("WIZARD_SPHERE_OF_CHAOS")
-            == expected_count
-        )
-        assert "WIZARD_WAVES_OF_FATIGUE" not in text
-    selina = _decompile_bcs(game.override_file("RR#SELI.BCS"), ids_root)  # type: ignore[arg-type]
+    for name, chaos_references in SCRIPT_COUNTS.items():
+        text = _decompiled(game, ids_root, name)
+        assert _assert_retargeted(text, name, chaos_references) == CASTING_BLOCKS[name]
+    selina = _decompiled(game, ids_root, "RR#SELI")
     assert selina.count("!CheckStatGT(Myself,0,WIZARD_SPELL_DEFLECTION)") == 1
     assert "!CheckStatGT(Myself,0,WIZARD_SPELL_TURNING)" not in selina
-    assert selina.count("WIZARD_SPELL_TURNING") == 4
+    turning_filter = f"!CheckStatGT({TARGET},0,WIZARD_SPELL_TURNING)"
+    assert selina.count("WIZARD_SPELL_TURNING") - selina.count(turning_filter) == 4
     assert "CheckStatGT(Myself,1,WIZARD_SPELL_TURNING)" in selina
+    opening = _blocks(selina)[0]
+    assert opening == (["True()"], opening[1])
+    assert "ReallyForceSpell(Player1,WIZARD_DOMINATION)" in opening[1]
+    aran = _blocks(_decompiled(game, ids_root, "RR#ARAN2"))[0]
+    assert aran[0] == ["!HaveSpell(WIZARD_HOLD_MONSTER)"]
 
 
 @pytest.mark.parametrize(
@@ -431,29 +597,9 @@ def test_repeated_production_action_is_byte_exact(tmp_path: Path) -> None:
     once = once_game.override_tree()
 
     game, ids_root = _make_game(tmp_path / "twice", rr_after_sr=False)
-    _mark_dependencies(game)
-    shutil.copy2(HARNESS, game.root / HARNESS.name)
-    (game.root / "SRCB_RR_COMPAT" / "lib").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(LIBRARY, game.root / "SRCB_RR_COMPAT" / "lib" / LIBRARY.name)
-    process = run_weidu(
-        [
-            HARNESS.name,
-            "--game",
-            str(game.root),
-            "--force-install-list",
-            "0",
-            "--args",
-            "SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa",
-            "--language",
-            "0",
-            "--use-lang",
-            "en_US",
-            "--no-exit-pause",
-            "--quick-log",
-        ],
-        cwd=game.root,
-    )
+    process = _install_twice(game)
     assert_installed(process)
+    assert "INSTALLED WITH WARNINGS" not in transcript(process), transcript(process)
     _assert_final_resources(game, ids_root)
     assert game.override_tree() == once
 
@@ -472,8 +618,8 @@ def test_final_chaos_alias_order_is_irrelevant(tmp_path: Path, spell_ids: str) -
 @pytest.mark.parametrize(
     ("component", "patched_creatures", "patched_scripts"),
     (
-        (11, {"RR#SELI", "RR#ZAER"}, {"RR#SELI"}),
-        (12, {"RR#ARAN2", "RR#SAW09", "RR#SFL04"}, {"RR#ARAN2", "RR#STM01"}),
+        (11, {"RR#SELI"}, {"RR#SELI"}),
+        (12, {"RR#ARAN2", "RR#SFL04"}, {"RR#ARAN2", "RR#STM01"}),
     ),
 )
 def test_each_rr_component_patches_only_its_own_resources(
@@ -495,8 +641,7 @@ def test_each_rr_component_patches_only_its_own_resources(
         assert path is not None
         if name in patched_scripts:
             assert path.read_bytes() != before[f"{name}.BCS"]
-            text = _decompile_bcs(path, ids_root)
-            assert "WIZARD_WAVES_OF_FATIGUE" not in text
+            _assert_retargeted(_decompile_bcs(path, ids_root), name, SCRIPT_COUNTS[name])
         else:
             assert path.read_bytes() == before[f"{name}.BCS"]
 
@@ -518,10 +663,12 @@ def test_public_component_requires_both_mods(
 
 def test_mixed_cre_shape_fails_closed(tmp_path: Path) -> None:
     game, _ = _make_game(tmp_path, rr_after_sr=False, mixed_cre=True)
+    before = game.override_tree()
     process = _install_public(game)
     text = transcript(process)
     assert "NOT INSTALLED DUE TO ERRORS" in text, text
-    assert "RR#SELI" in text
+    assert f"RR#SELI.CRE names both {OLD_RESREF}" in text, text
+    assert game.override_tree() == before
 
 
 # Valid alternate layouts (compatibility policy, 2026-10-17): RR's records are
@@ -534,11 +681,15 @@ def _build_cre(
     known: list[tuple[str, int, int]],
     rows: list[Row],
     layout: list[int] | None = None,
+    *,
+    class_id: int = 0,
+    items: int = 0,
 ) -> bytes:
     """CRE V1.0 with known spells and memorization rows.
 
     ``rows`` are (level, type, maximum, current, [(resref, flags), ...]) in
     table order; ``layout`` is the physical order of their prepared records.
+    ``items`` patterned item records follow the item slots.
     """
     layout = list(range(len(rows))) if layout is None else layout
     assert sorted(layout) == list(range(len(rows)))
@@ -551,9 +702,11 @@ def _build_cre(
         firsts[index] = len(memorized)
         memorized.extend(rows[index][4])
     slots_offset = memorized_offset + len(memorized) * 0x0C
-    end_offset = slots_offset + 0x50
+    items_offset = slots_offset + 0x50
+    end_offset = items_offset + items * 0x14
     data = bytearray(end_offset)
     data[:8] = b"CRE V1.0"
+    data[0x273] = class_id
     for field_offset, value in (
         (0x2A0, known_offset),
         (0x2A4, len(known)),
@@ -562,8 +715,8 @@ def _build_cre(
         (0x2B0, memorized_offset),
         (0x2B4, len(memorized)),
         (0x2B8, slots_offset),
-        (0x2BC, end_offset),
-        (0x2C0, 0),
+        (0x2BC, items_offset),
+        (0x2C0, items),
         (0x2C4, end_offset),
         (0x2C8, 0),
     ):
@@ -585,8 +738,10 @@ def _build_cre(
         offset = memorized_offset + index * 0x0C
         _put_resref(data, offset, spell)
         _put_u32(data, offset + 8, flags)
-    for offset in range(slots_offset, end_offset, 2):
+    for offset in range(slots_offset, items_offset, 2):
         _put_u16(data, offset, 0xFFFF)
+    for offset in range(items_offset, end_offset):
+        data[offset] = (offset * 7 + 3) & 0xFF
     return bytes(data)
 
 
@@ -620,18 +775,28 @@ def _assert_only_spellbook_changed(before: bytes, after: bytes) -> None:
     assert after[slots_offset:] == before[slots_offset:]
 
 
-def _migrated_rows(rows: list[Row]) -> list[Row]:
-    """Expected rows: old-slot copies leave level 5 and join level 7, flags kept."""
-    moved = [(FINAL_RESREF, flags) for spell, flags in
-             next(r for r in rows if r[:2] == (4, 1))[4] if spell == OLD_RESREF]
-    result = []
-    for level, kind, maximum, current, entries in rows:
-        if (level, kind) == (4, 1):
-            entries = [e for e in entries if e[0] != OLD_RESREF]
-        if (level, kind) == (6, 1):
-            entries = entries + moved
-        result.append((level, kind, maximum, current, entries))
-    return result
+def _assert_known_record_removed(before: bytes, after: bytes) -> None:
+    """One known record less; every later table moved with its contents."""
+    assert len(after) == len(before) - 0x0C
+    assert after[:0x2A0] == before[:0x2A0]
+    assert after[0x2CC:0x2D4] == before[0x2CC:0x2D4]
+    assert struct.unpack_from("<I", after, 0x2A4)[0] == struct.unpack_from("<I", before, 0x2A4)[0] - 1
+    for field in (0x2A8, 0x2B0, 0x2B8, 0x2BC, 0x2C4):
+        assert struct.unpack_from("<I", after, field)[0] == struct.unpack_from("<I", before, field)[0] - 0x0C
+    for field in (0x2AC, 0x2B4, 0x2C0, 0x2C8):
+        assert struct.unpack_from("<I", after, field)[0] == struct.unpack_from("<I", before, field)[0]
+    old_slots = struct.unpack_from("<I", before, 0x2B8)[0]
+    assert after[old_slots - 0x0C :] == before[old_slots:]
+
+
+def _replaced_rows(rows: list[Row], replacement: str) -> list[Row]:
+    """Expected rows: old-slot copies at level 5 become the replacement, flags kept."""
+    return [
+        (level, kind, maximum, current,
+         [(replacement if (level, kind) == (4, 1) and spell == OLD_RESREF else spell, flags)
+          for spell, flags in entries])
+        for level, kind, maximum, current, entries in rows
+    ]
 
 
 def _full_book(flags: tuple[int, ...]) -> tuple[list[tuple[str, int, int]], list[Row]]:
@@ -648,93 +813,200 @@ def _full_book(flags: tuple[int, ...]) -> tuple[list[tuple[str, int, int]], list
     return known, rows
 
 
+@pytest.mark.parametrize("caster", ("wizard", "sorcerer"))
 @pytest.mark.parametrize("layout", ("table-order", "level-7-first"))
-def test_full_spellbook_moves_only_old_slot_copies_with_flags(tmp_path: Path, layout: str) -> None:
+def test_full_spellbook_renames_only_old_slot_copies_with_flags(
+    tmp_path: Path, layout: str, caster: str
+) -> None:
     known, rows = _full_book((1, 0, 3))
     order = list(range(len(rows)))
     if layout == "level-7-first":
         order = list(reversed(order))
-    before = _build_cre(known, rows, order)
+    before = _build_cre(known, rows, order, class_id=SORCERER if caster == "sorcerer" else 1, items=2)
     game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": before})
     assert_installed(_install_public(game))
     after = _cre_after(game, "RR#SELI")
     assert after is not None
     _assert_only_spellbook_changed(before, after)
-    assert _rows(after) == _migrated_rows(rows)
+    assert _rows(after) == _replaced_rows(rows, "SPWI506")
+    known_five = "SPWI506" if caster == "sorcerer" else OLD_RESREF
     assert _known_spells(after) == [
-        ("ZZPRIEST", 0, 0), (FINAL_RESREF, 6, 1), ("ZZSEVEN", 6, 1), ("ZZINNATE", 0, 2)
+        ("ZZPRIEST", 0, 0), (known_five, 4, 1), ("ZZSEVEN", 6, 1), ("ZZINNATE", 0, 2)
     ]
 
 
-def test_other_copy_counts_are_migrated(tmp_path: Path) -> None:
-    counts = {"RR#SELI": 5, "RR#ZAER": 0, "RR#ARAN2": 1, "RR#SAW09": 3, "RR#SFL04": 0}
+def _selina_book(*, knows_domination: bool = False, class_id: int = SORCERER) -> tuple[bytes, list[Row]]:
+    """RR v4.92's Selina: a sorcerer with four level-5 spells, six slots each."""
+    known = [("SPWI401", 3, 1), ("SPWI513", 4, 1), (OLD_RESREF, 4, 1), ("SPWI505", 4, 1),
+             ("SPWI514", 4, 1), ("SPWI607", 5, 1)]
+    level_five = ([("SPWI513", 1)] * 6 + [(OLD_RESREF, 1)] * 6
+                  + [("SPWI514", 1)] * 6 + [("SPWI505", 1)] * 6)
+    if knows_domination:
+        known.insert(2, ("SPWI506", 4, 1))
+        level_five += [("SPWI506", 1)] * 6
+    rows: list[Row] = [
+        (3, 1, 6, 6, [("SPWI401", 1)] * 6),
+        (4, 1, 6, 6, level_five),
+        (5, 1, 5, 4, [("SPWI607", 1)] * 4 + [("SPWI607", 0)]),
+    ]
+    return _build_cre(known, rows, class_id=class_id, items=3), rows
+
+
+def _level_five_known(data: bytes) -> list[str]:
+    return [spell for spell, level, kind in _known_spells(data) if (level, kind) == (4, 1)]
+
+
+def test_sorcerer_known_record_changes_with_its_prepared_copies(tmp_path: Path) -> None:
+    before, rows = _selina_book()
+    game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": before})
+    assert_installed(_install_public(game))
+    after = _cre_after(game, "RR#SELI")
+    assert after is not None
+    _assert_only_spellbook_changed(before, after)
+    assert _level_five_known(after) == ["SPWI513", "SPWI506", "SPWI505", "SPWI514"]
+    level_five = _rows(after)[1]
+    assert level_five[:4] == (4, 1, 6, 6)
+    assert [spell for spell, _ in level_five[4]] == (
+        ["SPWI513"] * 6 + ["SPWI506"] * 6 + ["SPWI514"] * 6 + ["SPWI505"] * 6
+    )
+    # Known and memorized agree: each known spell has the level's six copies.
+    assert Counter(spell for spell, _ in level_five[4]) == {
+        spell: 6 for spell in _level_five_known(after)
+    }
+    assert _rows(after) == _replaced_rows(rows, "SPWI506")
+
+
+def test_sorcerer_who_knows_the_replacement_loses_the_old_record(tmp_path: Path) -> None:
+    before, rows = _selina_book(knows_domination=True)
+    game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": before})
+    assert_installed(_install_public(game))
+    after = _cre_after(game, "RR#SELI")
+    assert after is not None
+    _assert_known_record_removed(before, after)
+    assert _level_five_known(after) == ["SPWI513", "SPWI506", "SPWI505", "SPWI514"]
+    assert [spell for spell, _, _ in _known_spells(after)].count("SPWI506") == 1
+    assert _rows(after) == _replaced_rows(rows, "SPWI506")
+
+
+def test_wizard_with_a_sorcerer_shaped_book_keeps_its_known_records(tmp_path: Path) -> None:
+    before, rows = _selina_book(class_id=1)
+    game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": before})
+    assert_installed(_install_public(game))
+    after = _cre_after(game, "RR#SELI")
+    assert after is not None
+    _assert_only_spellbook_changed(before, after)
+    assert _known_spells(after) == _known_spells(before)
+    assert _rows(after) == _replaced_rows(rows, "SPWI506")
+
+
+def test_wizard_books_keep_their_known_records(tmp_path: Path) -> None:
+    # RR v4.92's Aran (mage/thief) and RR#SFL04 (mage), level-5 rows as shipped.
+    aran_rows: list[Row] = [
+        (3, 1, 5, 5, [("SPWI401", 1)] * 5),
+        (4, 1, 5, 5, [(OLD_RESREF, 1)] * 4 + [("SPWI505", 1)]),
+    ]
+    aran = _build_cre(
+        [("SPWI401", 3, 1), ("SPWI505", 4, 1), (OLD_RESREF, 4, 1), ("SPWI509", 4, 1)],
+        aran_rows, class_id=13,
+    )
+    stim_rows: list[Row] = [
+        (4, 1, 5, 5, [(OLD_RESREF, 1), (OLD_RESREF, 0), ("SPWI509", 1), ("SPWI509", 1), ("SPWI505", 1)]),
+    ]
+    stim = _build_cre([(OLD_RESREF, 4, 1), ("SPWI505", 4, 1), ("SPWI509", 4, 1)], stim_rows, class_id=1)
+    game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#ARAN2": aran, "RR#SFL04": stim})
+    assert_installed(_install_public(game))
+    for name, before, rows, replacement in (
+        ("RR#ARAN2", aran, aran_rows, "SPWI507"),
+        ("RR#SFL04", stim, stim_rows, "SPWI509"),
+    ):
+        after = _cre_after(game, name)
+        assert after is not None
+        _assert_only_spellbook_changed(before, after)
+        assert _known_spells(after) == _known_spells(before)
+        assert _rows(after) == _replaced_rows(rows, replacement)
+    assert [spell for spell, _ in _rows(_cre_after(game, "RR#SFL04"))[0][4]] == (  # type: ignore[arg-type]
+        ["SPWI509"] * 4 + ["SPWI505"]
+    )
+
+
+def test_other_copy_counts_are_replaced(tmp_path: Path) -> None:
+    counts = {"RR#SELI": 5, "RR#ARAN2": 1, "RR#SFL04": 3}
     game, _ = _make_game(
         tmp_path, rr_after_sr=False,
-        cres={name: _make_rr_cre(count) for name, count in counts.items()},
+        cres={name: _make_rr_cre(count, sorcerer=name in SORCERERS) for name, count in counts.items()},
     )
     assert_installed(_install_public(game))
     for name, count in counts.items():
         after = _cre_after(game, name)
         assert after is not None
-        assert Counter(_known_spells(after)) == Counter(
-            (("ZZFIVE", 4, 1), (FINAL_RESREF, 6, 1), ("ZZSEVEN", 6, 1))
-        )
+        replacement = REPLACEMENTS[name]
+        known_five = replacement if name in SORCERERS else OLD_RESREF
+        assert _known_spells(after) == [("ZZFIVE", 4, 1), (known_five, 4, 1), ("ZZSEVEN", 6, 1)]
         memorized = _memorized_by_level(after)
-        assert memorized[4] == [("ZZMEMA", 1)]
-        assert memorized[6] == [("ZZMEMB", 1), *((FINAL_RESREF, 1),) * count]
+        assert memorized[4] == [("ZZMEMA", 1), *((replacement, 1),) * count]
+        assert memorized[6] == [("ZZMEMB", 1)]
         assert _memorization_caps(after) == {4: (max(1, count + 1), 0), 6: (1, 0)}
 
 
 def test_prepared_without_known_and_duplicate_known_records(tmp_path: Path) -> None:
-    rows: list[Row] = [
-        (4, 1, 2, 2, [(OLD_RESREF, 1), (OLD_RESREF, 1)]),
-        (6, 1, 1, 1, []),
-    ]
-    prepared_only = _build_cre([("ZZFIVE", 4, 1)], rows)
-    known_twice = _build_cre([(OLD_RESREF, 4, 1), (OLD_RESREF, 4, 1)], [(4, 1, 1, 1, []), (6, 1, 1, 1, [])])
+    prepared_only = _build_cre(
+        [("ZZFIVE", 4, 1)], [(4, 1, 2, 2, [(OLD_RESREF, 1), (OLD_RESREF, 0)])], class_id=SORCERER
+    )
+    known_twice = _build_cre(
+        [(OLD_RESREF, 4, 1), ("ZZFIVE", 4, 1), (OLD_RESREF, 4, 1)],
+        [(4, 1, 1, 1, [(OLD_RESREF, 1)])], class_id=SORCERER,
+    )
     game, _ = _make_game(
         tmp_path, rr_after_sr=False,
-        cres={"RR#SAW09": prepared_only, "RR#ZAER": known_twice},
+        cres={"RR#SFL04": prepared_only, "RR#SELI": known_twice},
     )
     assert_installed(_install_public(game))
-    saw = _cre_after(game, "RR#SAW09")
-    assert saw is not None
-    assert _known_spells(saw) == [("ZZFIVE", 4, 1)]
-    assert _rows(saw) == [(4, 1, 2, 2, []), (6, 1, 1, 1, [(FINAL_RESREF, 1), (FINAL_RESREF, 1)])]
-    zaer = _cre_after(game, "RR#ZAER")
-    assert zaer is not None
-    assert _known_spells(zaer) == [(FINAL_RESREF, 6, 1), (FINAL_RESREF, 6, 1)]
-    assert _rows(zaer) == [(4, 1, 1, 1, []), (6, 1, 1, 1, [])]
+    stim = _cre_after(game, "RR#SFL04")
+    assert stim is not None
+    assert _known_spells(stim) == [("ZZFIVE", 4, 1)]
+    assert _rows(stim) == [(4, 1, 2, 2, [("SPWI509", 1), ("SPWI509", 0)])]
+    selina = _cre_after(game, "RR#SELI")
+    assert selina is not None
+    _assert_known_record_removed(known_twice, selina)
+    assert _known_spells(selina) == [("SPWI506", 4, 1), ("ZZFIVE", 4, 1)]
+    assert _rows(selina) == [(4, 1, 1, 1, [("SPWI506", 1)])]
 
 
-def test_migrated_and_unrelated_creatures_are_left_alone(tmp_path: Path) -> None:
-    migrated = _build_cre(
-        [("ZZFIVE", 4, 1), (FINAL_RESREF, 6, 1)],
-        [(4, 1, 1, 0, [("ZZMEMA", 1)]), (6, 1, 1, 0, [("ZZMEMB", 1), (FINAL_RESREF, 0)])],
+def test_known_only_replaced_and_unrelated_creatures_are_left_alone(tmp_path: Path) -> None:
+    # Known-only old-slot records are not RR's prepared Chaos, even for a sorcerer.
+    known_only = _build_cre([(OLD_RESREF, 4, 1)], [(4, 1, 1, 1, [("ZZMEMA", 1)])], class_id=SORCERER)
+    # Already changed: prepares the replacement, still knows the old slot (wizard).
+    replaced = _build_cre(
+        [("ZZFIVE", 4, 1), (OLD_RESREF, 4, 1)],
+        [(4, 1, 5, 5, [("SPWI507", 1)] * 4 + [("ZZMEMA", 1)])], class_id=13,
     )
     unrelated = _build_cre([("ZZFIVE", 4, 1)], [(4, 1, 1, 0, [("ZZMEMA", 1)]), (6, 1, 1, 0, [])])
     game, _ = _make_game(
-        tmp_path, rr_after_sr=False, cres={"RR#ARAN2": migrated, "RR#SFL04": unrelated}
+        tmp_path, rr_after_sr=False,
+        cres={"RR#SELI": known_only, "RR#ARAN2": replaced, "RR#SFL04": unrelated},
     )
     process = _install_public(game)
     assert_installed(process)
     text = transcript(process)
     assert "INSTALLED WITH WARNINGS" in text, text
-    assert f"RR#SFL04.CRE names neither {OLD_RESREF} nor {FINAL_RESREF}" in text
-    assert "RR#ARAN2.CRE names" not in text
-    assert _cre_after(game, "RR#ARAN2") is None
-    assert _cre_after(game, "RR#SFL04") is None
+    assert f"RR#SELI.CRE prepares neither {OLD_RESREF}" in text, text
+    assert f"RR#SFL04.CRE prepares neither {OLD_RESREF}" in text, text
+    assert "RR#ARAN2.CRE" not in text
+    for name in ("RR#SELI", "RR#ARAN2", "RR#SFL04", "RR#ZAER", "RR#SAW09"):
+        assert _cre_after(game, name) is None, name
 
 
 def test_missing_rr_resources_are_reported(tmp_path: Path) -> None:
     game, _ = _make_game(
-        tmp_path, rr_after_sr=False, cres={"RR#ZAER": None}, scripts={"RR#STM01": None}
+        tmp_path, rr_after_sr=False,
+        cres={"RR#SFL04": None, "RR#ZAER": None}, scripts={"RR#STM01": None},
     )
     process = _install_public(game)
     assert_installed(process)
     text = transcript(process)
-    assert "RR#ZAER.CRE is not in the game" in text, text
+    assert "RR#SFL04.CRE is not in the game" in text, text
     assert "RR#STM01.BCS is not in the game" in text, text
+    assert "RR#ZAER" not in text, text
     assert _cre_after(game, "RR#SELI") is not None
 
 
@@ -742,26 +1014,22 @@ def test_missing_rr_resources_are_reported(tmp_path: Path) -> None:
     ("case", "message"),
     (
         ("innate-copy", f"RR#SELI.CRE has {OLD_RESREF} prepared outside its level-5 wizard row (1 of 2 copies there)"),
-        ("known-at-level-7", f"RR#SELI.CRE knows {OLD_RESREF} outside its level-5 wizard book (1 of 2 known records there)"),
-        ("no-level-7-row", "RR#SELI.CRE needs one level-5 and one level-7 wizard memorization row to move its 1 prepared Chaos copies; it has 1 and 0"),
-        ("overlapping-rows", "RR#SELI.CRE memorization rows 0 and 1 share prepared records"),
+        ("sorcerer-knows-it-at-level-7", f"RR#SELI.CRE knows {OLD_RESREF} outside its level-5 wizard book (1 of 2 known records there)"),
+        ("copy-shared-with-level-7", "RR#SELI.CRE memorization rows 0 and 1 share prepared records"),
     ),
 )
 def test_unattributable_spellbooks_fail_without_changes(tmp_path: Path, case: str, message: str) -> None:
     known = [(OLD_RESREF, 4, 1)]
     rows: list[Row] = [(4, 1, 1, 1, [(OLD_RESREF, 1)]), (6, 1, 1, 1, [("ZZMEMB", 1)])]
+    class_id = 1
     if case == "innate-copy":
         rows.append((0, 2, 1, 1, [(OLD_RESREF, 1)]))
-    elif case == "known-at-level-7":
+    elif case == "sorcerer-knows-it-at-level-7":
         known.append((OLD_RESREF, 6, 1))
-    elif case == "no-level-7-row":
-        rows = rows[:1]
-    data = _build_cre(known, rows)
-    if case == "overlapping-rows":
-        info_offset = struct.unpack_from("<I", data, 0x2A8)[0]
-        patched = bytearray(data)
-        _put_u32(patched, info_offset + 0x10 + 8, 0)  # level-7 row reuses record 0
-        data = bytes(patched)
+        class_id = SORCERER
+    data = _build_cre(known, rows, class_id=class_id)
+    if case == "copy-shared-with-level-7":
+        data = _set_row_first(data, 1, 0)  # level-7 row reuses record 0
     game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": data})
     before = game.override_tree()
     process = _install_public(game)
@@ -771,27 +1039,138 @@ def test_unattributable_spellbooks_fail_without_changes(tmp_path: Path, case: st
     assert game.override_tree() == before
 
 
-def _decompiled(game: FakeGame, ids_root: Path, name: str) -> str:
-    path = game.override_file(f"{name}.BCS")
-    assert path is not None
-    return _decompile_bcs(path, ids_root)
+@pytest.mark.parametrize("case", ("wizard-knows-it-at-level-7", "no-level-7-row", "rows-sharing-other-records"))
+def test_layouts_the_rename_does_not_depend_on(tmp_path: Path, case: str) -> None:
+    known = [(OLD_RESREF, 4, 1)]
+    rows: list[Row] = [(4, 1, 2, 2, [(OLD_RESREF, 1), ("ZZW4", 1)]), (6, 1, 1, 1, [("ZZMEMB", 1)])]
+    if case == "wizard-knows-it-at-level-7":
+        known.append((OLD_RESREF, 6, 1))
+    elif case == "no-level-7-row":
+        rows = rows[:1]
+    data = _build_cre(known, rows, class_id=1)
+    if case == "rows-sharing-other-records":
+        data = _set_row_first(data, 1, 1)  # level 7 shares ZZW4, not the copy
+    game, _ = _make_game(tmp_path, rr_after_sr=False, cres={"RR#SELI": data})
+    assert_installed(_install_public(game))
+    after = _cre_after(game, "RR#SELI")
+    assert after is not None
+    assert after == _renamed_records(data, "SPWI506")
 
 
-def _chaos_count(text: str) -> int:
-    return text.count("WIZARD_CHAOS)") + text.count("WIZARD_SPHERE_OF_CHAOS)")
+def _set_row_first(data: bytes, row: int, first: int) -> bytes:
+    info_offset = struct.unpack_from("<I", data, 0x2A8)[0]
+    patched = bytearray(data)
+    _put_u32(patched, info_offset + row * 0x10 + 8, first)
+    return bytes(patched)
 
 
-def test_extra_and_fewer_chaos_branches_are_migrated(tmp_path: Path) -> None:
+def _records(data: bytes) -> list[tuple[str, int]]:
+    offset, count = struct.unpack_from("<II", data, 0x2B0)
+    return [(_resref(data, offset + i * 0x0C), struct.unpack_from("<I", data, offset + i * 0x0C + 8)[0])
+            for i in range(count)]
+
+
+def _renamed_records(data: bytes, replacement: str) -> bytes:
+    """``data`` with every prepared old-slot record renamed, nothing else changed."""
+    offset, count = struct.unpack_from("<II", data, 0x2B0)
+    renamed = bytearray(data)
+    for index in range(count):
+        if _resref(data, offset + index * 0x0C) == OLD_RESREF:
+            _put_resref(renamed, offset + index * 0x0C, replacement)
+    return bytes(renamed)
+
+
+def _install_twice(game: FakeGame):
+    """The production action applied twice in one transaction (see the harness)."""
+    _mark_dependencies(game)
+    shutil.copy2(HARNESS, game.root / HARNESS.name)
+    (game.root / "SRCB_RR_COMPAT" / "lib").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(LIBRARY, game.root / "SRCB_RR_COMPAT" / "lib" / LIBRARY.name)
+    return run_weidu(
+        [HARNESS.name, "--game", str(game.root), "--force-install-list", "0",
+         "--args", "SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa", "--language", "0",
+         "--use-lang", "en_US", "--no-exit-pause", "--quick-log"],
+        cwd=game.root,
+    )
+
+
+@pytest.mark.parametrize(
+    ("case", "rows", "row_first"),
+    (
+        # Layouts from the 2026-10-17 review: an empty level-7 row whose first
+        # index points between another row's records. Renaming in place leaves
+        # every row index as it was.
+        ("inside-level-5", [(4, 1, 3, 3, [("ZZW4", 1), (OLD_RESREF, 1), ("ZZW4B", 1)]), (6, 1, 1, 0, [])], 1),
+        ("inside-level-5-old-last", [(4, 1, 3, 3, [("ZZW4", 1), ("ZZW4B", 1), (OLD_RESREF, 0)]), (6, 1, 1, 0, [])], 1),
+        ("inside-another-level", [(2, 1, 3, 3, [("ZZW2", 1), ("ZZW2B", 1), ("ZZW2C", 1)]),
+                                  (4, 1, 1, 1, [(OLD_RESREF, 1)]), (6, 1, 1, 0, [])], 1),
+        ("at-level-5-start", [(4, 1, 2, 2, [(OLD_RESREF, 1), ("ZZW4", 1)]), (6, 1, 1, 0, [])], 0),
+    ),
+)
+def test_unusual_row_layouts_change_only_the_renamed_records(
+    tmp_path: Path, case: str, rows: list[Row], row_first: int
+) -> None:
+    target_row = next(index for index, row in enumerate(rows) if row[:2] == (6, 1))
+    before = _set_row_first(_build_cre([(OLD_RESREF, 4, 1)], rows), target_row, row_first)
+    expected = _renamed_records(before, "SPWI506")
+    for name, install in (("once", _install_public), ("twice", _install_twice)):
+        game, _ = _make_game(tmp_path / name, rr_after_sr=False, cres={"RR#SELI": before})
+        assert_installed(install(game))
+        assert _cre_after(game, "RR#SELI") == expected, name
+
+
+def test_extra_and_fewer_chaos_branches_are_retargeted(tmp_path: Path) -> None:
     scripts = {
         "RR#SELI": _script_source("RR#SELI") + "\n" + _chaos_blocks(2),
         "RR#ARAN2": _chaos_blocks(3),
     }
     game, ids_root = _make_game(tmp_path, rr_after_sr=False, scripts=scripts)
     assert_installed(_install_public(game))
-    for name, expected in (("RR#SELI", 21), ("RR#ARAN2", 6), ("RR#STM01", 12)):
+    for name, references, blocks in (("RR#SELI", 21, 10), ("RR#ARAN2", 6, 3), ("RR#STM01", 12, 6)):
         text = _decompiled(game, ids_root, name)
-        assert _chaos_count(text) == expected, text
-        assert "WIZARD_WAVES_OF_FATIGUE" not in text
+        assert _assert_retargeted(text, name, references) == blocks
+
+
+def test_filters_a_block_has_are_kept_once_and_other_targets_get_their_own(tmp_path: Path) -> None:
+    # The decompiler comments a HasItem line; it still counts as present.
+    already = (
+        f"!CheckStatGT({TARGET},0,CLERIC_FREE_ACTION)",
+        f"!Kit({TARGET},INQUISITOR)",
+        f'!HasItem("MORSWORD",{TARGET})',
+    )
+    nearest = "NearestEnemyOf(Myself)"
+    script = "\n".join((
+        _chaos_block(extra=already),
+        _chaos_block(target=nearest, action="SpellNoDec"),
+    ))
+    game, ids_root = _make_game(tmp_path, rr_after_sr=False, scripts={"RR#ARAN2": script})
+    assert_installed(_install_public(game))
+    blocks = _blocks(_decompiled(game, ids_root, "RR#ARAN2"))
+    assert len(blocks) == 2
+    assert blocks[0][0] == _expected_triggers("RR#ARAN2", extra=already)
+    assert blocks[1][0] == _expected_triggers("RR#ARAN2", target=nearest)
+    assert f"SpellNoDec({nearest},WIZARD_HOLD_MONSTER)" in blocks[1][1]
+    assert TARGET not in "".join(blocks[1][0])
+
+
+def test_scripts_already_pointing_at_the_replacements_are_left_alone(tmp_path: Path) -> None:
+    retargeted = {
+        name: _script_source(name).replace("WIZARD_CHAOS", SCRIPT_REPLACEMENTS[name])
+        for name in SCRIPT_COUNTS
+    }
+    game, ids_root = _make_game(tmp_path, rr_after_sr=False, scripts=retargeted)
+    before = game.override_tree()
+    process = _install_public(game)
+    assert_installed(process)
+    text = transcript(process)
+    assert ".BCS names" not in text, text
+    after = game.override_tree()
+    assert after["RR#ARAN2.BCS"] == before["RR#ARAN2.BCS"]
+    assert after["RR#STM01.BCS"] == before["RR#STM01.BCS"]
+    # Selina's script changes only by her Spell Deflection guard.
+    selina = _decompiled(game, ids_root, "RR#SELI")
+    assert selina.count("!CheckStatGT(Myself,0,WIZARD_SPELL_DEFLECTION)") == 1
+    assert f"!CheckStatGT({TARGET},0,WIZARD_SPELL_TURNING)" not in selina
 
 
 def test_script_naming_both_slots_fails_without_changes(tmp_path: Path) -> None:
@@ -825,13 +1204,13 @@ def test_chaos_shield_is_not_mistaken_for_chaos(tmp_path: Path) -> None:
         tmp_path, rr_after_sr=False,
         current_spell_ids=CURRENT_SPELL_IDS + shield,
         compile_spell_ids=VANILLA_SPELL_IDS + shield,
-        scripts={"RR#STM01": _chaos_blocks(6) + "\n" + block},
+        scripts={"RR#STM01": _script_source("RR#STM01") + "\n" + block},
     )
     assert_installed(_install_public(game))
     text = _decompiled(game, ids_root, "RR#STM01")
-    assert _chaos_count(text) == 12, text
+    assert _assert_retargeted(text, "RR#STM01", 12) == 6
     assert text.count("WIZARD_CHAOS_SHIELD") == 2, text
-    assert "WIZARD_WAVES_OF_FATIGUE" not in text
+    assert _blocks(text)[-1][0] == ["HaveSpell(WIZARD_CHAOS_SHIELD)"]
 
 
 def test_old_slot_alias_printed_by_the_decompiler_is_recognized(tmp_path: Path) -> None:
@@ -841,9 +1220,9 @@ def test_old_slot_alias_printed_by_the_decompiler_is_recognized(tmp_path: Path) 
     )
     game, ids_root = _make_game(tmp_path, rr_after_sr=False, current_spell_ids=aliased)
     assert_installed(_install_public(game))
-    for name, expected in SCRIPT_COUNTS.items():
+    for name, references in SCRIPT_COUNTS.items():
         text = _decompiled(game, ids_root, name)
-        assert _chaos_count(text) == expected, text
+        assert _assert_retargeted(text, name, references) == CASTING_BLOCKS[name]
         assert "FATIGUE" not in text
 
 
@@ -882,7 +1261,7 @@ def test_selina_without_self_recast_guard_is_reported(tmp_path: Path) -> None:
     assert_installed(process)
     text = transcript(process)
     assert "RR#SELI.BCS has no self-recast of Spell Turning" in text, text
-    assert _chaos_count(_decompiled(game, ids_root, "RR#SELI")) == 6
+    assert _assert_retargeted(_decompiled(game, ids_root, "RR#SELI"), "RR#SELI", 6) == 3
 
 
 def test_spell_turning_alias_printed_by_the_decompiler_is_recognized(tmp_path: Path) -> None:
@@ -898,77 +1277,61 @@ def test_spell_turning_alias_printed_by_the_decompiler_is_recognized(tmp_path: P
     assert "!CheckStatGT(Myself,0,WIZARD_SPELL_TURNING)" not in text
 
 
-def _set_row_first(data: bytes, row: int, first: int) -> bytes:
-    info_offset = struct.unpack_from("<I", data, 0x2A8)[0]
-    patched = bytearray(data)
-    _put_u32(patched, info_offset + row * 0x10 + 8, first)
-    return bytes(patched)
-
-
-def _records(data: bytes) -> list[tuple[str, int]]:
-    offset, count = struct.unpack_from("<II", data, 0x2B0)
-    return [(_resref(data, offset + i * 0x0C), struct.unpack_from("<I", data, offset + i * 0x0C + 8)[0])
-            for i in range(count)]
-
-
-def _assert_rows_disjoint(data: bytes) -> None:
-    info_offset, info_count = struct.unpack_from("<II", data, 0x2A8)
-    used: list[int] = []
-    for index in range(info_count):
-        first, count = struct.unpack_from("<II", data, info_offset + index * 0x10 + 8)
-        used.extend(range(first, first + count))
-    assert len(used) == len(set(used))
-
-
-def _install_twice(game: FakeGame):
-    """The production action applied twice in one transaction (see the harness)."""
-    _mark_dependencies(game)
-    shutil.copy2(HARNESS, game.root / HARNESS.name)
-    (game.root / "SRCB_RR_COMPAT" / "lib").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(LIBRARY, game.root / "SRCB_RR_COMPAT" / "lib" / LIBRARY.name)
-    return run_weidu(
-        [HARNESS.name, "--game", str(game.root), "--force-install-list", "0",
-         "--args", "SRCB_RR_COMPAT/lib/rr_spell_semantics.tpa", "--language", "0",
-         "--use-lang", "en_US", "--no-exit-pause", "--quick-log"],
-        cwd=game.root,
+@pytest.mark.parametrize(
+    ("ids_name", "line", "message"),
+    (
+        ("STATS.IDS", "164 WIZARD_SPELL_TRAP\n", "STATS.IDS has no WIZARD_SPELL_TRAP"),
+        ("KIT.IDS", "0x4006 UNDEADHUNTER\n", "KIT.IDS has no UNDEADHUNTER"),
+        ("GENERAL.IDS", "4 UNDEAD\n", "GENERAL.IDS has no UNDEAD"),
+    ),
+)
+def test_missing_filter_symbol_fails_without_changes(
+    tmp_path: Path, ids_name: str, line: str, message: str
+) -> None:
+    ids_text = _script_ids(CURRENT_SPELL_IDS)[ids_name]
+    assert line in ids_text
+    game, _ = _make_game(
+        tmp_path, rr_after_sr=False, game_ids={ids_name: ids_text.replace(line, "")}
     )
+    before = game.override_tree()
+    process = _install_public(game)
+    text = transcript(process)
+    assert "NOT INSTALLED DUE TO ERRORS" in text, text
+    assert message in text, text
+    assert game.override_tree() == before
 
 
 @pytest.mark.parametrize(
-    ("case", "rows", "target_first"),
+    ("case", "message"),
     (
-        # Review finding 2026-10-17: an empty level-7 row whose first index points
-        # between level 5's records.
-        ("inside-level-5", [(4, 1, 3, 3, [("ZZW4", 1), (OLD_RESREF, 1), ("ZZW4B", 1)]), (6, 1, 1, 0, [])], 1),
-        ("inside-level-5-old-last", [(4, 1, 3, 3, [("ZZW4", 1), ("ZZW4B", 1), (OLD_RESREF, 0)]), (6, 1, 1, 0, [])], 1),
-        ("inside-another-level", [(2, 1, 3, 3, [("ZZW2", 1), ("ZZW2B", 1), ("ZZW2C", 1)]),
-                                  (4, 1, 1, 1, [(OLD_RESREF, 1)]), (6, 1, 1, 0, [])], 1),
-        ("at-level-5-start", [(4, 1, 2, 2, [(OLD_RESREF, 1), ("ZZW4", 1)]), (6, 1, 1, 0, [])], 0),
+        ("symbol-at-level-6", "final SPELL.IDS must map WIZARD_HOLD_MONSTER to a level-5 wizard spell"),
+        ("symbol-on-the-old-slot", "final SPELL.IDS must map WIZARD_FEEBLEMIND to a level-5 wizard spell other than Waves of Fatigue"),
+        ("spell-file-at-level-6", "SPWI506.SPL is not the expected level-5 wizard spell"),
     ),
 )
-def test_empty_level_seven_row_pointing_into_another_row(
-    tmp_path: Path, case: str, rows: list[Row], target_first: int
-) -> None:
-    target_row = next(index for index, row in enumerate(rows) if row[:2] == (6, 1))
-    before = _set_row_first(_build_cre([(OLD_RESREF, 4, 1)], rows), target_row, target_first)
-    results = []
-    for name, install in (("once", _install_public), ("twice", _install_twice)):
-        game, _ = _make_game(tmp_path / name, rr_after_sr=False, cres={"RR#SELI": before})
-        assert_installed(install(game))
-        after = _cre_after(game, "RR#SELI")
-        assert after is not None
-        _assert_only_spellbook_changed(before, after)
-        _assert_rows_disjoint(after)
-        assert _rows(after) == _migrated_rows(rows)
-        assert Counter(_records(after)) == Counter(
-            (FINAL_RESREF if spell == OLD_RESREF else spell, flags) for spell, flags in _records(before)
-        )
-        results.append(after)
-    assert results[0] == results[1]
+def test_replacement_must_be_a_level_five_wizard_spell(tmp_path: Path, case: str, message: str) -> None:
+    spell_ids = CURRENT_SPELL_IDS
+    spells: dict[str, bytes] = {}
+    if case == "symbol-at-level-6":
+        spell_ids = spell_ids.replace("2507 WIZARD_HOLD_MONSTER", "2607 WIZARD_HOLD_MONSTER")
+    elif case == "symbol-on-the-old-slot":
+        spell_ids = spell_ids.replace("2509 WIZARD_FEEBLEMIND", "2508 WIZARD_FEEBLEMIND")
+    else:
+        spells = {"SPWI506": _wizard_spell(6)}
+    game, _ = _make_game(tmp_path, rr_after_sr=False, game_ids={"SPELL.IDS": spell_ids}, spells=spells)
+    before = game.override_tree()
+    process = _install_public(game)
+    text = transcript(process)
+    assert "NOT INSTALLED DUE TO ERRORS" in text, text
+    assert message in text, text
+    assert game.override_tree() == before
 
 
 HEX_SPELL_IDS = """IDS V1.0
+0x9ca WIZARD_DOMINATION
+0x9CB WIZARD_HOLD_MONSTER
 0x9cc WIZARD_WAVES_OF_FATIGUE
+0x9cd WIZARD_FEEBLEMIND
 0xA8D WIZARD_SPELL_TURNING
 0xa97 WIZARD_CHAOS
 0xa97 WIZARD_SPHERE_OF_CHAOS
