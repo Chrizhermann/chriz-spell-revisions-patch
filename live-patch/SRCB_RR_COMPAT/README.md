@@ -1,6 +1,6 @@
 # Rogue Rebalancing / Spell Revisions compatibility
 
-Version: v4.21-chriz.5
+Version: v4.21-chriz.6
 
 Three Rogue Rebalancing v4.92 mages prepare Chaos in the level-5 slot that Spell
 Revisions gives to Waves of Fatigue; SR's Chaos is a level-7 spell. Their level-5

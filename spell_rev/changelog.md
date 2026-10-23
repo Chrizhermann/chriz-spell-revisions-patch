@@ -1,5 +1,35 @@
 # A. Changelog.
 
+## Fork version: v4.21-chriz.6 (2026-10-23).
+
+1. `SRCB_RR_COMPAT`: Chaos stays Spell Revisions' level-7 spell. Rogue Rebalancing
+   v4.92's prepared level-5 Chaos copies become a level-5 spell where they stand, with
+   their flags and every spell-slot cap: Hold Monster for Aran Linvail, Feeblemind for
+   the Zhentarim Mercenary and Domination for Selina. This replaces the level-7
+   migration of v4.21-chriz.4, whose moved copies Aran and the Mercenary could never
+   cast behind their level-7 slot counters (BG2:EE 2.7.3.0 lab check).
+2. Selina is a sorcerer and casts from her known list, so her known old-slot record
+   becomes Domination too, without a duplicate. Wizards keep their known records;
+   `RR#SAW09` and `RR#ZAER` only know the old slot and are no longer changed.
+3. The three RR scripts cast the replacement in either SR/RR order. Blocks that pick a
+   target keep their filters and gain the checks the replacement needs, written as RR's
+   own blocks check them: Spell Turning and similar protections for Feeblemind and
+   Domination, charm-protection items for Domination, and free action and hold-immune
+   kits and items for Hold Monster. Selina's opening Spell Trigger casts Domination.
+4. RR spellbook entries and script references are recognized by the spell they name,
+   not by the audited counts, and hexadecimal `SPELL.IDS` values are read. A creature or
+   script naming both RR's old slot and SR's Chaos, or holding the old slot outside the
+   level-5 wizard book, fails with the resource named.
+5. Lightning Bolt options (80, 81 and `SRCB_CLASSIC_LIGHTNING`): SR's two damage halves
+   are identified by meaning, in either order. Damage another mod adds to the bolt is
+   kept instead of failing the installation, and a repeat application is byte-exact.
+
+Validation: 198 tests passed with real WeiDU 249, including 53 SR/RR compatibility and
+88 Lightning Bolt tests. A local check applied the RR component to RR v4.92's own
+creatures and scripts in both orders and over a v4.21-chriz.5 installation of it. The
+level-5 replacements have not been checked in game yet. The main SR component,
+component 60 and the component menu are unchanged from v4.21-chriz.5.
+
 ## Fork version: v4.21-chriz.5 (2026-09-16).
 
 1. Added optional, mutually exclusive Lightning Bolt behaviors: classic bouncing
