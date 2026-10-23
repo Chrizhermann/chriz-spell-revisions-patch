@@ -110,7 +110,10 @@ Clenched Fist, Infravision, and a wider SCS compatibility sample are outside thi
 
 Install before first entering/spawning the affected encounters. The patch does not edit save
 files, so a creature whose spellbook is already embedded in a save is not retroactively
-rewritten. Uninstall restores the prior game resources. Automated coverage uses real WeiDU with
+rewritten. While it is the last entry in WeiDU.log, a reinstall updates it in place and an
+uninstall restores the prior game resources. Deeper in a stack, do not reinstall or uninstall
+it: WeiDU 249 either skips the request or reinstalls every later component, which can drop
+some of them. Automated coverage uses real WeiDU with
 synthetic CREs with the audited copy counts and with other counts, flags, classes and full
 spellbook layouts, plus compiled BCS fixtures: both SR/RR orders converge byte-exactly, a second
 pass is idempotent, each RR prerequisite scopes its own resources, sorcerer and wizard known
