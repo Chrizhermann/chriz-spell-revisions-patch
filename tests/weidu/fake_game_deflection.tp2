@@ -1,0 +1,9 @@
+// Test-only tp2: runs spell_rev/components/nwn_spell_deflection.tpa (component 55's code) inside
+// a synthetic fake game (tests/weidu_env.py FakeGame). Never install this in a real game.
+
+BACKUP ~weidu_external/backup/srcb_test_deflection~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~test: run spell_rev/components/nwn_spell_deflection.tpa~ DESIGNATED 0
+INCLUDE ~spell_rev/components/nwn_spell_deflection.tpa~

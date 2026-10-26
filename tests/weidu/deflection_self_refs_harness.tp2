@@ -1,0 +1,18 @@
+// Test harness for the Spell Deflection copy references (spell_rev/lib/deflection_self_refs.tpa).
+// Run ONLY with `weidu --nogame` from a disposable directory; never install in a game.
+//
+//   argv[0] = input SPL path
+//   argv[1] = output SPL path
+//   argv[2] = the original spell's resref
+//   argv[3] = the copy's resref
+//   argv[4] = path to spell_rev/lib/deflection_self_refs.tpa
+
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~apply: srcb_deflection_copy_self_refs~ DESIGNATED 0
+INCLUDE ~%argv[4]%~
+COPY ~%argv[0]%~ ~%argv[1]%~
+  LPF srcb_deflection_copy_self_refs STR_VAR original = EVAL ~%argv[2]%~ copy = EVAL ~%argv[3]%~ RET renamed = srcb_renamed END
+  PATCH_PRINT ~srcb_test renamed=%renamed%~

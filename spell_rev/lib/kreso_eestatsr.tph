@@ -3721,6 +3721,25 @@ LPF ADD_SPELL_EFFECT
 END
 END
 
+// SR's level-7 Chaos sphere: the same check as the priest version (sppr709)
+ACTION_IF FILE_EXISTS_IN_GAME ~spwi711.spl~ THEN BEGIN
+COPY_EXISTING ~spwi711.spl~ ~override~
+LPF ADD_SPELL_EFFECT
+	INT_VAR
+	opcode			= 324
+	target			= 2
+	power			= 0
+	savingthrow     = 0
+	parameter1      = 41     // Chaotic commands
+	parameter2		= 110
+	duration        = 1
+	timing			= 0
+	insert_point    = 0
+	STR_VAR
+	resource        = spwi711
+END
+END
+
 ACTION_IF FILE_EXISTS_IN_GAME ~spwi929.spl~ THEN BEGIN
 COPY_EXISTING ~spwi929.spl~ ~override~  
 LPF ADD_SPELL_EFFECT
