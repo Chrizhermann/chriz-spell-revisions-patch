@@ -853,18 +853,8 @@ COPY_EXISTING	~spin562.spl~	override		// scalding steam
 		END
 	BUT_ONLY IF_EXISTS
 	
-			COPY_EXISTING	~spdr501.spl~	override		// cone of cold avenger
-		LPF	ADD_SPELL_EFFECT
-			INT_VAR
-				insert_point = 0
-				opcode = 324
-				target = 2
-				parameter2 = COLD
-				duration = 1
-			STR_VAR
-				resource = EVAL ~%SOURCE_RES%~
-		END
-	BUT_ONLY IF_EXISTS
+	// spdr501, the Avenger's level-5 spell, is SR's Confusion (it replaces Chaos), not Cone of
+	// Cold: it gets the Chaotic Commands check under CHAOS & CONFUSION & CHARM, no cold check
 
 
 	
@@ -3285,6 +3275,25 @@ LPF ADD_SPELL_EFFECT
 	insert_point    = 0
 	STR_VAR
 	resource        = bdhamadc
+END
+END
+
+// The Avenger's Confusion: the same check as the wizard's Confusion (spwi401)
+ACTION_IF FILE_EXISTS_IN_GAME ~spdr501.spl~ THEN BEGIN
+COPY_EXISTING ~spdr501.spl~ ~override~
+LPF ADD_SPELL_EFFECT
+	INT_VAR
+	opcode			= 324
+	target			= 2
+	power			= 0
+	savingthrow     = 0
+	parameter1      = 41     // Chaotic commands
+	parameter2		= 110
+	duration        = 1
+	timing			= 0
+	insert_point    = 0
+	STR_VAR
+	resource        = spdr501
 END
 END
 
