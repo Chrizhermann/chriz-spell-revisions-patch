@@ -88,6 +88,8 @@ def assert_installed(process: subprocess.CompletedProcess[str]) -> None:
 
 def parse_check(kind: str, path: Path) -> subprocess.CompletedProcess[str]:
     """`weidu --nogame --parse-check TYPE file` (order matters; no trailing flags)."""
+    # WeiDU 249 reports a missing file as a FATAL ERROR but still exits 0.
+    assert path.is_file(), f"parse check target missing: {path}"
     return run_weidu(["--nogame", "--parse-check", kind, str(path)], cwd=path.parent)
 
 

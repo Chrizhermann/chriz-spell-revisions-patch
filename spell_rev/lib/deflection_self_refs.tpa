@@ -1,0 +1,35 @@
+// Spell Deflection blocks AoE spells (component 55) copies each area spell into a secondary
+// spell that the original casts on every creature it reaches. Creatures receive the copy's
+// effects under the copy's name (verified on BG2:EE 2.7.3.0), so references inside the copy
+// that mean "this spell" have to name the copy:
+// * A protection (opcode 206, 318 or 324) followed by other effects of its ability guards
+//   them, such as the Chaotic Commands check in Chaos. Naming the original, it never blocks
+//   them.
+// * A removal (opcode 321) of this spell refreshes an earlier casting. Naming the original, it
+//   never finds the earlier copy's effects.
+// A protection that is the last effect of its ability only stops later castings. Naming the
+// original already does that, by blocking the original's cast, so it stays unchanged.
+// Casting features are left alone: they belong to whoever casts the copy.
+DEFINE_PATCH_FUNCTION srcb_deflection_copy_self_refs
+  STR_VAR original = "" copy = ""
+  RET srcb_renamed
+BEGIN
+  SET srcb_renamed = 0
+  READ_LONG  0x64 srcb_ab_off
+  READ_SHORT 0x68 srcb_ab_num
+  READ_LONG  0x6a srcb_fx_off
+  FOR (srcb_ab = 0; srcb_ab < srcb_ab_num; ++srcb_ab) BEGIN
+    READ_SHORT (srcb_ab_off + srcb_ab * 0x28 + 0x1e) srcb_fx_num
+    READ_SHORT (srcb_ab_off + srcb_ab * 0x28 + 0x20) srcb_fx_first
+    FOR (srcb_e = 0; srcb_e < srcb_fx_num; ++srcb_e) BEGIN
+      SET srcb_fx = srcb_fx_off + (srcb_fx_first + srcb_e) * 0x30
+      READ_SHORT srcb_fx srcb_op
+      READ_ASCII (srcb_fx + 0x14) srcb_res (8) NULL
+      PATCH_IF ("%srcb_res%" STRING_EQUAL_CASE "%original%") AND
+               (srcb_op = 321 OR ((srcb_op = 206 OR srcb_op = 318 OR srcb_op = 324) AND srcb_e + 1 < srcb_fx_num)) BEGIN
+        WRITE_ASCIIE (srcb_fx + 0x14) ~%copy%~ (8)
+        SET srcb_renamed += 1
+      END
+    END
+  END
+END
