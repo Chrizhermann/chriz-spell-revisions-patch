@@ -1942,8 +1942,8 @@ Jet de sauvegarde contre la mort : annule
 
 Symbole de Mort est un puissant enchantement qui permet au lanceur de sorts d'inscrire un symbole sur le sol ou toute autre surface. Ce symbole explosera si une créature ennemie s'en approche à moins de 4 mètres et demi. Toute créature dans un rayon de 6 mètres doit alors réussir un jet de sauvegarde contre la mort à -4 ou mourir. Les créatures ayant plus de 60 points de vie à cet instant sont immunisées contre les effets de ce sort.~
 
-@297   = ~Chaos~
-@298   = ~Chaos
+@297   = ~Sphère du chaos~
+@298   = ~Sphère du chaos
 Niveau : 7
 École : Enchantement
 Sphère : Chaos

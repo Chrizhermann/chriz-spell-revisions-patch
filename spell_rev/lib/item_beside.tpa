@@ -1,0 +1,185 @@
+// Adds item wherever anchor turns up: next to it in every store that sells it, in every area
+// container that holds it, and in the inventory of every creature that carries it. The new
+// entry copies the anchor's entry: quantity, flags, expiry and, in stores, stock and supply.
+// A store, container or creature that already has the item keeps its own entry. A creature
+// with no free inventory slot gets no copy and a warning instead.
+// Waves of Fatigue uses it to show up wherever a Chaos scroll does.
+DEFINE_ACTION_FUNCTION srcb_add_item_beside
+  STR_VAR anchor = ~~ item = ~~
+BEGIN
+  COPY_EXISTING_REGEXP GLOB ~^.+\.sto$~ ~override~
+    PATCH_IF (SOURCE_SIZE > 0x9b) AND (INDEX_BUFFER (CASE_INSENSITIVE EXACT_MATCH ~%anchor%~) >= 0) BEGIN
+      LPF srcb_store_add_beside STR_VAR anchor item END
+    END
+  BUT_ONLY
+  COPY_EXISTING_REGEXP GLOB ~^.+\.are$~ ~override~
+    PATCH_IF (SOURCE_SIZE > 0x11b) AND (INDEX_BUFFER (CASE_INSENSITIVE EXACT_MATCH ~%anchor%~) >= 0) BEGIN
+      LPF srcb_area_add_beside STR_VAR anchor item END
+    END
+  BUT_ONLY
+  COPY_EXISTING_REGEXP GLOB ~^.+\.cre$~ ~override~
+    PATCH_IF (SOURCE_SIZE > 0x2d3) AND (INDEX_BUFFER (CASE_INSENSITIVE EXACT_MATCH ~%anchor%~) >= 0) BEGIN
+      LPF srcb_creature_add_beside STR_VAR anchor item END
+    END
+  BUT_ONLY
+END
+
+// Scrolls (item type 11) with an ability that teaches spell (opcode 147), such as SCRL5P for
+// Chaos in the Baldur's Gate games and SCCHAO in Icewind Dale.
+DEFINE_ACTION_FUNCTION srcb_scrolls_teaching
+  STR_VAR spell = ~~
+  RET_ARRAY scrolls
+BEGIN
+  ACTION_CLEAR_ARRAY scrolls
+  COPY_EXISTING_REGEXP GLOB ~^.+\.itm$~ ~override~
+    PATCH_IF (SOURCE_SIZE > 0x71) AND (INDEX_BUFFER (CASE_INSENSITIVE EXACT_MATCH ~%spell%~) >= 0) BEGIN
+      READ_ASCII 0x00 srcb_sig (8)
+      READ_SHORT 0x1c srcb_type
+      PATCH_IF (~%srcb_sig%~ STRING_EQUAL ~ITM V1  ~) AND (srcb_type = 11) BEGIN
+        READ_LONG  0x64 srcb_ab_off
+        READ_SHORT 0x68 srcb_ab_num
+        READ_LONG  0x6a srcb_fx_off
+        FOR (srcb_ab = 0; srcb_ab < srcb_ab_num; ++srcb_ab) BEGIN
+          READ_SHORT (srcb_ab_off + srcb_ab * 0x38 + 0x1e) srcb_fx_num
+          READ_SHORT (srcb_ab_off + srcb_ab * 0x38 + 0x20) srcb_fx_first
+          FOR (srcb_e = 0; srcb_e < srcb_fx_num; ++srcb_e) BEGIN
+            SET srcb_fx = srcb_fx_off + (srcb_fx_first + srcb_e) * 0x30
+            READ_SHORT srcb_fx srcb_op
+            READ_ASCII (srcb_fx + 0x14) srcb_res (8) NULL
+            PATCH_IF (srcb_op = 147) AND (~%srcb_res%~ STRING_EQUAL_CASE ~%spell%~) BEGIN
+              SET $scrolls(~%SOURCE_RES%~) = 1
+            END
+          END
+        END
+      END
+    END
+  BUT_ONLY
+END
+
+// Store (STOR V1.0): a sale entry after the anchor's, with the anchor's 0x08-0x1b fields.
+DEFINE_PATCH_FUNCTION srcb_store_add_beside
+  STR_VAR anchor = ~~ item = ~~
+BEGIN
+  READ_ASCII 0x00 srcb_sig (8)
+  PATCH_IF (~%srcb_sig%~ STRING_EQUAL ~STORV1.0~) BEGIN
+    LPF srcb_find_entries INT_VAR offset_at = 0x34 count_at = 0x38 size = 0x1c STR_VAR anchor item
+      RET srcb_anchor_at = anchor_at srcb_item_at = item_at
+    END
+    PATCH_IF (srcb_anchor_at >= 0) AND (srcb_item_at < 0) BEGIN
+      READ_ASCII (srcb_anchor_at + 0x08) srcb_fields (0x14)
+      ADD_STORE_ITEM ~%item%~ AFTER ~%anchor%~ #0 #0 #0 ~IDENTIFIED~ #1
+      LPF srcb_find_entries INT_VAR offset_at = 0x34 count_at = 0x38 size = 0x1c STR_VAR anchor item
+        RET srcb_item_at = item_at
+      END
+      PATCH_IF (srcb_item_at < 0) BEGIN
+        PATCH_FAIL ~srcb_add_item_beside: %item% was not added to %SOURCE_FILE%.~
+      END
+      WRITE_ASCIIE (srcb_item_at + 0x08) ~%srcb_fields%~ (0x14)
+    END
+  END
+END
+
+// Area (AREAV1.0): in each container that holds the anchor and not the item, an item record
+// with the anchor's 0x08-0x13 fields.
+DEFINE_PATCH_FUNCTION srcb_area_add_beside
+  STR_VAR anchor = ~~ item = ~~
+BEGIN
+  READ_ASCII 0x00 srcb_sig (8)
+  PATCH_IF (~%srcb_sig%~ STRING_EQUAL ~AREAV1.0~) BEGIN
+    READ_SHORT 0x74 srcb_containers
+    FOR (srcb_c = 0; srcb_c < srcb_containers; ++srcb_c) BEGIN
+      READ_LONG 0x70 srcb_con_off
+      READ_LONG 0x78 srcb_itm_off
+      READ_LONG (srcb_con_off + srcb_c * 0xc0 + 0x40) srcb_first
+      READ_LONG (srcb_con_off + srcb_c * 0xc0 + 0x44) srcb_count
+      SET srcb_anchor_at = "-1"
+      SET srcb_has_item = 0
+      FOR (srcb_i = srcb_first; srcb_i < srcb_first + srcb_count; ++srcb_i) BEGIN
+        READ_ASCII (srcb_itm_off + srcb_i * 0x14) srcb_res (8) NULL
+        PATCH_IF (srcb_anchor_at < 0) AND (~%srcb_res%~ STRING_EQUAL_CASE ~%anchor%~) BEGIN
+          SET srcb_anchor_at = srcb_itm_off + srcb_i * 0x14
+        END
+        PATCH_IF (~%srcb_res%~ STRING_EQUAL_CASE ~%item%~) BEGIN
+          SET srcb_has_item = 1
+        END
+      END
+      PATCH_IF (srcb_anchor_at >= 0) AND (srcb_has_item = 0) BEGIN
+        READ_SHORT (srcb_anchor_at + 0x08) srcb_expiry
+        READ_SHORT (srcb_anchor_at + 0x0a) srcb_charge0
+        READ_SHORT (srcb_anchor_at + 0x0c) srcb_charge1
+        READ_SHORT (srcb_anchor_at + 0x0e) srcb_charge2
+        READ_LONG  (srcb_anchor_at + 0x10) srcb_flags
+        LPF fj_are_structure
+          INT_VAR
+            fj_con_itm_idx = srcb_c
+            fj_itm_expiry  = srcb_expiry
+            fj_charge0     = srcb_charge0
+            fj_charge1     = srcb_charge1
+            fj_charge2     = srcb_charge2
+            fj_flags       = srcb_flags
+          STR_VAR
+            fj_structure_type = itm
+            fj_name           = EVAL ~%item%~
+        END
+      END
+    END
+  END
+END
+
+// Creature (CRE V1.0): the item in the first free inventory slot (INV1-INV16, slots 21-36),
+// with the anchor's 0x08-0x13 fields.
+DEFINE_PATCH_FUNCTION srcb_creature_add_beside
+  STR_VAR anchor = ~~ item = ~~
+BEGIN
+  READ_ASCII 0x00 srcb_sig (8)
+  PATCH_IF (~%srcb_sig%~ STRING_EQUAL ~CRE V1.0~) BEGIN
+    LPF srcb_find_entries INT_VAR offset_at = 0x2bc count_at = 0x2c0 size = 0x14 STR_VAR anchor item
+      RET srcb_anchor_at = anchor_at srcb_item_at = item_at
+    END
+    PATCH_IF (srcb_anchor_at >= 0) AND (srcb_item_at < 0) BEGIN
+      READ_LONG 0x2b8 srcb_slots
+      SET srcb_free = 0
+      FOR (srcb_s = 21; srcb_s <= 36; ++srcb_s) BEGIN
+        READ_SSHORT (srcb_slots + srcb_s * 2) srcb_slot
+        PATCH_IF (srcb_slot < 0) BEGIN
+          SET srcb_free += 1
+        END
+      END
+      PATCH_IF (srcb_free = 0) BEGIN
+        PATCH_WARN ~srcb_add_item_beside: %SOURCE_FILE% carries %anchor% but has no free inventory slot for %item%.~
+      END ELSE BEGIN
+        READ_ASCII (srcb_anchor_at + 0x08) srcb_fields (0x0c)
+        ADD_CRE_ITEM ~%item%~ #0 #0 #0 ~NONE~ ~INV1 INV2 INV3 INV4 INV5 INV6 INV7 INV8 INV9 INV10 INV11 INV12 INV13 INV14 INV15 INV16~
+        LPF srcb_find_entries INT_VAR offset_at = 0x2bc count_at = 0x2c0 size = 0x14 STR_VAR anchor item
+          RET srcb_item_at = item_at
+        END
+        PATCH_IF (srcb_item_at < 0) BEGIN
+          PATCH_FAIL ~srcb_add_item_beside: %item% was not added to %SOURCE_FILE%.~
+        END
+        WRITE_ASCIIE (srcb_item_at + 0x08) ~%srcb_fields%~ (0x0c)
+      END
+    END
+  END
+END
+
+// Offsets of the first anchor entry and the first item entry in a table of records that start
+// with a resref; -1 when absent.
+DEFINE_PATCH_FUNCTION srcb_find_entries
+  INT_VAR offset_at = 0 count_at = 0 size = 0
+  STR_VAR anchor = ~~ item = ~~
+  RET anchor_at item_at
+BEGIN
+  SET anchor_at = "-1"
+  SET item_at = "-1"
+  READ_LONG offset_at srcb_table
+  READ_LONG count_at  srcb_entries
+  FOR (srcb_i = 0; srcb_i < srcb_entries; ++srcb_i) BEGIN
+    READ_ASCII (srcb_table + srcb_i * size) srcb_res (8) NULL
+    PATCH_IF (anchor_at < 0) AND (~%srcb_res%~ STRING_EQUAL_CASE ~%anchor%~) BEGIN
+      SET anchor_at = srcb_table + srcb_i * size
+    END
+    PATCH_IF (item_at < 0) AND (~%srcb_res%~ STRING_EQUAL_CASE ~%item%~) BEGIN
+      SET item_at = srcb_table + srcb_i * size
+    END
+  END
+END

@@ -938,7 +938,7 @@ Les chances de réussite de la dissipation sont fixées par le niveau du lanceur e
 Niveau : 4
 École : Enchantement
 Portée : longue
-Durée : 5 rounds
+Durée : 4 rounds (5 au niveau 15, 6 au niveau 20)
 Temps d'incantation : 4
 Zone d'effet : rayon de 9 mètres
 Jet de sauvegarde contre les sorts : annule
@@ -2217,8 +2217,8 @@ Jet de sauvegarde : aucun
 
 Ce sort permet au mage de préparer un séquenceur magique pour stocker des sorts à utiliser par la suite dans un unique geste éclair. Trois sorts (de niveau 4 ou inférieur) peuvent ainsi être stockés et lancés simultanément. Le mage ne peut avoir qu'un seul séquenceur de sorts à un instant donné, et le séquenceur reste actif tant que les sorts qu'il contient n'ont pas été lancés.~
 
-@737   = ~Chaos~
-@738   = ~Chaos
+@737   = ~Sphère du chaos~
+@738   = ~Sphère du chaos
 Niveau : 7
 École : Enchantement
 Portée : longue
@@ -3501,3 +3501,16 @@ Détecter les illusions : 50 %~
 @21009=~Métamorphose en Golem de fer~ // original iwdee @36177
 @21010=~Métamorphose en Flagelleur mental~ // original iwdee @36175
 @21011=~Métamorphose en muloup majeur~ // original iwdee @36181 is WRONG loup-garou -> muloup
+
+// Chriz fork: strings from @90000 on.
+@90000 = ~Chaos~
+@90001 = ~Chaos
+Niveau : 5
+École : Enchantement
+Portée : longue
+Durée : 4 rounds (5 au niveau 15, 6 au niveau 20)
+Temps d'incantation : 4
+Zone d'effet : rayon de 9 mètres
+Jet de sauvegarde contre les sorts : annule
+
+Ce sort fonctionne comme le sort de 4e niveau Confusion, mais il est plus difficile d'y résister. Toutes les créatures dans la zone d'effet peuvent lancer un jet de sauvegarde contre les sorts à -4. Celles qui le réussissent ne sont pas affectées par le sort. Les créatures qui ratent leur jet de sauvegarde deviennent berserk, confuses ou errent pendant la durée du sort. Les créatures errantes s'éloignent le plus possible du jeteur de sorts en utilisant leur mode de déplacement habituel (les personnages marchent, les poissons nagent, les chauves-souris volent, etc.) Toute créature confuse qui se fait attaquer considère son agresseur comme un ennemi et réagit en fonction de sa nature.~

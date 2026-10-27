@@ -962,7 +962,7 @@ The chance of the dispel succeeding is determined by the level of the caster and
 Level: 4
 School: Enchantment
 Range: Long
-Duration: 5 rounds
+Duration: 4 rounds (5 at 15th level, 6 at 20th level)
 Casting Time: 4
 Area of Effect: 30' radius
 Saving Throw: Spell negates
@@ -2263,8 +2263,8 @@ Saving Throw: None
 
 This spell allows a mage to prepare a magical sequencer that can store spells to be used later in a single swift action. The sequencer can store three spells to be released simultaneously, all of which must be of 4th level or lower. A mage can only possess one spell sequencer at a time, and the sequencer will remain active until the spells contained within it are released.~
 
-@737=~Chaos~
-@738=~Chaos
+@737=~Sphere of Chaos~
+@738=~Sphere of Chaos
 Level: 7
 School: Enchantment
 Range: Long
@@ -3567,3 +3567,16 @@ Special Abilities:
 
 //More sectypes.
 @23000 = "Imprisonment ended."
+
+// Chriz fork: strings from @90000 on.
+@90000 = ~Chaos~
+@90001 = ~Chaos
+Level: 5
+School: Enchantment
+Range: Long
+Duration: 4 rounds (5 at 15th level, 6 at 20th level)
+Casting Time: 4
+Area of Effect: 30' radius
+Saving Throw: Spell negates
+
+This spell works like the 4th-level spell Confusion, but it is harder to resist. All hostile creatures within the area of effect are allowed a saving throw vs. spell at -4. Those successfully saving are unaffected by the spell. Those who fail their saving throws will either go berserk, stand confused, or wander about for the duration of the spell. Wandering creatures move as far from the caster as possible, according to their most typical mode of movement (characters walk, fish swim, bats fly, etc.). Any confused creature that is attacked perceives the attacker as an enemy and acts according to its basic nature.~
