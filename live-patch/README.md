@@ -72,9 +72,15 @@ guard.** Install this component after both Spell Revisions and Rogue Rebalancing
 which of those two was installed first. It requires SR's main component (`spell_rev` #0) and
 RR's **Chosen of Cyric** (#11) and/or **Shadow Thief Improvements** (#12).
 
-RR's creature files have the original physical `SPWI508` spellbook entry baked into them. SR
-turns that slot into Waves of Fatigue and makes Chaos a level-seven spell, which stays so. The
-patch resolves every identity from the final `SPELL.IDS`. Each prepared level-five copy of the
+RR's creature files have the original physical `SPWI508` spellbook entry baked into them. The
+patch resolves every identity from the final `SPELL.IDS` and reads where SR has Chaos.
+
+**Chaos at level 5** (this fork from v4.21-chriz.8): `SPWI508` is Chaos again, so RR's
+spellbooks and Chaos casts are right as they are and stay. Only Selina's self-recast guard
+changes (last paragraph of this section). The Chaos spell must be a level-five wizard spell.
+
+**Chaos at level 7** (SR up to v4.21-chriz.7): SR turns that slot into Waves of Fatigue and
+makes Chaos a level-seven spell, which stays so. Each prepared level-five copy of the
 old slot becomes a level-five spell where it stands, with its own flags and without changing
 any spell-slot counter: Hold Monster for Aran Linvail (`RR#ARAN2`), Feeblemind for the
 Zhentarim Mercenary (`RR#SFL04`) and Domination for Selina (`RR#SELI`). A wizard's known
@@ -118,8 +124,11 @@ synthetic CREs with the audited copy counts and with other counts, flags, classe
 spellbook layouts, plus compiled BCS fixtures: both SR/RR orders converge byte-exactly, a second
 pass is idempotent, each RR prerequisite scopes its own resources, sorcerer and wizard known
 records, added checks, extra branches, IDS aliases and Chaos Shield are handled, ambiguous or
-malformed shapes fail closed, and public install/uninstall round-trips cleanly. A local check
-applied it to RR v4.92's own creatures and scripts in both install orders.
+malformed shapes fail closed, and public install/uninstall round-trips cleanly. With Chaos at
+level 5, both install orders change only Selina's script, keep every Chaos reference, and
+uninstall cleanly; RR's component 12 alone changes nothing, and a Chaos spell outside level
+five fails. A local check applied the level-seven branch to RR v4.92's own creatures and
+scripts in both install orders; the level-five branch has not been run against RR's own files.
 A quick in-game spellbook/casting smoke test of the earlier level-seven migration was reported
 successful by the user on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install; the level-five
 replacements have not been checked in game yet. Full hostile-encounter behavior, including the
