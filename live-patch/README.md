@@ -7,8 +7,9 @@ They can be appended without uninstalling the main Spell Revisions component (th
 never-uninstall rule for the main EET install).
 
 Fresh installs do not need the retrofit patches when they install this fork's `spell_rev/`
-itself. They **do** need any applicable cross-mod tail patch, notably `SRCB_RR_COMPAT` when
-Rogue Rebalancing is present.
+itself. They **do** need any applicable cross-mod patch, notably `SRCB_RR_COMPAT` when
+Rogue Rebalancing is present and `SRCB_SCS_COMPAT` when SCS is. `SRCB_SCS_COMPAT` is no tail
+patch: it changes SCS's source, so it goes after SR and before SCS's AI components.
 
 ## SRCB_CLASSIC_LIGHTNING (optional)
 
@@ -133,3 +134,30 @@ A quick in-game spellbook/casting smoke test of the earlier level-seven migratio
 successful by the user on 2026-09-07 in an isolated BG2:EE 2.6.6.0 install; the level-five
 replacements have not been checked in game yet. Full hostile-encounter behavior, including the
 recast guard in combat, and a wider SCS audit have not been tested.
+
+## SRCB_SCS_COMPAT
+
+**Sword Coast Stratagems compatibility: SCS mages use their own Chaos tactic.** SCS has a
+tactic for its mages' Chaos (cast it at groups, skip targets that are confused already or
+protected against confusion) and leaves it out whenever Spell Revisions is installed, because
+SR up to v4.21-chriz.7 had no Chaos at level 5. With this fork's Chaos at level 5, the
+component removes SCS's Spell Revisions gate (`Demivrgvs`) from the tactic blocks in
+`stratagems/mage/ssl/combatblocks/l5_enchantment.ssl` that cast `WIZARD_CHAOS`. SCS's dragons
+keep casting Confusion in place of Chaos, and Waves of Fatigue keeps SCS's own tactic.
+
+It changes SCS's source, so it goes after Spell Revisions' main component and before SCS's AI
+and tactical components (6000 and up), with SCS's files already in the game folder. Copy the
+`SRCB_SCS_COMPAT` folder and `Setup-SRCB_SCS_COMPAT.exe` from its release archive into the
+game directory. When using a source checkout, create the setup executable there as a copy of
+WeiDU v249 instead. Double-click it or run:
+
+```
+./setup-SRCB_SCS_COMPAT.exe --force-install-list 0 --language 0 --use-lang en_US --no-exit-pause
+```
+
+The component fails without changing anything when the final `SPELL.IDS` does not map
+`WIZARD_CHAOS` to a level-5 wizard spell, when SCS's library does not call Spell Revisions
+`Demivrgvs`, or when the file has no block that casts Chaos. When SCS's AI components are
+installed already, it warns: their mage scripts keep the skip until they are reinstalled.
+Automated tests and disposable-lab results (114 of 114 SCS mages with Chaos got the tactic,
+0 of 125 without the component) are in [its README](SRCB_SCS_COMPAT/README.md).

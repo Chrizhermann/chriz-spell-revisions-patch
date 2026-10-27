@@ -23,9 +23,10 @@ spell, Chaos in the game, had become a copy of SR's Confusion.
 | Chaos | Back at wizard level 5 in `SPWI508`: SR's Confusion with its saving throw at -4 ("variant D"), nothing else added |
 | Duration | Confusion and Chaos: 4 rounds, 5 from caster level 15, 6 from caster level 20 |
 | Level-7 spell | SR's sphere stays, with its effects, and is called Sphere of Chaos (wizard and priest) |
-| Waves of Fatigue | Stays a level-5 spell in a slot of its own, with its own scroll wherever a Chaos scroll is |
+| Waves of Fatigue | Stays a level-5 spell in a slot of its own, with its own scroll wherever a Chaos scroll is; confirmed 2026-10-28 on condition that it interferes nowhere (checked, sections 4 and 5) |
 | Avenger | Casts Chaos again |
 | Scope | New installs; the streamed game stays as it is |
+| SCS (2026-10-28) | SCS's own Chaos tactic runs with SR again, through a fix that runs before SCS; SCS's dragons keep casting Confusion in place of Chaos; no request to SCS's author |
 
 ## 3. Implementation
 
@@ -51,11 +52,24 @@ spell, Chaos in the game, had become a copy of SR's Confusion.
   are disabled in the tp2.
 - `live-patch/SRCB_RR_COMPAT` reads where Chaos is: at level 5 it keeps RR's Chaos and only
   fixes Selina's guard (see the RR design note).
+- `live-patch/SRCB_SCS_COMPAT` (new, installed after SR and before SCS's AI components). SCS
+  sets `Demivrgvs` whenever SR's `dvimhere.mrk` exists, and its mage tactic for Chaos
+  (`stratagems/mage/ssl/combatblocks/l5_enchantment.ssl`: cast at groups, skip confused and
+  confusion-proof targets) carries `IgnoreBlock(Demivrgvs)`. SCS's other Chaos casts run
+  only on the easiest difficulty (`TRIGGER=Easiest` in `ssl/difficulty.slb`) or from a Spell
+  Trigger, so SCS mages that know Chaos would hardly cast it. With SCS's IWD spell tables,
+  which SCS uses by default when IWDification's arcane spells are installed (CEBG), enchanters,
+  conjurers, fighter/mages and others learn Chaos at level 5. The component checks that
+  `WIZARD_CHAOS` is a level-5 wizard spell and that SCS still calls SR `Demivrgvs`. It then
+  removes that entry from the `IgnoreBlock` lists of the blocks that cast `WIZARD_CHAOS`,
+  reading lines as SCS's `ssl/ssl.pl` does, by deleting bytes only. SCS's Waves of Fatigue
+  tactic (`RequireBlock(Demivrgvs)`) then names the new slot through `SPELL.IDS`.
 
 ## 4. Verification
 
 **Automated:** `tests/test_chaos_level5.py` (24 real-WeiDU tests), the Spell Deflection
-fake game with the new registry name, and 4 new RR compatibility tests.
+fake game with the new registry name, 4 new RR compatibility tests, and
+`tests/test_scs_compat.py` (27 real-WeiDU tests on a synthetic SCS-shaped file).
 
 **Static lab check** (local evidence in `CEBG-Tests/_runs-20261028-chaos-level5`, not in the
 repository). Two disposable BG2:EE 2.7.3.0 + EEex labs got CEBG's SR components [0, 10, 20,
@@ -85,6 +99,26 @@ levels 9 and 14, 30 s at 15, 18 and 19, and 36 s at 20, so it follows the caster
 the target's. Confusion: 24 s at 9, 36 s at 20. Avenger's Chaos by the cleric: 30 s at 18,
 36 s at 20. Waves of Fatigue's copy applied its fatigue. Chaotic Commands stopped Chaos.
 
+**SCS labs** (2026-10-28; copies of the branch lab plus IWDification's arcane spells and SCS
+35.21's components 5900 and 6030; no game started): with `SRCB_SCS_COMPAT`, 114 of the 404
+SCS mages prepared Chaos and all 114 got SCS's Chaos tactic; without it, 125 prepared Chaos
+and none got it. No mage without Chaos got the tactic, and the 23 mages that got the same
+spells in both labs (none with Chaos) got the same scripts. SCS picks spells at random on
+every install, so the labs are compared by counts. A third lab without IWDification used
+SCS's Spell Revisions tables: no SCS mage prepared Chaos there (those tables pick Waves of
+Fatigue at 5 and Sphere of Chaos at 7), and the 59 mages that prepared Waves of Fatigue in
+`SPWI525` all got SCS's tactic for it. On SCS 35.21's own file the component removes exactly
+the Chaos tactic's `IgnoreBlock(Demivrgvs)` line, and uninstalling restores it.
+
+**Waves of Fatigue's own slot** (2026-10-28): the SCS labs have `2525 WIZARD_WAVES_OF_FATIGUE`
+and IWDification's Shroud of Flame in `SPWI526`, with matching names, portrait icon
+(`SPWI526D`) and spell-book entries in `BGEE.LUA`: later mods allocate their spells around it.
+A search of the 71 mod archives in CEBG's cache and of the stream game's mod folders found
+symbol references only (SCS, Tweaks Anthology, EE Fixpack), Korlasz's `spwi508` in SoD Remix
+(Chaos again, as in the unmodded game) and two kits with fixed slot lists: Bardic Wonders'
+Kapellmeister (`C0KM#H4.2da`, `SPWI501`–`SPWI534`) and Artisan's Kitpack's Dark Moon Monk
+(`C0DMM01E.2DA`, `SPWI524`–`SPWI526`).
+
 ## 5. Behaviour changes and limits
 
 - Everything that names `SPWI508` means Chaos again, as in the unmodded game: Chaotic Commands,
@@ -100,5 +134,16 @@ the target's. Confusion: 24 s at 9, 36 s at 20. Avenger's Chaos by the cleric: 3
 - Not updated: Russian, Spanish and Polish texts (disabled in the tp2), IWD:EE's own `SCCHAO`
   description. Not checked: an install with Rogue Rebalancing's own files on the level-five
   branch, IWD:EE and EET labs, existing saves.
-- Open: SCS skips its Chaos handling under SR and needs a look (question to DavidW, a
-  temporary CEBG fix before SCS).
+- SCS: dragons keep casting Confusion in place of Chaos (Christopher's decision). Plain BAF
+  blocks in SCS's SSL files are not touched; the tactic file has none. A component installed
+  after SCS's AI components changes only later SCS installs, and says so.
+- With SCS's Spell Revisions tables (no IWDification) SCS gives no mage Chaos, so
+  `SRCB_SCS_COMPAT` changes nothing there. SCS skips some mages of level 7 or 8 there with an
+  error about `WIZARD_NULL`: its Spell Revisions list of defensive spells for invokers
+  (`mage/spellchoices_defensive/demivrgvs/invoker.tph:50`) writes `NULL` where its other
+  lists write `null`. That is SCS's own and happens without this fork's changes too.
+- Kits with fixed slot lists offer whatever spell holds a slot. Bardic Wonders' Kapellmeister
+  gets Waves of Fatigue as one more choice; in the stream game's layout the last level-5 slot
+  moves from 2528 to 2529, still inside its list. Artisan's Dark Moon Monk (Sorcerous Lineage:
+  invocation, illusion or necromancy) offers Waves of Fatigue, a necromancy spell, where that
+  layout offers Conjure Lesser Water Elemental.

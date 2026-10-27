@@ -21,8 +21,9 @@ fixes here are written so they can be submitted as upstream pull requests
   A weekly GitHub Action (`.github/workflows/check-upstream.yml`) opens an `upstream-sync` issue when upstream moves.
 - Spell Revisions fixes are made **in the mod source** (`spell_rev/…`) so fresh installs get them.
   Fixes that can safely retrofit effective resources are mirrored as **tail-installable
-  mini-mods** in `live-patch/`. Compatibility that inherently depends on another mod's final
-  resources lives only there and must be installed after both mods.
+  mini-mods** in `live-patch/`. Compatibility that inherently depends on another mod's
+  resources lives only there: `SRCB_RR_COMPAT` is installed after both mods,
+  `SRCB_SCS_COMPAT` after SR and before SCS's AI components.
 - `spell_rev/setup-spell_rev.tp2` carries `VERSION ~v4.21-chriz.N~` so `WeiDU.log` shows which build an install came from.
 - `tests/` drive a real `weidu.exe` against synthetic fixtures (`python -m pytest tests`; set `WEIDU=` to a WeiDU ≥ 249 binary). No live game is touched.
 
@@ -35,6 +36,7 @@ fixes here are written so they can be submitted as upstream pull requests
 | 3 | **Rogue Rebalancing mages can cast Waves of Fatigue when their AI intends Chaos**, or fail to recognize/memorize SR's relocated Chaos; Selina can also recast Spell Turning immediately because SR's replacement uses the Spell Deflection state. | cross-mod compatibility | Reads where the installed SR has Chaos, from final `SPELL.IDS`. Chaos at level 5 (this fork from v4.21-chriz.8, row 5): RR's Chaos spellbooks and casts stay, only Selina's guard changes. Chaos at level 7 (SR up to v4.21-chriz.7): RR v4.92's prepared level-5 Chaos copies become Hold Monster (Aran), Feeblemind (Zhentarim Mercenary) or Domination (Selina) where they stand, slot caps kept, and their scripts cast that spell with the target checks it needs; CRE/BCS entries recognized by the spell they name; deferred tactical redirects are deliberately untouched | `live-patch/SRCB_RR_COMPAT` — install after SR and RR |
 | 4 | **With Spell Deflection blocks AoE spells (component 55), the checks and refreshes inside 69 area spells never worked.** The component copies each area spell into a secondary spell that the original casts on every creature, and creatures receive the copy's effects under the copy's name (lab-verified on BG2:EE 2.7.3.0). So the immunity checks SR puts first in these spells (Chaotic Commands, Free Action, Death Ward, Resist Fear, elemental immunities) still named the original and never matched: the priest's Sphere of Chaos put panic through Chaotic Commands. Self-refreshes never found the earlier casting either, so Greater Malison stacked with itself. SR's level-7 wizard sphere (Chaos in upstream, Sphere of Chaos here, row 5) also lacked the Chaotic Commands check that the priest version has, and the Avenger's level-5 spell had a cold-immunity check meant for Cone of Cold. | bug fix | `spell_rev/lib/deflection_self_refs.tpa` → `srcb_deflection_copy_self_refs`, called by component 55 for each copy; both checks in `spell_rev/lib/kreso_eestatsr.tph` | None — new installs |
 | 5 | **Chaos is back at wizard level 5.** Upstream moved Chaos to level 7 and put Waves of Fatigue into its level-5 slot (`SPWI508`), so every scroll, store, creature spellbook, AI script and protection that names Chaos got Waves of Fatigue. Here Chaos is SR's Confusion with its saving throw at -4. Confusion and Chaos last 4 rounds, 5 from caster level 15 and 6 from caster level 20 (lab-verified on BG2:EE 2.7.3.0, also through component 55). Waves of Fatigue keeps its effects in a slot of its own, and its own scroll lies beside every Chaos scroll. Both level-7 spheres are called Sphere of Chaos, and the Avenger casts Chaos again. Chaotic Commands, both Mind Blanks, Dispel Confusion and Spiritual Clarity act on Chaos again instead of Waves of Fatigue. | design change | `spell_rev/lib/chaos_confusion.tpa`, `spell_rev/lib/item_beside.tpa`, main component; [design](docs/plans/2026-10-28-chaos-level-5-design.md) | None — new installs |
+| 6 | **SCS mages never use SCS's own Chaos tactic with SR.** SCS leaves that tactic out whenever SR is installed, because upstream SR moved Chaos off level 5. With Chaos at level 5 again (row 5), SCS mages that know Chaos would cast it only on the easiest difficulty or from a Spell Trigger. | cross-mod compatibility | Before SCS compiles its mage scripts, removes SCS's SR gate (`Demivrgvs`) from the blocks that cast `WIZARD_CHAOS` in `stratagems/mage/ssl/combatblocks/l5_enchantment.ssl`, read the way SCS's compiler reads them. Refuses unless Chaos is a level-5 wizard spell. Waves of Fatigue's tactic and SCS's dragons (Confusion in place of Chaos) stay. | `live-patch/SRCB_SCS_COMPAT` — install after SR, before SCS's AI |
 
 Design notes live in `docs/plans/`; the upstream-ready write-up of each bug in `docs/upstream-reports/`.
 
@@ -55,16 +57,18 @@ limitations and the separate tail mini-mod. The existing SR/RR compatibility abo
 ## Installation
 
 The [latest release](https://github.com/Chrizhermann/chriz-spell-revisions-patch/releases/latest)
-provides a full Windows archive and smaller `SRCB_RR_COMPAT`-only and
-`SRCB_CLASSIC_LIGHTNING`-only archives, all with WeiDU 249 x64 installers. The full
-archive includes both extra folders and their separate installers; running
-`Setup-spell_rev.exe` does not install the SR/RR compatibility component.
+provides a full Windows archive and smaller `SRCB_RR_COMPAT`-only,
+`SRCB_CLASSIC_LIGHTNING`-only and `SRCB_SCS_COMPAT`-only archives, all with WeiDU 249 x64
+installers. The full archive includes the three extra folders and their separate installers;
+running `Setup-spell_rev.exe` installs neither compatibility component.
 
 Same as upstream (below): copy `spell_rev/` into the game directory and run it with WeiDU.
 For an **existing** install, don't reinstall Spell Revisions mid-stack — append the relevant
 `live-patch/` mini-mod at the tail instead (see `live-patch/README.md`). A fresh install that
 includes Rogue Rebalancing should still install `SRCB_RR_COMPAT` after both SR and RR; installing
-SR before RR remains the preferred base order.
+SR before RR remains the preferred base order. One that includes SCS should install
+`SRCB_SCS_COMPAT` after SR and before SCS's AI and tactical components, with SCS's files
+already in the game folder.
 
 Install component 60, **Update Spellbooks of Joinable NPCs**, after every mod component that
 adds an NPC or changes an NPC's class, kit, spellbook, or scripts. On future full installs this
