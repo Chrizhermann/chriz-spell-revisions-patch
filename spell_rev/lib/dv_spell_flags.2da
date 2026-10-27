@@ -291,6 +291,7 @@ WIZARD_SHADOW_DOOR                          -1          -1      -1              
 WIZARD_DOMINATION                           1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_HOLD_MONSTER                         1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_WAVES_OF_FATIGUE                     1           1       -1              -1                  -1                  -1          -1                  -1
+WIZARD_CHAOS                                1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_FEEBLEMIND                           1           1       -1              -1                  -1                  -1          -1                  -1
 WIZARD_DISPELLING_SCREEN                    -1          -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_PROTECTION_FROM_NORMAL_WEAPONS       -1          -1      -1              -1                  -1                  -1          -1                  -1
@@ -343,7 +344,7 @@ WIZARD_SUMMON_DEATH_KNIGHT                  -1          1       -1              
 WIZARD_CACOFIEND                            -1          1       -1              -1                  -1                  -1          -1                  -1
 WIZARD_MANTLE                               -1          -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_SPELL_SEQUENCER                      -1          -1      -1              -1                  -1                  -1          -1                  -1
-WIZARD_CHAOS                                1           -1      -1              -1                  -1                  -1          -1                  -1
+WIZARD_SPHERE_OF_CHAOS                      1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_DELAYED_BLAST_FIREBALL               1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_FINGER_OF_DEATH                      1           -1      -1              -1                  -1                  -1          -1                  -1
 WIZARD_PRISMATIC_SPRAY                      1           -1      -1              -1                  -1                  -1          -1                  -1

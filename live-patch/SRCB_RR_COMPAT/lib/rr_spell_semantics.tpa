@@ -2,14 +2,18 @@
 // This library is self-contained so SRCB_RR_COMPAT can be copied to a game
 // without the rest of the fork.
 //
-// SR gives Chaos a level-7 wizard identity and turns its old level-5 slot into
-// Waves of Fatigue. RR's mages were written for the old slot, so their
-// spellbooks prepare Waves of Fatigue and their scripts name it where RR meant
-// Chaos. Chaos stays SR's level-7 spell and no slot moves (Christopher's
-// decision, 2026-10-23): each affected mage's level-5 Chaos copies become a
-// level-5 spell that its script casts instead. Records and references are
-// recognized by the spell they name, never by how many of them one
-// installation happened to contain.
+// Up to v4.21-chriz.7, SR gives Chaos a level-7 wizard identity and turns its
+// old level-5 slot into Waves of Fatigue. RR's mages were written for the old
+// slot, so their spellbooks prepare Waves of Fatigue and their scripts name it
+// where RR meant Chaos. For that layout each affected mage's level-5 Chaos
+// copies become a level-5 spell that its script casts instead (Christopher's
+// decision, 2026-10-23). Records and references are recognized by the spell
+// they name, never by how many of them one installation happened to contain.
+//
+// From v4.21-chriz.8, SR keeps Chaos at wizard level 5 (Christopher's decision,
+// 2026-10-27). RR's level-5 Chaos copies and casts are real Chaos again and
+// stay. Either way SR's spell behind Spell Turning raises the Spell Deflection
+// stat, so Selina's self-recast guard changes.
 
 
 // Regexp alternation of every SPELL.IDS symbol for one spell number. The script
@@ -587,6 +591,61 @@ END
 
 
 DEFINE_ACTION_FUNCTION srcb_rr_apply_spell_semantics
+BEGIN
+    OUTER_SET srcb_chaos_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_CHAOS~)
+    ACTION_IF (srcb_chaos_number >= 2501) AND (srcb_chaos_number <= 2599) BEGIN
+        LAF srcb_rr_keep_level5_chaos END
+    END ELSE BEGIN
+        LAF srcb_rr_replace_level7_chaos END
+    END
+END
+
+
+// SR from v4.21-chriz.8: Chaos is the level-5 spell RR wrote for, so RR's
+// spellbooks and casts stay. Only Selina's Spell Turning guard changes.
+DEFINE_ACTION_FUNCTION srcb_rr_keep_level5_chaos
+BEGIN
+    LAF RES_NUM_OF_SPELL_NAME
+        STR_VAR spell_name = ~WIZARD_CHAOS~
+        RET srcb_chaos_spell = spell_res
+    END
+    OUTER_TEXT_SPRINT srcb_chaos_spell ~%srcb_chaos_spell%~
+    ACTION_TO_UPPER srcb_chaos_spell
+    LAF srcb_rr_require_wizard_spell
+        INT_VAR expected_level = 5
+        STR_VAR resource_name = EVAL ~%srcb_chaos_spell%~
+    END
+    PRINT ~SRCB_RR_COMPAT: Chaos is the level-5 spell %srcb_chaos_spell%; RR's Chaos spellbooks and casts stay as they are.~
+
+    ACTION_IF MOD_IS_INSTALLED ~rr/setup-rr.tp2~ 11 BEGIN
+        OUTER_SET srcb_turning_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_SPELL_TURNING~)
+        ACTION_IF (srcb_turning_number < 0) BEGIN
+            FAIL
+                ~SRCB_RR_COMPAT: SPELL.IDS has no WIZARD_SPELL_TURNING, so Selina's Spell Turning self-recast block cannot be identified.~
+        END
+        ACTION_IF (IDS_OF_SYMBOL (~STATS~ ~WIZARD_SPELL_DEFLECTION~) < 0) BEGIN
+            FAIL
+                ~SRCB_RR_COMPAT: STATS.IDS has no WIZARD_SPELL_DEFLECTION, which Selina's corrected guard names.~
+        END
+        ACTION_IF FILE_EXISTS_IN_GAME ~rr#seli.bcs~ BEGIN
+            COPY_EXISTING ~rr#seli.bcs~ ~override~
+                DECOMPILE_AND_PATCH BEGIN
+                    LPF srcb_rr_fix_selina_deflection_guard
+                        INT_VAR turning_number = srcb_turning_number
+                        STR_VAR resource_name = ~RR#SELI~
+                    END
+                END
+            BUT_ONLY
+        END ELSE BEGIN
+            WARN ~SRCB_RR_COMPAT: RR#SELI.BCS is not in the game; there is no script to change.~
+        END
+    END
+END
+
+
+// SR up to v4.21-chriz.7: Chaos is a level-7 spell and Waves of Fatigue holds
+// RR's level-5 Chaos slot.
+DEFINE_ACTION_FUNCTION srcb_rr_replace_level7_chaos
 BEGIN
     OUTER_SET srcb_source_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_WAVES_OF_FATIGUE~)
     OUTER_SET srcb_chaos_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_CHAOS~)

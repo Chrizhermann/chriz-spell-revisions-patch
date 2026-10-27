@@ -853,8 +853,8 @@ COPY_EXISTING	~spin562.spl~	override		// scalding steam
 		END
 	BUT_ONLY IF_EXISTS
 	
-	// spdr501, the Avenger's level-5 spell, is SR's Confusion (it replaces Chaos), not Cone of
-	// Cold: it gets the Chaotic Commands check under CHAOS & CONFUSION & CHARM, no cold check
+	// spdr501, the Avenger's level-5 spell, is Chaos, not Cone of Cold: it gets the
+	// Chaotic Commands check under CHAOS & CONFUSION & CHARM, no cold check
 
 
 	
@@ -3278,7 +3278,7 @@ LPF ADD_SPELL_EFFECT
 END
 END
 
-// The Avenger's Confusion: the same check as the wizard's Confusion (spwi401)
+// The Avenger's Chaos: the same check as the wizard's Chaos (spwi508)
 ACTION_IF FILE_EXISTS_IN_GAME ~spdr501.spl~ THEN BEGIN
 COPY_EXISTING ~spdr501.spl~ ~override~
 LPF ADD_SPELL_EFFECT

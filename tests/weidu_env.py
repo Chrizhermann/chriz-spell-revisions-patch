@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-RESOURCE_TYPE = {"SPL": 1006, "IDS": 1008, "CRE": 1009, "ARE": 1010, "2DA": 1012}
+RESOURCE_TYPE = {
+    "BAM": 1000, "ITM": 1005, "SPL": 1006, "IDS": 1008, "CRE": 1009, "ARE": 1010, "2DA": 1012, "STO": 1014,
+}
 
 ONE_EMPTY_STRING_TLK = (
     struct.pack("<8sHII", b"TLK V1  ", 0, 1, 0x2C)

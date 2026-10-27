@@ -1,0 +1,21 @@
+// Test harness for spell_rev/lib/chaos_confusion.tpa.
+// Run ONLY with `weidu --nogame` from a disposable directory; never install in a game.
+//
+//   argv[0] = input SPL path
+//   argv[1] = output SPL path
+//   argv[2] = rounds, chaos or both (Chaos as main component 0 makes it)
+//   argv[3] = path to spell_rev/lib/chaos_confusion.tpa
+
+BACKUP ~backup~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~apply: chaos_confusion.tpa~ DESIGNATED 0
+INCLUDE ~%argv[3]%~
+COPY ~%argv[0]%~ ~%argv[1]%~
+  PATCH_MATCH ~%argv[2]%~ WITH
+    ~rounds~ BEGIN LPF srcb_confusion_rounds END END
+    ~chaos~  BEGIN LPF srcb_chaos_from_confusion END END
+    ~both~   BEGIN LPF srcb_chaos_from_confusion END LPF srcb_confusion_rounds END END
+    DEFAULT PATCH_FAIL ~unknown mode %argv[2]%~
+  END
