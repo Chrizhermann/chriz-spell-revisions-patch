@@ -18,7 +18,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DONOR_SHA256 = "6276bfdb3610e0d7d5100f845e14037812d739b7fcf287b4c51152428c161298"
-MODS = ("spell_rev", "SRCB_RR_COMPAT", "SRCB_CLASSIC_LIGHTNING")
+MODS = ("spell_rev", "SRCB_RR_COMPAT", "SRCB_CLASSIC_LIGHTNING", "SRCB_SCS_COMPAT")
 
 
 def package(donor: Path, output: Path) -> list[dict]:
@@ -32,7 +32,8 @@ def package(donor: Path, output: Path) -> list[dict]:
         raise ValueError("WeiDU donor is not a Windows executable")
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     raw = subprocess.check_output(["git", "archive", "--format=zip", "HEAD", "spell_rev", "README.md",
-                                   "live-patch/SRCB_RR_COMPAT", "live-patch/SRCB_CLASSIC_LIGHTNING"], cwd=ROOT)
+                                   "live-patch/SRCB_RR_COMPAT", "live-patch/SRCB_CLASSIC_LIGHTNING",
+                                   "live-patch/SRCB_SCS_COMPAT"], cwd=ROOT)
     with zipfile.ZipFile(io.BytesIO(raw)) as source:
         payload = {entry.filename: source.read(entry) for entry in source.infolist() if not entry.is_dir()}
         timestamp = source.getinfo("README.md").date_time

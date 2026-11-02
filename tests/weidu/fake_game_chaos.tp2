@@ -1,0 +1,23 @@
+// Test-only tp2: runs the Chaos redesign's libraries inside a synthetic fake game
+// (tests/weidu_env.py FakeGame) the way main component 0 calls them. Never install this in a
+// real game.
+
+BACKUP ~weidu_external/backup/srcb_test_chaos~
+AUTHOR ~chriz-spell-revisions-patch tests~
+VERSION ~test~
+
+BEGIN ~test: Chaos from SR's Confusion~ DESIGNATED 0
+INCLUDE ~spell_rev/lib/chaos_confusion.tpa~
+COPY ~spell_rev/spwi4##/spwi401.spl~ ~override/spwi508.spl~
+  LPF srcb_chaos_from_confusion END
+  LPF srcb_confusion_rounds END
+
+BEGIN ~test: Waves of Fatigue scroll beside every Chaos scroll, twice~ DESIGNATED 1
+INCLUDE ~spell_rev/lib/item_beside.tpa~
+OUTER_FOR (pass = 1; pass <= 2; ++pass) BEGIN
+  LAF srcb_scrolls_teaching STR_VAR spell = ~spwi508~ RET_ARRAY srcb_chaos_scrolls = scrolls END
+  ACTION_PHP_EACH srcb_chaos_scrolls AS srcb_chaos_scroll => srcb_found BEGIN
+    PRINT ~srcb_test anchor=%srcb_chaos_scroll%~
+    LAF srcb_add_item_beside STR_VAR anchor = EVAL ~%srcb_chaos_scroll%~ item = ~srcbwofs~ END
+  END
+END

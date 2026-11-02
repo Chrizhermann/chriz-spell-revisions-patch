@@ -1347,3 +1347,60 @@ def test_hexadecimal_spell_ids_are_read(tmp_path: Path, rr_after_sr: bool) -> No
     )
     assert_installed(_install_public(game))
     _assert_final_resources(game, ids_root)
+
+
+# SR from v4.21-chriz.8 (Christopher's decision, 2026-10-27): Chaos is at level 5
+# again, Waves of Fatigue has a slot of its own and the sphere is a spell of its own.
+LEVEL5_SPELL_IDS = """IDS V1.0
+2506 WIZARD_DOMINATION
+2507 WIZARD_HOLD_MONSTER
+2508 WIZARD_CHAOS
+2509 WIZARD_FEEBLEMIND
+2524 WIZARD_WAVES_OF_FATIGUE
+2701 WIZARD_SPELL_TURNING
+2711 WIZARD_SPHERE_OF_CHAOS
+"""
+
+
+@pytest.mark.parametrize("rr_after_sr", (False, True))
+def test_level5_chaos_keeps_rr_and_fixes_only_selinas_guard(tmp_path: Path, rr_after_sr: bool) -> None:
+    game, ids_root = _make_game(tmp_path, rr_after_sr=rr_after_sr, current_spell_ids=LEVEL5_SPELL_IDS)
+    before = game.override_tree()
+    process = _install_public(game)
+    assert_installed(process)
+    text = transcript(process)
+    assert "INSTALLED WITH WARNINGS" not in text, text
+    assert "Chaos is the level-5 spell SPWI508" in text, text
+
+    after = game.override_tree()
+    assert {name for name in after if after[name] != before.get(name)} == {"RR#SELI.BCS"}
+    selina = _decompiled(game, ids_root, "RR#SELI")
+    assert selina.count("!CheckStatGT(Myself,0,WIZARD_SPELL_DEFLECTION)") == 1, selina
+    assert "!CheckStatGT(Myself,0,WIZARD_SPELL_TURNING)" not in selina
+    assert "CheckStatGT(Myself,1,WIZARD_SPELL_TURNING)" in selina  # her other check keeps its meaning
+    assert _references(selina, "WIZARD_CHAOS") == SCRIPT_COUNTS["RR#SELI"]
+    assert "WIZARD_DOMINATION" not in selina
+
+    process = game.uninstall("SRCB_RR_COMPAT/setup-SRCB_RR_COMPAT.tp2", 0)
+    assert "SUCCESSFULLY REMOVED" in transcript(process) or "Uninstalled" in transcript(process)
+    assert game.override_tree() == before
+    game.assert_inputs_unchanged()
+
+
+def test_level5_chaos_without_selina_changes_nothing(tmp_path: Path) -> None:
+    game, _ = _make_game(tmp_path, rr_after_sr=False, current_spell_ids=LEVEL5_SPELL_IDS)
+    before = game.override_tree()
+    _mark_dependencies(game, rr_components=(12,))
+    process = game.install("SRCB_RR_COMPAT/setup-SRCB_RR_COMPAT.tp2", 0)
+    assert_installed(process)
+    assert game.override_tree() == before
+
+
+def test_level5_chaos_must_be_a_level_five_wizard_spell(tmp_path: Path) -> None:
+    game, _ = _make_game(
+        tmp_path, rr_after_sr=False, current_spell_ids=LEVEL5_SPELL_IDS, spells={OLD_RESREF: _wizard_spell(7)})
+    before = game.override_tree()
+    text = transcript(_install_public(game))
+    assert "SUCCESSFULLY INSTALLED" not in text, text
+    assert "SPWI508.SPL is not the expected level-5 wizard spell" in text, text
+    assert game.override_tree() == before

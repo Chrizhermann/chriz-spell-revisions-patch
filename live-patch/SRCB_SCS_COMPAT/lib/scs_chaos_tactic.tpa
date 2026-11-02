@@ -1,0 +1,255 @@
+// Sword Coast Stratagems compatibility for Spell Revisions with Chaos at wizard
+// level 5. This library is self-contained so SRCB_SCS_COMPAT can be copied to
+// a game without the rest of the fork.
+//
+// SCS builds its mage scripts from SSL source files when its AI and tactical
+// components install. Its own Chaos tactic, in
+// mage/ssl/combatblocks/l5_enchantment.ssl, carries IgnoreBlock(Demivrgvs):
+// SCS sets Demivrgvs whenever dvimhere.mrk exists (lib/always.tph) and then
+// leaves the tactic out, because SR up to v4.21-chriz.7 took Chaos off wizard
+// level 5. From v4.21-chriz.8 Chaos is a level-5 wizard spell again
+// (Christopher's decision, 2026-10-27). Before SCS reads the file, this
+// removes Demivrgvs from the IgnoreBlock lists of the blocks that cast
+// WIZARD_CHAOS (Christopher's decision, 2026-10-28). Every other block,
+// including SCS's Waves of Fatigue tactic, stays as it is.
+
+
+// SCS's compiler (ssl/ssl.pl) reads SSL line by line: text after // is a
+// comment, a block starts at a line IF TRIGGER, its actions start at the line
+// containing THEN DO, and it ends at a line END. An IgnoreBlock list is the
+// text between the first ( and the last ) of its line, split on |. SCS fills
+// in its variables and drops the block when an entry is exactly True, so only
+// an entry that is exactly Demivrgvs is SCS's Spell Revisions gate.
+//
+// In each block whose actions name WIZARD_CHAOS, those entries go: with their
+// whole line when the list holds nothing else, otherwise with one separator
+// each. Only bytes are deleted, so the rest of the file stays byte for byte.
+DEFINE_PATCH_FUNCTION srcb_scs_ungate_chaos_blocks
+    RET
+        chaos_blocks
+        gated_blocks
+BEGIN
+    SET chaos_blocks = 0
+    SET gated_blocks = 0
+    SET edits = 0
+    SET pending = 0
+    SET part = 0  // 0 outside a block, 1 its trigger part, 2 its action part
+    SET casts_chaos = 0
+    SET line_start = 0
+    WHILE (line_start < BUFFER_LENGTH) BEGIN
+        SET line_end = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~%LNL%~ line_start)
+        PATCH_IF (line_end < 0) BEGIN
+            SET line_end = BUFFER_LENGTH
+            SET next_line = BUFFER_LENGTH
+        END ELSE BEGIN
+            SET next_line = line_end + 1
+        END
+        SET code_end = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~//~ line_start)
+        PATCH_IF (code_end < 0) OR (code_end > line_end) BEGIN
+            SET code_end = line_end
+        END
+
+        PATCH_IF (part = 0) BEGIN
+            PATCH_IF (INDEX_BUFFER (CASE_SENSITIVE EVALUATE_REGEXP
+                    ~^[ %TAB%%MNL%]*IF[ %TAB%%MNL%]+TRIGGER[ %TAB%%MNL%]*\(//[^%LNL%]*\)?$~
+                    line_start) = line_start) BEGIN
+                SET part = 1
+                SET pending = 0
+                SET casts_chaos = 0
+            END
+        END ELSE PATCH_IF (part = 1) BEGIN
+            SET found = INDEX_BUFFER (CASE_SENSITIVE EVALUATE_REGEXP ~THEN[ %TAB%%MNL%]+DO~ line_start)
+            PATCH_IF (found >= 0) AND (found < code_end) BEGIN
+                SET part = 2
+            END ELSE BEGIN
+                SET found = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~IgnoreBlock~ line_start)
+                SET open = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~(~ line_start)
+                SET close = RINDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~)~ (code_end - 1))
+                PATCH_IF (found >= 0) AND (found < code_end)
+                      AND (open >= line_start) AND (open < code_end) AND (close > open) BEGIN
+                    SET entries = 0
+                    SET gates = 0
+                    SET entry_start = open + 1
+                    SET more = 1
+                    WHILE more BEGIN
+                        SET entry_end = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~|~ entry_start)
+                        PATCH_IF (entry_end < 0) OR (entry_end > close) BEGIN
+                            SET entry_end = close
+                            SET more = 0
+                        END
+                        SET $srcb_entry_from(~%entries%~) = entry_start
+                        SET $srcb_entry_to(~%entries%~) = entry_end
+                        SET $srcb_entry_gate(~%entries%~) = ((entry_end - entry_start) = 9)
+                            AND (INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~Demivrgvs~ entry_start) = entry_start)
+                        SET gates = gates + $srcb_entry_gate(~%entries%~)
+                        SET entries = entries + 1
+                        SET entry_start = entry_end + 1
+                    END
+                    SET $srcb_entry_gate(~%entries%~) = 0
+
+                    PATCH_IF (gates > 0) AND (gates = entries) BEGIN
+                        SET $srcb_pending_from(~%pending%~) = line_start
+                        SET $srcb_pending_to(~%pending%~) = next_line
+                        SET pending = pending + 1
+                    END ELSE PATCH_IF (gates > 0) BEGIN
+                        // Each run of gate entries goes with the separator
+                        // after it when it opens the list, otherwise with the
+                        // one before it. A kept entry separates the runs.
+                        SET entry = 0
+                        WHILE (entry < entries) BEGIN
+                            PATCH_IF $srcb_entry_gate(~%entry%~) BEGIN
+                                SET run_first = entry
+                                WHILE $srcb_entry_gate(~%entry%~) BEGIN
+                                    SET entry = entry + 1
+                                END
+                                PATCH_IF (run_first = 0) BEGIN
+                                    SET $srcb_pending_from(~%pending%~) = $srcb_entry_from(~0~)
+                                    SET $srcb_pending_to(~%pending%~) = $srcb_entry_from(~%entry%~)
+                                END ELSE BEGIN
+                                    SET kept = run_first - 1
+                                    SET run_last = entry - 1
+                                    SET $srcb_pending_from(~%pending%~) = $srcb_entry_to(~%kept%~)
+                                    SET $srcb_pending_to(~%pending%~) = $srcb_entry_to(~%run_last%~)
+                                END
+                                SET pending = pending + 1
+                            END ELSE BEGIN
+                                SET entry = entry + 1
+                            END
+                        END
+                    END
+                END
+            END
+        END ELSE BEGIN
+            PATCH_IF (INDEX_BUFFER (CASE_SENSITIVE EVALUATE_REGEXP
+                    ~^[ %TAB%%MNL%]*END[ %TAB%%MNL%]*\(//[^%LNL%]*\)?$~
+                    line_start) = line_start) BEGIN
+                PATCH_IF casts_chaos BEGIN
+                    SET chaos_blocks = chaos_blocks + 1
+                    PATCH_IF (pending > 0) BEGIN
+                        SET gated_blocks = gated_blocks + 1
+                        SET moved = 0
+                        WHILE (moved < pending) BEGIN
+                            SET $srcb_edit_from(~%edits%~) = $srcb_pending_from(~%moved%~)
+                            SET $srcb_edit_to(~%edits%~) = $srcb_pending_to(~%moved%~)
+                            SET edits = edits + 1
+                            SET moved = moved + 1
+                        END
+                    END
+                END
+                SET part = 0
+            END ELSE BEGIN
+                SET found = INDEX_BUFFER (CASE_SENSITIVE EXACT_MATCH ~Action(~ line_start)
+                PATCH_IF (found >= 0) AND (found < code_end) BEGIN
+                    SET found = INDEX_BUFFER (CASE_INSENSITIVE EVALUATE_REGEXP
+                        ~[(,|][ %TAB%]*WIZARD_CHAOS[ %TAB%]*[,|)]~ line_start)
+                    PATCH_IF (found >= 0) AND (found < code_end) BEGIN
+                        SET casts_chaos = 1
+                    END
+                END
+            END
+        END
+        SET line_start = next_line
+    END
+
+    // The edits run front to back and never overlap, so deleting them back to
+    // front keeps every recorded offset valid.
+    WHILE (edits > 0) BEGIN
+        SET edits = edits - 1
+        SET from = $srcb_edit_from(~%edits%~)
+        DELETE_BYTES from ($srcb_edit_to(~%edits%~) - from)
+    END
+END
+
+
+DEFINE_ACTION_FUNCTION srcb_scs_require_wizard_spell
+    INT_VAR expected_level = 1
+    STR_VAR resource_name = ""
+BEGIN
+    ACTION_IF NOT FILE_EXISTS_IN_GAME ~%resource_name%.spl~ BEGIN
+        FAIL ~SRCB_SCS_COMPAT: required spell %resource_name%.SPL does not exist.~
+    END
+    COPY_EXISTING ~%resource_name%.spl~ ~override~
+        PATCH_IF (SOURCE_SIZE < 0x38) BEGIN
+            PATCH_FAIL ~SRCB_SCS_COMPAT: %resource_name%.SPL is too small to be a valid spell.~
+        END
+        READ_ASCII 0 srcb_spell_signature (8)
+        READ_SHORT 0x1c srcb_spell_type
+        READ_LONG 0x34 srcb_spell_level
+        PATCH_IF NOT (~%srcb_spell_signature%~ STRING_EQUAL_CASE ~SPL V1  ~)
+              OR (srcb_spell_type != 1)
+              OR (srcb_spell_level != expected_level) BEGIN
+            PATCH_FAIL
+                ~SRCB_SCS_COMPAT: %resource_name%.SPL is not the expected level-%expected_level% wizard spell.~
+        END
+    BUT_ONLY
+END
+
+
+DEFINE_ACTION_FUNCTION srcb_scs_enable_chaos_tactic
+BEGIN
+    OUTER_TEXT_SPRINT srcb_ssl ~stratagems/mage/ssl/combatblocks/l5_enchantment.ssl~
+
+    // With Chaos anywhere but wizard level 5, SCS is right to leave its
+    // level-5 Chaos tactic out under Spell Revisions.
+    OUTER_SET srcb_chaos_number = IDS_OF_SYMBOL (~spell~ ~WIZARD_CHAOS~)
+    ACTION_IF (srcb_chaos_number < 2501) OR (srcb_chaos_number > 2599) BEGIN
+        FAIL
+            ~SRCB_SCS_COMPAT: final SPELL.IDS does not map WIZARD_CHAOS to a level-5 wizard spell, so SCS rightly leaves its Chaos tactic out with Spell Revisions. This component is for Spell Revisions from v4.21-chriz.8, which keeps Chaos at wizard level 5.~
+    END
+    LAF RES_NUM_OF_SPELL_NAME
+        STR_VAR spell_name = ~WIZARD_CHAOS~
+        RET srcb_chaos_spell = spell_res
+    END
+    OUTER_TEXT_SPRINT srcb_chaos_spell ~%srcb_chaos_spell%~
+    ACTION_TO_UPPER srcb_chaos_spell
+    LAF srcb_scs_require_wizard_spell
+        INT_VAR expected_level = 5
+        STR_VAR resource_name = EVAL ~%srcb_chaos_spell%~
+    END
+
+    // The gate this removes is SCS's name for Spell Revisions. Another name
+    // would leave an unknown gate on the tactic. FILE_CONTAINS stops the
+    // install on a missing file, so its existence comes first.
+    OUTER_SET srcb_names_sr = 0
+    ACTION_IF FILE_EXISTS ~stratagems/lib/always.tph~ BEGIN
+        ACTION_IF FILE_CONTAINS ~stratagems/lib/always.tph~ ~Demivrgvs=True~ BEGIN
+            OUTER_SET srcb_names_sr = 1
+        END
+    END
+    ACTION_IF NOT srcb_names_sr BEGIN
+        FAIL
+            ~SRCB_SCS_COMPAT: stratagems/lib/always.tph is missing or does not set Demivrgvs, SCS's name for Spell Revisions that this component expects. This SCS version is not supported; nothing was changed.~
+    END
+
+    // SCS's AI and tactical components (6000 and up) compile mage scripts
+    // from the file; scripts compiled before this component keep the gate.
+    OUTER_SET srcb_compiled = 0
+    OUTER_FOR (srcb_component = 6000; srcb_component < 10000; ++srcb_component) BEGIN
+        ACTION_IF (srcb_compiled = 0)
+              AND (MOD_IS_INSTALLED ~stratagems/setup-stratagems.tp2~ ~%srcb_component%~) BEGIN
+            OUTER_SET srcb_compiled = srcb_component
+        END
+    END
+    ACTION_IF (srcb_compiled > 0) BEGIN
+        WARN
+            ~SRCB_SCS_COMPAT: SCS component %srcb_compiled% is already installed. Mage scripts that SCS compiled before this component still leave the Chaos tactic out; install this component before SCS's AI and tactical components, or reinstall those.~
+    END
+
+    COPY ~%srcb_ssl%~ ~%srcb_ssl%~
+        LPF srcb_scs_ungate_chaos_blocks
+            RET
+                srcb_chaos_blocks = chaos_blocks
+                srcb_gated_blocks = gated_blocks
+        END
+        PATCH_IF (srcb_chaos_blocks = 0) BEGIN
+            PATCH_FAIL
+                ~SRCB_SCS_COMPAT: %srcb_ssl% has no block that casts WIZARD_CHAOS. This SCS version is not supported; nothing was changed.~
+        END
+        PATCH_IF (srcb_gated_blocks = 0) BEGIN
+            PATCH_PRINT ~SRCB_SCS_COMPAT: SCS's Chaos tactic already runs with Spell Revisions; nothing to change.~
+        END ELSE BEGIN
+            PATCH_PRINT
+                ~SRCB_SCS_COMPAT: Chaos is the level-5 spell %srcb_chaos_spell%; SCS's own Chaos tactic now runs with Spell Revisions (%srcb_gated_blocks% of %srcb_chaos_blocks% Chaos blocks were gated).~
+        END
+    BUT_ONLY
+END

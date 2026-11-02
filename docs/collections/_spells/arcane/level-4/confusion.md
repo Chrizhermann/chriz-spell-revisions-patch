@@ -12,7 +12,7 @@ Confusion
 Level: 4  
 School: Enchantment  
 Range: Long  
-Duration: 5 rounds  
+Duration: 4 rounds (5 at 15th level, 6 at 20th level)  
 Casting Time: 4  
 Area of Effect: 30' radius  
 Saving Throw: Spell negates  

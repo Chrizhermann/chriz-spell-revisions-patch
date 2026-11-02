@@ -1,5 +1,10 @@
 # RR / Spell Revisions spell-semantics compatibility
 
+From v4.21-chriz.8 this fork has Chaos at wizard level 5 again
+(`2026-10-28-chaos-level-5-design.md`). The component then keeps RR's Chaos
+spellbooks and casts and only fixes Selina's guard; everything below about
+replacing RR's Chaos applies to SR up to v4.21-chriz.7, where Chaos is at level 7.
+
 The decision of 2026-10-23 (last section) replaces the level-seven Chaos
 migration described in the earlier sections: Chaos stays at level 7, and RR's
 level-five copies become level-five spells.

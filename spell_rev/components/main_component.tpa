@@ -1,5 +1,7 @@
 INCLUDE ~spell_rev\lib\cre_spell_immunity.tph~
 INCLUDE ~spell_rev\lib\manage_add_spell_references.tpa~
+INCLUDE ~spell_rev\lib\chaos_confusion.tpa~
+INCLUDE ~spell_rev\lib\item_beside.tpa~
 
 
 /*------------Manage ADD_SPELL References, Part 1-----------*/
@@ -257,8 +259,7 @@ COPY ~spell_rev\shared\spdr301.spl~     ~override~ // Lightning Bolt
   SAY NAME1 @515    SAY UNIDENTIFIED_DESC @516
 COPY ~spell_rev\shared\spdr401.spl~     ~override~ // Improved Invisibility
   SAY NAME1 @569    SAY UNIDENTIFIED_DESC @570
-COPY ~spell_rev\shared\spdr501.spl~     ~override~ // Confusion (replaces Chaos)
-  SAY NAME1 @561    SAY UNIDENTIFIED_DESC @562
+// spdr501, the Avenger's Chaos, is copied from the wizard's Chaos (level 5).
 COPY ~spell_rev\shared\spdr601.spl~     ~override~ // Chain Lightning
   SAY NAME1 @687    SAY UNIDENTIFIED_DESC @688
 
@@ -1301,7 +1302,7 @@ COPY ~spell_rev\sppr7##\sppr708.spl~     ~override~  // Finger of Death
 COPY ~spell_rev\sppr7##\dvfingpi.eff~     ~override~
 
 ADD_PROJECTILE ~spell_rev\projectles\dvschaos.pro~
-COPY ~spell_rev\sppr7##\sppr709.spl~     ~override~  // Chaos (replaces Confusion)
+COPY ~spell_rev\sppr7##\sppr709.spl~     ~override~  // Sphere of Chaos (replaces Confusion)
   SAY NAME1 @297    SAY UNIDENTIFIED_DESC @298
   WRITE_SHORT 0x98 %dvschaos%
 APPEND ~spell.ids~ ~1709 CLERIC_CHAOS~
@@ -2142,6 +2143,7 @@ COPY ~spell_rev\spwi3##\dvwi327c.bam~     ~override~
 
 COPY ~spell_rev\spwi4##\spwi401.spl~     ~override~  // Confusion
   SAY NAME1 @561    SAY UNIDENTIFIED_DESC @562
+  LPF srcb_confusion_rounds END
 COPY ~spell_rev\spwi4##\scrl1u.itm~     ~override~
   SAY NAME2 @561    SAY IDENTIFIED_DESC   @562
 
@@ -2431,15 +2433,17 @@ COPY ~spell_rev\spwi5##\spwi507.spl~     ~override~  // Hold Monster
 COPY ~spell_rev\spwi5##\scrl5o.itm~     ~override~
   SAY NAME2 @623    SAY IDENTIFIED_DESC   @624
 
-COPY ~spell_rev\spwi5##\spwi508.spl~     ~override~  // Waves of Fatigue (replaces Chaos)
-  SAY NAME1 @625    SAY UNIDENTIFIED_DESC @626
+// Chaos is SR's Confusion at level 5 with its saving throw at -4 (Christopher, 2026-10-27).
+// Waves of Fatigue, which SR had put here, is added below with ADD_SPELL.
+COPY ~spell_rev\spwi4##\spwi401.spl~     ~override\spwi508.spl~  // Chaos
+  SAY NAME1 @90000  SAY UNIDENTIFIED_DESC @90001
+  LPF srcb_chaos_from_confusion END
+  LPF srcb_confusion_rounds END
 COPY ~spell_rev\spwi5##\scrl5p.itm~     ~override~
-  SAY NAME2 @625    SAY IDENTIFIED_DESC   @626
-COPY ~spell_rev\spwi5##\spwi508a.bam~    ~override~
-COPY ~spell_rev\spwi5##\spwi508b.bam~    ~override~
-COPY ~spell_rev\spwi5##\spwi508c.bam~    ~override~
-COPY_EXISTING ~spell.ids~ ~override~
-  REPLACE_TEXTUALLY ~^2508[ %TAB%]+WIZARD_CHAOS~ ~2508 WIZARD_WAVES_OF_FATIGUE~
+  SAY NAME2 @90000  SAY IDENTIFIED_DESC   @90001
+COPY_EXISTING ~spwi508.spl~             ~override\spdr501.spl~  // the Avenger's Chaos
+  WRITE_SHORT 0x1c 2 // priest spell
+  WRITE_LONG  0x1e 0 // no exclusions
 
 COPY ~spell_rev\spwi5##\spwi509.spl~     ~override~  // Feeblemind
   SAY NAME1 @627    SAY UNIDENTIFIED_DESC @628
@@ -2589,6 +2593,16 @@ COPY ~spell_rev\spwi5##\dvwi526a.bam~    ~override~
 COPY ~spell_rev\spwi5##\dvwi526b.bam~    ~override~
 COPY ~spell_rev\spwi5##\dvwi526c.bam~    ~override~
 /* STRING_SET ~13070~ @565 // change portrait icon from Fire Shield (Blue) to Acid Sheath */
+
+//ADD_SPELL: Waves of Fatigue (SR had it in SPWI508, which is Chaos again)
+ADD_SPELL ~spell_rev\spwi5##\spwiwof.spl~ 2 5 ~WIZARD_WAVES_OF_FATIGUE~  // Waves of Fatigue
+  SAY NAME1 @625    SAY UNIDENTIFIED_DESC @626
+COPY ~spell_rev\spwi5##\srcbwofs.itm~    ~override~
+  SAY NAME2 @625    SAY IDENTIFIED_DESC   @626
+COPY ~spell_rev\spwi5##\srcbwofa.bam~    ~override~
+COPY ~spell_rev\spwi5##\srcbwofb.bam~    ~override~
+COPY ~spell_rev\spwi5##\srcbwofc.bam~    ~override~
+// Its scroll is placed beside every Chaos scroll after the Tutu scrolls below.
 
 
 /*-----------------------level 6-----------------------*/
@@ -2891,7 +2905,7 @@ COPY ~spell_rev\spwi7##\scrl8l.itm~     ~override~
 COPY ~spell_rev\spwi7##\spwi710d.spl~     ~override~
   SAY NAME1 @735
 
-COPY ~spell_rev\spwi7##\spwi711.spl~     ~override~  // Chaos ("replaces" Sphere of Chaos)
+COPY ~spell_rev\spwi7##\spwi711.spl~     ~override~  // Sphere of Chaos (SR's sphere)
   SAY NAME1 @737    SAY UNIDENTIFIED_DESC @738
   WRITE_SHORT 0x98 %dvschaos%
 COPY ~spell_rev\spwi7##\scrl8m.itm~     ~override~
@@ -2899,7 +2913,6 @@ COPY ~spell_rev\spwi7##\scrl8m.itm~     ~override~
 COPY ~spell_rev\spwi7##\dvwi711a.bam~    ~override~
 COPY ~spell_rev\spwi7##\dvwi711b.bam~    ~override~ // also used by CLERIC_CHAOS
 COPY ~spell_rev\spwi7##\dvwi711c.bam~    ~override~ // also used by CLERIC_CHAOS
-APPEND ~spell.ids~ ~2711 WIZARD_CHAOS~
 
 COPY ~spell_rev\spwi7##\spwi712.spl~     ~override~  // Delayed Blast Fireball
   SAY NAME1 @739    SAY UNIDENTIFIED_DESC @740
@@ -3479,6 +3492,16 @@ ACTION_IF (GAME_IS ~tutu tutu_totsc~) BEGIN
       COPY_EXISTING ~%scroll%.itm~ ~override/_%scroll%.itm~
     END
   END
+END
+
+
+/*---------------Waves of Fatigue Scrolls---------------*/
+
+// The Waves of Fatigue scroll turns up wherever a Chaos scroll does (Christopher, 2026-10-26):
+// in stores, area containers and creature inventories.
+LAF srcb_scrolls_teaching STR_VAR spell = ~spwi508~ RET_ARRAY srcb_chaos_scrolls = scrolls END
+ACTION_PHP_EACH srcb_chaos_scrolls AS srcb_chaos_scroll => srcb_found BEGIN
+  LAF srcb_add_item_beside STR_VAR anchor = EVAL ~%srcb_chaos_scroll%~ item = ~srcbwofs~ END
 END
 
 

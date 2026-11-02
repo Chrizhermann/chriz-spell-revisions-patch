@@ -1,0 +1,20 @@
+// SRCB_SCS_COMPAT — Sword Coast Stratagems compatibility for Spell Revisions
+// with Chaos at wizard level 5. Install after Spell Revisions and before SCS's
+// AI and tactical components, with SCS's files already in the game folder.
+
+BACKUP ~weidu_external/backup/SRCB_SCS_COMPAT~
+AUTHOR ~Chriz (Spell Revisions — Chriz Balance Patch,
+https://github.com/Chrizhermann/chriz-spell-revisions-patch)~
+VERSION ~v4.21-chriz.8~
+
+BEGIN ~Sword Coast Stratagems compatibility: SCS mages use their own Chaos tactic~
+DESIGNATED 0
+LABEL ~SRCB_SCS_COMPAT-scs-chaos-tactic~
+REQUIRE_PREDICATE (MOD_IS_INSTALLED ~spell_rev/setup-spell_rev.tp2~ 0)
+    ~This component requires Spell Revisions (main component) to be installed.~
+REQUIRE_PREDICATE (FILE_EXISTS ~stratagems/mage/ssl/combatblocks/l5_enchantment.ssl~)
+    ~This component requires Sword Coast Stratagems' files in the game folder. Extract SCS first, then install this component before SCS's AI components.~
+
+INCLUDE ~SRCB_SCS_COMPAT/lib/scs_chaos_tactic.tpa~
+
+LAF srcb_scs_enable_chaos_tactic END

@@ -40,6 +40,7 @@ FAKE_GAME_TP2 = ROOT / "tests" / "weidu" / "fake_game_deflection.tp2"
 LIBRARY = ROOT / "spell_rev" / "lib" / "deflection_self_refs.tpa"
 COMPONENT = ROOT / "spell_rev" / "components" / "nwn_spell_deflection.tpa"
 ADD_SPELL_REFERENCES = ROOT / "spell_rev" / "lib" / "manage_add_spell_references.tpa"
+MAIN_COMPONENT = ROOT / "spell_rev" / "components" / "main_component.tpa"
 
 CHAOTIC_COMMANDS_STATE = 41
 SPLPROT_SPLSTATE_ROW = 110
@@ -183,13 +184,23 @@ def test_second_pass_changes_nothing(tmp_path: Path) -> None:
 
 
 def _spell_ids_text() -> bytes:
-    """SPELL.IDS entries for every ADD_SPELL spell the component resolves (no warnings)."""
+    """SPELL.IDS entries for every ADD_SPELL spell the component resolves (no warnings).
+
+    A numbered registry name (spwi427) stands for its own slot. A named one (spwiwof) gets a
+    stand-in slot at the level its ADD_SPELL line in main component 0 gives it; the real slot is
+    whichever ADD_SPELL finds free."""
     text = ADD_SPELL_REFERENCES.read_text(encoding="utf-8")
     block = text.split("ACTION_DEFINE_ASSOCIATIVE_ARRAY new_spells BEGIN", 1)[1].split("END", 1)[0]
+    levels = {
+        name.lower(): int(level)
+        for name, level in re.findall(
+            r"^ADD_SPELL ~[^~]*\\(\w+)\.spl~ \d (\d)", MAIN_COMPONENT.read_text(encoding="latin-1"), re.MULTILINE)
+    }
     lines = ["IDS V1.0"]
-    for resref, symbol in re.findall(r"^\s*(sp(?:pr|wi)\d{3})\s*=>\s*(\w+)", block, re.MULTILINE):
+    for index, (resref, symbol) in enumerate(re.findall(r"^\s*(sp(?:pr|wi)\w+)\s*=>\s*(\w+)", block, re.MULTILINE)):
         kind = 1 if resref.startswith("sppr") else 2
-        lines.append(f"{kind * 1000 + int(resref[4:])} {symbol}")
+        number = int(resref[4:]) if resref[4:].isdigit() else levels[resref] * 100 + 50 + index
+        lines.append(f"{kind * 1000 + number} {symbol}")
     return ("\n".join(lines) + "\n").encode("ascii")
 
 

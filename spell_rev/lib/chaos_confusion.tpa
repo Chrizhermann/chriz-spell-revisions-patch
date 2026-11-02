@@ -1,0 +1,112 @@
+// Chaos is back at wizard level 5 (SPWI508): SR's Confusion with its saving throw at -4.
+// Confusion and Chaos last 4 rounds, 5 rounds from caster level 15 and 6 rounds from caster
+// level 20. Christopher decided both on 2026-10-27.
+
+// Gives SR's Confusion its rounds. The spell's one ability becomes three, for caster levels
+// 1, 15 and 20, and every effect that lasts as long as the confusion (opcode 128) lasts 4, 5
+// or 6 rounds in them. Other effects, such as the "Confused" message, stay as they are.
+DEFINE_PATCH_FUNCTION srcb_confusion_rounds
+BEGIN
+  READ_SHORT 0x68 srcb_ab_num
+  PATCH_IF (srcb_ab_num != 1) BEGIN
+    PATCH_FAIL ~srcb_confusion_rounds: %SOURCE_FILE% has %srcb_ab_num% abilities; it expects the single ability of SR's Confusion.~
+  END
+  READ_LONG  0x64 srcb_ab_off
+  READ_LONG  0x6a srcb_fx_off
+  READ_SHORT (srcb_ab_off + 0x1e) srcb_fx_num
+  READ_SHORT (srcb_ab_off + 0x20) srcb_fx_first
+  READ_SHORT 0x6e srcb_cast_first
+  READ_SHORT 0x70 srcb_cast_num
+
+  SET srcb_base = 0
+  FOR (srcb_e = 0; srcb_e < srcb_fx_num; ++srcb_e) BEGIN
+    SET srcb_fx = srcb_fx_off + (srcb_fx_first + srcb_e) * 0x30
+    READ_SHORT srcb_fx srcb_op
+    READ_LONG  (srcb_fx + 0x0e) srcb_duration
+    PATCH_IF (srcb_op = 128) AND (srcb_base = 0) BEGIN
+      SET srcb_base = srcb_duration
+    END
+  END
+  PATCH_IF (srcb_base <= 0) BEGIN
+    PATCH_FAIL ~srcb_confusion_rounds: %SOURCE_FILE% has no timed confusion effect (opcode 128).~
+  END
+
+  // Effect records in the table, wherever the ability's and the casting effects sit.
+  SET srcb_fx_total = srcb_fx_first + srcb_fx_num
+  PATCH_IF (srcb_cast_first + srcb_cast_num > srcb_fx_total) BEGIN
+    SET srcb_fx_total = srcb_cast_first + srcb_cast_num
+  END
+  READ_ASCII srcb_ab_off srcb_ability (0x28)
+  READ_ASCII (srcb_fx_off + srcb_fx_first * 0x30) srcb_effects (srcb_fx_num * 0x30)
+
+  // Two more abilities after the first, then their effects at the end of the table.
+  SET srcb_ab_end = srcb_ab_off + 0x28
+  INSERT_BYTES srcb_ab_end 0x50
+  PATCH_IF (srcb_fx_off >= srcb_ab_end) BEGIN
+    SET srcb_fx_off += 0x50
+    WRITE_LONG 0x6a srcb_fx_off
+  END
+  SET srcb_fx_end = srcb_fx_off + srcb_fx_total * 0x30
+  INSERT_BYTES srcb_fx_end (2 * srcb_fx_num * 0x30)
+  PATCH_IF (srcb_ab_off >= srcb_fx_end) BEGIN
+    SET srcb_ab_off += 2 * srcb_fx_num * 0x30
+    WRITE_LONG 0x64 srcb_ab_off
+  END
+  FOR (srcb_step = 1; srcb_step < 3; ++srcb_step) BEGIN
+    SET srcb_new_ab = srcb_ab_off + srcb_step * 0x28
+    WRITE_ASCIIE srcb_new_ab ~%srcb_ability%~ (0x28)
+    WRITE_SHORT (srcb_new_ab + 0x20) (srcb_fx_total + (srcb_step - 1) * srcb_fx_num)
+    WRITE_ASCIIE (srcb_fx_off + (srcb_fx_total + (srcb_step - 1) * srcb_fx_num) * 0x30) ~%srcb_effects%~ (srcb_fx_num * 0x30)
+  END
+  WRITE_SHORT 0x68 3
+
+  FOR (srcb_step = 0; srcb_step < 3; ++srcb_step) BEGIN
+    SET srcb_min_level = (srcb_step = 0) ? 1 : ((srcb_step = 1) ? 15 : 20)
+    SET srcb_rounds = 4 + srcb_step
+    SET srcb_ab = srcb_ab_off + srcb_step * 0x28
+    WRITE_SHORT (srcb_ab + 0x10) srcb_min_level
+    READ_SHORT  (srcb_ab + 0x20) srcb_first
+    FOR (srcb_e = 0; srcb_e < srcb_fx_num; ++srcb_e) BEGIN
+      SET srcb_fx = srcb_fx_off + (srcb_first + srcb_e) * 0x30
+      READ_LONG (srcb_fx + 0x0e) srcb_duration
+      PATCH_IF (srcb_duration = srcb_base) BEGIN
+        WRITE_LONG (srcb_fx + 0x0e) (srcb_rounds * 6)
+      END
+    END
+  END
+END
+
+// Turns SR's Confusion into Chaos: wizard level 5, a saving throw at -4 on every effect that
+// allows one, and effect power 5 where it was the old spell level. Chaos keeps the game's own
+// icons (book_icon at 0x3a, ability_icon in the abilities) when the game has them; otherwise
+// it keeps Confusion's.
+DEFINE_PATCH_FUNCTION srcb_chaos_from_confusion
+  STR_VAR book_icon = ~SPWI508C~ ability_icon = ~SPWI508B~
+BEGIN
+  READ_LONG  0x34 srcb_old_level
+  WRITE_LONG 0x34 5
+  READ_LONG  0x64 srcb_ab_off
+  READ_SHORT 0x68 srcb_ab_num
+  READ_LONG  0x6a srcb_fx_off
+  FOR (srcb_ab = 0; srcb_ab < srcb_ab_num; ++srcb_ab) BEGIN
+    READ_SHORT (srcb_ab_off + srcb_ab * 0x28 + 0x1e) srcb_fx_num
+    READ_SHORT (srcb_ab_off + srcb_ab * 0x28 + 0x20) srcb_fx_first
+    FOR (srcb_e = 0; srcb_e < srcb_fx_num; ++srcb_e) BEGIN
+      SET srcb_fx = srcb_fx_off + (srcb_fx_first + srcb_e) * 0x30
+      READ_BYTE (srcb_fx + 0x03) srcb_power
+      PATCH_IF (srcb_power = srcb_old_level) BEGIN
+        WRITE_BYTE (srcb_fx + 0x03) 5
+      END
+      READ_LONG (srcb_fx + 0x24) srcb_save_type
+      PATCH_IF (srcb_save_type != 0) BEGIN
+        WRITE_LONG (srcb_fx + 0x28) (0 - 4)
+      END
+    END
+  END
+  PATCH_IF (FILE_EXISTS_IN_GAME ~%book_icon%.bam~) AND (FILE_EXISTS_IN_GAME ~%ability_icon%.bam~) BEGIN
+    WRITE_ASCIIE 0x3a ~%book_icon%~ #8
+    FOR (srcb_ab = 0; srcb_ab < srcb_ab_num; ++srcb_ab) BEGIN
+      WRITE_ASCIIE (srcb_ab_off + srcb_ab * 0x28 + 0x04) ~%ability_icon%~ #8
+    END
+  END
+END
