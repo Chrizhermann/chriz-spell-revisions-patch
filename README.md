@@ -1,3 +1,9 @@
+> [!NOTE]
+> **This Chriz edition is frozen: it gets no further balance changes.**
+> It stays in Chriz Easy BG until our own replacement mod is ready.
+> Please report problems with this edition here, in this repository's
+> [issues](https://github.com/Chrizhermann/chriz-spell-revisions-patch/issues), not to the original authors (Demivrgvs, Ardanis and the Gibberlings3 team). Credit for Spell Revisions stays with the original authors (see below).
+
 # Spell Revisions — Chriz Balance Patch
 
 A personal fix-and-balance fork of **[Spell Revisions](https://github.com/Gibberlings3/SpellRevisions)**, the Baldur's Gate II / Enhanced Edition spell overhaul created by **Demivrgvs** (Marco Montagnoli) with **Ardanis**, and maintained today by the **Gibberlings3** team (Mike1072, lambda-dom, subtledoctor, kreso and many more — see the [upstream contributors](https://github.com/Gibberlings3/SpellRevisions/graphs/contributors)). All spell design, data, art and installer architecture are their work; this fork only adds bug fixes and a few balance knobs on top of upstream, and offers every fix back.
@@ -6,12 +12,12 @@ A personal fix-and-balance fork of **[Spell Revisions](https://github.com/Gibber
 
 - **Upstream repository:** https://github.com/Gibberlings3/SpellRevisions
 - **Spell list / documentation:** https://gibberlings3.github.io/SpellRevisions/
-- **Forum (bug reports, discussion):** https://www.gibberlings3.net/forums/forum/118-spell-revisions/
+- **Forum (the original mod; problems with this Chriz edition go to this repository's issues):** https://www.gibberlings3.net/forums/forum/118-spell-revisions/
 - **Readme shipped with the mod:** `spell_rev/readme-spell_rev.html`
 
 Spell Revisions is © 2008–2015 Marco Montagnoli and the Gibberlings3 contributors; its readme
 asks that the mod not be redistributed without the author's consent. This fork is a patch set on
-top of upstream — not a competing release. Please support and report to upstream first; the
+top of upstream — not a competing release. Please support upstream, but report problems with this edition here, not there; the
 fixes here are written so they can be submitted as upstream pull requests
 (`docs/upstream-reports/`).
 
